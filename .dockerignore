@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+.git
+.github
+.vscode
+.idea
+*.md
+!README.md
+test-results
+.turbo

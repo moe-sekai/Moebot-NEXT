@@ -1,0 +1,21 @@
+{
+  "name": "moebot-next",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Moebot NEXT — 新一代 PJSK BOT",
+  "scripts": {
+    "dev": "koishi start -- --watch",
+    "start": "koishi start",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "eslint packages/*/src/**/*.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "sync:assets": "tsx scripts/sync-assets.ts"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.0.0"
+}

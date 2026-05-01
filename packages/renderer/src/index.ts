@@ -1,0 +1,5 @@
+export { renderToImage, renderToSvg, type RenderOptions } from './engine'
+export { ImageCache, type CacheOptions } from './cache'
+export { loadFonts, type FontData } from './fonts'
+export * from './templates'
+export { theme } from './styles/theme'

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  moebot:
+    build: .
+    container_name: moebot-next
+    ports:
+      - "${CONSOLE_PORT:-5140}:5140"   # Koishi Console WebUI
+      - "${ONEBOT_PORT:-6700}:6700"    # OneBot 反向 WebSocket
+    volumes:
+      - ./data:/app/data               # 持久化: 数据库 + 缓存
+      - ./assets:/app/assets           # 静态资源
+      - ./koishi.yml:/app/koishi.yml   # 配置文件 (自行编辑)
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,55 @@
+# ============================================================
+# Moebot NEXT — Koishi 配置文件
+# ============================================================
+# 复制此文件为 koishi.yml 后编辑
+# cp koishi.example.yml koishi.yml
+# ============================================================
+
+# Koishi Console WebUI
+host: 0.0.0.0
+port: 5140
+
+# ---- 数据库 (libSQL/SQLite) ----
+plugins:
+  database-sqlite:
+    path: ./data/moebot.db
+
+  # ---- OneBot 协议适配器 ----
+  # 使用反向 WebSocket 连接 NapCat / Lagrange / LLOneBot
+  adapter-onebot:
+    # 你的 QQ 机器人账号
+    selfId: "123456789"
+    # 反向 WebSocket 模式
+    protocol: ws-reverse
+    # 监听端口 (需要与 QQ 框架配置一致)
+    endpoint: ws://0.0.0.0:6700
+
+  # ---- Moebot 核心插件 ----
+  moebot-core:
+    # Masterdata 数据源 URL
+    masterDataUrl: https://sk.exmeaning.com/master
+    # 自动刷新间隔 (毫秒, 默认 1 小时)
+    masterDataRefreshInterval: 3600000
+    # 图片缓存
+    imageCache:
+      enabled: true
+      maxSizeBytes: 1073741824    # 1GB
+      ttlMs: 86400000             # 24 小时
+    # 指令前缀
+    commandPrefix: "/"
+    # SEKAI API 配置 (可选 — 不配置不影响基本功能)
+    # 也可以在管理面板 WebUI 中配置
+    sekaiApi:
+      enabled: false
+      baseUrl: ""
+      region: jp
+      headers: {}
+      timeout: 10000
+      rateLimit: 30
+      # proxy: "http://127.0.0.1:7890"
+
+  # ---- 管理面板 ----
+  moebot-console:
+    auth:
+      username: admin
+      password: ""    # 首次登录时设置
