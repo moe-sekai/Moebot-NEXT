@@ -26,12 +26,14 @@
       <div class="info-section" v-if="status">
         <h3>系统信息</h3>
         <table>
-          <tr><td>Node.js</td><td>{{ status.nodeVersion }}</td></tr>
-          <tr><td>平台</td><td>{{ status.platform }}</td></tr>
-          <tr>
-            <td>内存使用</td>
-            <td>{{ formatBytes(status.memoryUsage?.heapUsed) }} / {{ formatBytes(status.memoryUsage?.heapTotal) }}</td>
-          </tr>
+          <tbody>
+            <tr><td>Node.js</td><td>{{ status.nodeVersion }}</td></tr>
+            <tr><td>平台</td><td>{{ status.platform }}</td></tr>
+            <tr>
+              <td>内存使用</td>
+              <td>{{ formatBytes(status.memoryUsage?.heapUsed) }} / {{ formatBytes(status.memoryUsage?.heapTotal) }}</td>
+            </tr>
+          </tbody>
         </table>
       </div>
 

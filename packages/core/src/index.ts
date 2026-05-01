@@ -41,7 +41,10 @@ export function apply(ctx: Context, config: MoebotConfig) {
   // Optional SEKAI API service
   let sekaiApi: SekaiApiService | null = null
   if (config.sekaiApi.enabled) {
-    sekaiApi = new SekaiApiService(ctx, config.sekaiApi)
+    sekaiApi = new SekaiApiService(ctx, {
+      name: 'default',
+      ...config.sekaiApi,
+    })
     ctx.logger('moebot').info('SEKAI API integration enabled')
   } else {
     ctx.logger('moebot').info('SEKAI API not configured — basic features only')

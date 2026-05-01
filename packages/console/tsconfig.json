@@ -2,10 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "."
+    "rootDir": "src"
   },
-  "include": ["src", "client"],
+  "include": ["src"],
   "references": [
-    { "path": "../shared" }
+    { "path": "../shared" },
+    { "path": "../renderer" }
   ]
 }

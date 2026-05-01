@@ -6,16 +6,50 @@
   "scripts": {
     "dev": "koishi start -- --watch",
     "start": "koishi start",
-    "build": "npm run build --workspaces --if-present",
+    "build": "bun run build:shared && bun run build:renderer && bun run build:core && bun run build:console",
+    "build:shared": "tsc -b packages/shared --force",
+    "build:renderer": "tsc -b packages/renderer --force",
+    "build:core": "tsc -b packages/core --force",
+    "build:console": "tsc -b packages/console --force",
+    "clean": "bun run clean:shared && bun run clean:renderer && bun run clean:core && bun run clean:console",
+    "clean:shared": "bun --cwd packages/shared run clean",
+    "clean:renderer": "bun --cwd packages/renderer run clean",
+    "clean:core": "bun --cwd packages/core run clean",
+    "clean:console": "bun --cwd packages/console run clean",
     "lint": "eslint packages/*/src/**/*.ts",
-    "db:migrate": "tsx scripts/migrate.ts",
-    "sync:assets": "tsx scripts/sync-assets.ts"
+    "db:migrate": "bunx tsx scripts/migrate.ts",
+    "sync:assets": "bunx tsx scripts/sync-assets.ts"
   },
   "workspaces": [
     "packages/*"
   ],
   "engines": {
+    "bun": ">=1.3.0",
     "node": ">=20.0.0"
   },
-  "packageManager": "npm@10.0.0"
+  "packageManager": "bun@1.3.13",
+  "dependencies": {
+    "@moebot/renderer": "workspace:*",
+    "@moebot/shared": "workspace:*",
+    "koishi-plugin-moebot-core": "workspace:*",
+    "koishi-plugin-moebot-console": "workspace:*",
+    "@koishijs/plugin-console": "^5.30.11",
+    "@koishijs/plugin-database-sqlite": "^4.7.0",
+    "@koishijs/plugin-http": "^0.6.3",
+    "@koishijs/plugin-proxy-agent": "^0.3.3",
+    "koishi": "^4.18.11",
+    "koishi-plugin-adapter-onebot": "^6.9.3",
+    "react": "^19.2.5"
+  },
+  "devDependencies": {
+    "@koishijs/client": "^5.30.11",
+    "@popperjs/core": "^2.11.8",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.2.14",
+    "@vitejs/plugin-vue": "^5.1.4",
+    "eslint": "^9.39.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.10"
+  }
 }

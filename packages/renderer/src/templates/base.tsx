@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { theme } from '../styles/theme'
+import { getMoebotLogoDataUri } from '../styles/logo'
 
 interface BaseCardProps {
   title?: string
@@ -13,6 +14,7 @@ interface BaseCardProps {
 export function BaseCard({ title, subtitle, children, width, accentColor, footer }: BaseCardProps) {
   const w = width ?? theme.cardWidth
   const accent = accentColor ?? theme.colors.accent
+  const logo = getMoebotLogoDataUri(accent)
 
   return (
     <div
@@ -21,36 +23,69 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
         flexDirection: 'column',
         width: w,
         backgroundColor: theme.colors.background,
+        border: `1px solid ${theme.colors.border}`,
         borderRadius: theme.borderRadius.xl,
         overflow: 'hidden',
         fontFamily: 'Noto Sans CJK SC, Noto Sans SC, sans-serif',
+        color: theme.colors.text,
       }}
     >
-      {/* Accent top bar */}
-      <div style={{ display: 'flex', height: 4, backgroundColor: accent, width: '100%' }} />
-
-      {/* Header */}
-      {title && (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            padding: `${theme.spacing.lg}px ${theme.cardPadding}px ${theme.spacing.md}px`,
-          }}
-        >
-          <div style={{ display: 'flex', fontSize: theme.fontSize.xl, fontWeight: 700, color: theme.colors.text }}>
-            {title}
+      {/* Bright brand header */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          padding: `${theme.spacing.lg}px ${theme.cardPadding}px ${theme.spacing.md}px`,
+          backgroundColor: theme.colors.surface,
+          borderTop: `6px solid ${accent}`,
+          borderBottom: `1px solid ${theme.colors.border}`,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.md }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <img src={logo} width={136} height={30} style={{ objectFit: 'contain' }} />
           </div>
-          {subtitle && (
-            <div style={{ display: 'flex', fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, marginTop: 4 }}>
-              {subtitle}
-            </div>
-          )}
         </div>
-      )}
+
+        {title && (
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: theme.spacing.md }}>
+            <div
+              style={{
+                display: 'flex',
+                fontSize: theme.fontSize.xl,
+                fontWeight: 800,
+                color: theme.colors.text,
+                lineHeight: 1.25,
+              }}
+            >
+              {title}
+            </div>
+            {subtitle && (
+              <div
+                style={{
+                  display: 'flex',
+                  fontSize: theme.fontSize.sm,
+                  color: theme.colors.textSecondary,
+                  marginTop: 5,
+                  lineHeight: 1.45,
+                }}
+              >
+                {subtitle}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Content */}
-      <div style={{ display: 'flex', flexDirection: 'column', padding: `0 ${theme.cardPadding}px ${theme.spacing.lg}px` }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          padding: `${theme.spacing.lg}px ${theme.cardPadding}px`,
+          backgroundColor: theme.colors.background,
+        }}
+      >
         {children}
       </div>
 
@@ -59,13 +94,15 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
         style={{
           display: 'flex',
           justifyContent: 'flex-end',
+          alignItems: 'center',
           padding: `${theme.spacing.sm}px ${theme.cardPadding}px`,
           backgroundColor: theme.colors.surface,
+          borderTop: `1px solid ${theme.colors.border}`,
           fontSize: theme.fontSize.xs,
           color: theme.colors.textMuted,
         }}
       >
-        {footer ?? 'Moebot NEXT · pjsk.moe'}
+        <span style={{ display: 'flex' }}>{footer ?? 'Moebot NEXT · pjsk.moe'}</span>
       </div>
     </div>
   )

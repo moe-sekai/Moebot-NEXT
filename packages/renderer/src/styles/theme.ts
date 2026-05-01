@@ -1,28 +1,33 @@
-// Design tokens for card templates
+// Light design tokens for Satori-rendered Moebot cards.
+// Keep this palette bright: Console preview and bot images should not use dark surfaces.
 export const theme = {
   colors: {
-    background: '#1a1b2e',
-    surface: '#252641',
-    surfaceLight: '#2f3050',
-    text: '#ffffff',
-    textSecondary: '#a0a0b8',
-    textMuted: '#6b6b80',
-    accent: '#7c5cfc',
-    accentLight: '#9b85fc',
-    success: '#44cc88',
-    warning: '#ffaa44',
-    error: '#ff4466',
-    border: '#3a3b55',
+    background: '#f7fbff',
+    backgroundSoft: '#eef9fb',
+    surface: '#ffffff',
+    surfaceLight: '#f2f7fb',
+    surfaceAccent: '#e8fbf8',
+    text: '#172033',
+    textSecondary: '#526277',
+    textMuted: '#8a98aa',
+    accent: '#33ccbb',
+    accentLight: '#73e1d4',
+    accentSoft: '#dff8f5',
+    success: '#21b37b',
+    warning: '#ffb23f',
+    error: '#ff5d7a',
+    border: '#dce8f2',
+    borderStrong: '#b8d7e6',
 
     // Card attribute colors
     cute: '#FF6699',
-    cool: '#0077DD',
-    pure: '#00BB33',
-    happy: '#FFAA00',
-    mysterious: '#BB44DD',
+    cool: '#1C8CFF',
+    pure: '#35C86A',
+    happy: '#FFB000',
+    mysterious: '#A863E8',
 
     // Unit colors
-    vs: '#00BBDD',
+    vs: '#33CCBB',
     ln: '#4455DD',
     mmj: '#88DD44',
     vbs: '#EE1166',
@@ -50,13 +55,15 @@ export const theme = {
   },
 
   borderRadius: {
-    sm: 4,
-    md: 8,
-    lg: 12,
-    xl: 16,
+    sm: 6,
+    md: 10,
+    lg: 14,
+    xl: 22,
     round: 9999,
   },
 
   cardWidth: 800,
   cardPadding: 32,
 } as const
+
+export type ThemeColorName = keyof typeof theme.colors

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# Moebot NEXT — One-Click Installation Script
+# Moebot NEXT — One-Click Installation Script (Bun)
 # Usage: curl -fsSL https://raw.githubusercontent.com/xxx/moebot-next/main/scripts/install.sh | bash
 # ============================================================
 
@@ -16,25 +16,31 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo ""
-echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║    Moebot NEXT — Installation        ║${NC}"
-echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
+echo -e "${CYAN}========================================${NC}"
+echo -e "${CYAN}    Moebot NEXT — Installation${NC}"
+echo -e "${CYAN}========================================${NC}"
 echo ""
 
-# Check prerequisites
-for cmd in git node npm; do
-    if ! command -v $cmd &> /dev/null; then
-        echo -e "${RED}[ERROR] '$cmd' is required but not found.${NC}"
-        if [ "$cmd" = "node" ] || [ "$cmd" = "npm" ]; then
-            echo "Install Node.js 20+ from https://nodejs.org/"
-        fi
-        exit 1
-    fi
-done
+if ! command -v git &> /dev/null; then
+    echo -e "${RED}[ERROR] git is required but not found.${NC}"
+    exit 1
+fi
 
-echo -e "${GREEN}[✓]${NC} Prerequisites check passed"
+if ! command -v bun &> /dev/null; then
+    echo -e "${YELLOW}[INFO]${NC} Bun not found, installing Bun..."
+    curl -fsSL https://bun.sh/install | bash
+    export BUN_INSTALL="$HOME/.bun"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+fi
 
-# Clone or update repository
+if ! command -v bun &> /dev/null; then
+    echo -e "${RED}[ERROR] Bun installation failed or PATH not updated.${NC}"
+    echo "Please install Bun manually from https://bun.sh/ and retry."
+    exit 1
+fi
+
+echo -e "${GREEN}[✓]${NC} Bun version: $(bun --version)"
+
 if [ -d "$INSTALL_DIR" ]; then
     echo -e "${YELLOW}[INFO]${NC} Directory exists, pulling latest..."
     cd "$INSTALL_DIR"
@@ -45,23 +51,23 @@ else
     cd "$INSTALL_DIR"
 fi
 
-# Install dependencies
-echo -e "${GREEN}[INFO]${NC} Installing dependencies..."
-npm install
+echo -e "${GREEN}[INFO]${NC} Installing dependencies with Bun..."
+bun install
 
-# Create config
+echo -e "${GREEN}[INFO]${NC} Building packages..."
+bun run build
+
 if [ ! -f "koishi.yml" ]; then
     cp koishi.example.yml koishi.yml
     echo -e "${GREEN}[✓]${NC} Configuration file created at koishi.yml"
 fi
 
-# Create data directories
 mkdir -p data/cache data/master
 
 echo ""
-echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║    Installation Complete! 🎉          ║${NC}"
-echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}    Installation Complete!${NC}"
+echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "Next steps:"
 echo -e "  1. ${CYAN}cd $INSTALL_DIR${NC}"

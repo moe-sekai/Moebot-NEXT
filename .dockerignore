@@ -9,3 +9,5 @@ data
 !README.md
 test-results
 .turbo
+package-lock.json
+npm-debug.log*

@@ -1,47 +1,46 @@
 @echo off
-chcp 65001 >nul 2>&1
+setlocal EnableExtensions
 title Moebot NEXT
 
 echo.
-echo  ╔══════════════════════════════════════╗
-echo  ║       Moebot NEXT - PJSK BOT        ║
-echo  ║         Starting up...               ║
-echo  ╚══════════════════════════════════════╝
+echo ========================================
+echo        Moebot NEXT - PJSK BOT
+echo              Starting up
+echo ========================================
 echo.
 
-:: Check Node.js
-where node >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [ERROR] Node.js not found! Please install Node.js 20+
-    echo Download: https://nodejs.org/
+rem Check Bun
+where bun >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Bun not found! Please install Bun first.
+    echo Download: https://bun.sh/
+    echo Windows PowerShell install:
+    echo   powershell -c "irm bun.sh/install.ps1 ^| iex"
     pause
     exit /b 1
 )
 
-:: Check Node.js version
-for /f "tokens=1 delims=v." %%a in ('node -v') do set NODE_MAJOR=%%a
-for /f "tokens=2 delims=v." %%a in ('node -v') do set NODE_MAJOR=%%a
-echo [INFO] Node.js version: 
-node -v
+for /f "usebackq delims=" %%v in (`bun --version`) do set "BUN_VERSION=%%v"
+echo [INFO] Bun version: %BUN_VERSION%
 
-:: Navigate to project root
+rem Navigate to project root
 cd /d "%~dp0.."
 
-:: Check if node_modules exists
+rem Check if node_modules exists
 if not exist "node_modules" (
-    echo [INFO] Installing dependencies...
-    call npm install
-    if %errorlevel% neq 0 (
+    echo [INFO] Installing dependencies with Bun...
+    call bun install
+    if errorlevel 1 (
         echo [ERROR] Failed to install dependencies
         pause
         exit /b 1
     )
 )
 
-:: Check if koishi.yml exists
+rem Check if koishi.yml exists
 if not exist "koishi.yml" (
     echo [INFO] Creating default configuration...
-    copy "koishi.example.yml" "koishi.yml"
+    copy "koishi.example.yml" "koishi.yml" >nul
     echo [INFO] Please edit koishi.yml before running!
     echo [INFO] At minimum, set your QQ bot selfId in the adapter-onebot section.
     notepad "koishi.yml"
@@ -49,7 +48,18 @@ if not exist "koishi.yml" (
     exit /b 0
 )
 
-:: Create data directories
+rem Build packages if dist output is missing
+if not exist "packages\core\dist\index.js" (
+    echo [INFO] Building workspace packages...
+    call bun run build
+    if errorlevel 1 (
+        echo [ERROR] Build failed
+        pause
+        exit /b 1
+    )
+)
+
+rem Create data directories
 if not exist "data" mkdir data
 if not exist "data\cache" mkdir data\cache
 if not exist "data\master" mkdir data\master
@@ -59,7 +69,6 @@ echo [INFO] Console: http://localhost:5140
 echo [INFO] OneBot WS: ws://localhost:6700
 echo.
 
-:: Start Koishi
-call npx koishi start
+call bun run start
 
 pause

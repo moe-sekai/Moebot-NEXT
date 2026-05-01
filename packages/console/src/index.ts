@@ -1,4 +1,5 @@
 import { Context, Schema } from 'koishi'
+import { listRenderPreviews, renderPreviewTemplate, type RenderOptions } from '@moebot/renderer'
 
 export const name = 'moebot-console'
 export const inject = {
@@ -29,33 +30,77 @@ export const Config: Schema<ConsoleConfig> = Schema.object({
   }),
 })
 
+interface RendererPreviewRequest {
+  id: string
+  width?: number
+  height?: number
+  debug?: boolean
+  includeSvg?: boolean
+}
+
 export function apply(ctx: Context, config: ConsoleConfig) {
   const logger = ctx.logger('moebot-console')
+  const koishi = ctx as any
+  const clientEntry = getClientEntry()
 
   // ======== Dashboard API ========
-  ctx.console.addEntry(process.env.KOISHI_BASE ? [
-    process.env.KOISHI_BASE + '/dist/index.js',
-  ] : process.env.KOISHI_ENV === 'browser' ? [
-    // @ts-ignore
-    import.meta.url.replace(/\/src\/.*$/, '/client/index.ts'),
-  ] : {
-    dev: resolve(__dirname, '../client/index.ts'),
-    prod: resolve(__dirname, '../dist'),
+  koishi.console.addEntry({
+    dev: clientEntry,
+    prod: clientEntry,
+  })
+
+  // ======== Renderer Preview API ========
+  koishi.console.addListener('moebot/renderer/templates', async () => {
+    return listRenderPreviews()
+  })
+
+  koishi.console.addListener('moebot/renderer/preview', async (payload: RendererPreviewRequest) => {
+    try {
+      if (!payload?.id) {
+        return { success: false, error: '缺少模板 ID' }
+      }
+
+      const options: RenderOptions = {
+        debug: Boolean(payload.debug),
+      }
+      if (isPositiveNumber(payload.width)) options.width = payload.width
+      if (isPositiveNumber(payload.height)) options.height = payload.height
+
+      const result = await renderPreviewTemplate(payload.id, options)
+      const pngBase64 = result.trace.png.toString('base64')
+      const includeSvg = payload.includeSvg !== false
+
+      return {
+        success: true,
+        meta: result.meta,
+        image: `data:image/png;base64,${pngBase64}`,
+        svg: includeSvg ? result.trace.svg : undefined,
+        svgDataUrl: includeSvg ? `data:image/svg+xml;utf8,${encodeURIComponent(result.trace.svg)}` : undefined,
+        timings: result.trace.timings,
+        sizeBytes: result.trace.sizeBytes,
+        width: result.trace.width,
+        height: result.trace.height,
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      logger.warn('Renderer preview failed:', message)
+      return { success: false, error: message }
+    }
   })
 
   // API: Get bot status
-  ctx.console.addListener('moebot/status', async () => {
+  koishi.console.addListener('moebot/status', async () => {
     // Get stats from database
     let totalUsers = 0
     let totalGroups = 0
     let totalCommands = 0
 
     try {
-      const users = await ctx.database.get('moebot.users', {})
+      const users = await koishi.database.get('moebot.users', {})
       totalUsers = users.length
-      const groups = await ctx.database.get('moebot.groups', {})
+      const groups = await koishi.database.get('moebot.groups', {})
       totalGroups = groups.length
-      const stats = await ctx.database.get('moebot.stats', {})
+      const stats = await koishi.database.get('moebot.stats', {})
       totalCommands = stats.length
     } catch (err) {
       logger.warn('Failed to fetch stats:', err)
@@ -75,9 +120,9 @@ export function apply(ctx: Context, config: ConsoleConfig) {
   // ======== SEKAI API Configuration API ========
 
   // API: Get current SEKAI API config
-  ctx.console.addListener('moebot/sekai-api/config', async () => {
+  koishi.console.addListener('moebot/sekai-api/config', async () => {
     try {
-      const [config] = await ctx.database.get('moebot.groups', { groupId: '__sekai_api_config__' })
+      const [config] = await koishi.database.get('moebot.groups', { groupId: '__sekai_api_config__' })
       if (config) {
         return JSON.parse(config.config)
       }
@@ -90,15 +135,15 @@ export function apply(ctx: Context, config: ConsoleConfig) {
   })
 
   // API: Save SEKAI API config
-  ctx.console.addListener('moebot/sekai-api/save', async (data: any) => {
+  koishi.console.addListener('moebot/sekai-api/save', async (data: any) => {
     const configStr = JSON.stringify(data)
 
     try {
-      const [existing] = await ctx.database.get('moebot.groups', { groupId: '__sekai_api_config__' })
+      const [existing] = await koishi.database.get('moebot.groups', { groupId: '__sekai_api_config__' })
       if (existing) {
-        await ctx.database.set('moebot.groups', existing.id, { config: configStr })
+        await koishi.database.set('moebot.groups', existing.id, { config: configStr })
       } else {
-        await ctx.database.create('moebot.groups', {
+        await koishi.database.create('moebot.groups', {
           platform: 'system',
           groupId: '__sekai_api_config__',
           name: 'SEKAI API Configuration',
@@ -117,7 +162,7 @@ export function apply(ctx: Context, config: ConsoleConfig) {
   })
 
   // API: Test SEKAI API connection
-  ctx.console.addListener('moebot/sekai-api/test', async (endpoint: any) => {
+  koishi.console.addListener('moebot/sekai-api/test', async (endpoint: any) => {
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), endpoint.timeout || 10000)
@@ -143,9 +188,9 @@ export function apply(ctx: Context, config: ConsoleConfig) {
   })
 
   // ======== Groups API ========
-  ctx.console.addListener('moebot/groups', async () => {
+  koishi.console.addListener('moebot/groups', async () => {
     try {
-      const groups = await ctx.database.get('moebot.groups', {
+      const groups = await koishi.database.get('moebot.groups', {
         groupId: { $ne: '__sekai_api_config__' },
       })
       return groups
@@ -154,24 +199,24 @@ export function apply(ctx: Context, config: ConsoleConfig) {
     }
   })
 
-  ctx.console.addListener('moebot/groups/toggle', async ({ id, enabled }: { id: number; enabled: boolean }) => {
-    await ctx.database.set('moebot.groups', id, { enabled })
+  koishi.console.addListener('moebot/groups/toggle', async ({ id, enabled }: { id: number; enabled: boolean }) => {
+    await koishi.database.set('moebot.groups', id, { enabled })
     return { success: true }
   })
 
   // ======== Users API ========
-  ctx.console.addListener('moebot/users', async () => {
+  koishi.console.addListener('moebot/users', async () => {
     try {
-      return await ctx.database.get('moebot.users', {})
+      return await koishi.database.get('moebot.users', {})
     } catch {
       return []
     }
   })
 
   // ======== Command Stats API ========
-  ctx.console.addListener('moebot/stats', async () => {
+  koishi.console.addListener('moebot/stats', async () => {
     try {
-      const stats = await ctx.database.get('moebot.stats', {})
+      const stats = await koishi.database.get('moebot.stats', {})
 
       // Aggregate by command
       const commandCounts: Record<string, number> = {}
@@ -201,6 +246,21 @@ export function apply(ctx: Context, config: ConsoleConfig) {
   logger.info('Console management panel loaded')
 }
 
+function isPositiveNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
 function resolve(...args: string[]) {
   return require('path').resolve(...args)
+}
+
+function getClientEntry(): string {
+  const { existsSync } = require('fs')
+  const candidates = [
+    // compiled runtime: dist/index.js -> ../../client/index.ts
+    resolve(__dirname, '../../client/index.ts'),
+    // source runtime: src/index.ts -> ../client/index.ts
+    resolve(__dirname, '../client/index.ts'),
+  ]
+  return candidates.find((file) => existsSync(file)) ?? candidates[0]
 }

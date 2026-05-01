@@ -1,48 +1,52 @@
 # ============================================================
-# Moebot NEXT — Single Container Deployment
+# Moebot NEXT — Single Container Deployment (Bun)
 # ============================================================
-FROM node:20-alpine AS builder
+FROM oven/bun:1.3-alpine AS builder
 
 WORKDIR /app
 
 # Copy package files for dependency caching
-COPY package.json package-lock.json* ./
+COPY package.json bun.lock* ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/renderer/package.json packages/renderer/
 COPY packages/core/package.json packages/core/
 COPY packages/console/package.json packages/console/
 
 # Install dependencies
-RUN npm install --production=false
+RUN bun install --frozen-lockfile
 
 # Copy source code
 COPY tsconfig.base.json tsconfig.json ./
 COPY packages/ packages/
+COPY assets/ assets/
 
 # Build all packages
-RUN npm run build
+RUN bun run build
 
 # ---- Runtime ----
-FROM node:20-alpine
+FROM oven/bun:1.3-alpine
 
 WORKDIR /app
 
-# Install production deps only
-COPY package.json package-lock.json* ./
+# Copy package files
+COPY package.json bun.lock* ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/renderer/package.json packages/renderer/
 COPY packages/core/package.json packages/core/
 COPY packages/console/package.json packages/console/
-RUN npm install --production
 
-# Copy built files
-COPY --from=builder /app/packages/*/dist packages/
-COPY --from=builder /app/packages/*/src packages/
+# Install production dependencies
+RUN bun install --frozen-lockfile --production
 
-# Copy assets
-COPY assets/ assets/
+# Copy built packages and console client sources
+COPY --from=builder /app/packages/shared/dist packages/shared/dist
+COPY --from=builder /app/packages/renderer/dist packages/renderer/dist
+COPY --from=builder /app/packages/core/dist packages/core/dist
+COPY --from=builder /app/packages/console/dist packages/console/dist
+COPY --from=builder /app/packages/console/client packages/console/client
 
-# Copy default config
+# Copy assets and config
+COPY --from=builder /app/assets assets
 COPY koishi.example.yml koishi.yml
 
 # Create data directory
@@ -55,4 +59,4 @@ EXPOSE 5140 6700
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD wget -q --spider http://localhost:5140 || exit 1
 
-CMD ["node", "-e", "require('koishi').start()"]
+CMD ["bun", "run", "start"]

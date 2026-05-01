@@ -10,7 +10,23 @@
 - 🌐 内置管理面板 (Koishi Console)
 - 🗄️ 轻量嵌入式数据库 (libSQL/SQLite)
 - 🔌 可选接入 SEKAI API 获取实时数据
+- ⚡ 使用 Bun 作为包管理器和启动入口
 - 📦 一键部署
+
+## 环境要求
+
+- Bun 1.3+
+- 推荐 Docker 部署时无需手动安装 Bun
+
+安装 Bun：
+
+```bash
+# macOS / Linux
+curl -fsSL https://bun.sh/install | bash
+
+# Windows PowerShell
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
 
 ## 快速开始
 
@@ -35,24 +51,36 @@ docker compose up -d
 ### Windows 部署
 
 ```batch
-:: 1. 安装 Node.js 20+ (https://nodejs.org/)
+:: 1. 安装 Bun
+powershell -c "irm bun.sh/install.ps1 | iex"
+
 :: 2. 克隆仓库
 git clone https://github.com/xxx/moebot-next.git
 cd moebot-next
 
-:: 3. 运行启动脚本
+:: 3. 安装依赖并构建
+bun install
+bun run build
+
+:: 4. 运行启动脚本
 scripts\start.bat
 ```
 
 ### macOS / Linux 部署
 
 ```bash
-# 1. 安装 Node.js 20+
+# 1. 安装 Bun
+curl -fsSL https://bun.sh/install | bash
+
 # 2. 克隆仓库
 git clone https://github.com/xxx/moebot-next.git
 cd moebot-next
 
-# 3. 运行启动脚本
+# 3. 安装依赖并构建
+bun install
+bun run build
+
+# 4. 运行启动脚本
 chmod +x scripts/start.sh
 ./scripts/start.sh
 ```
@@ -61,6 +89,15 @@ chmod +x scripts/start.sh
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xxx/moebot-next/main/scripts/install.sh | bash
+```
+
+## 常用命令
+
+```bash
+bun install        # 安装依赖
+bun run build      # 构建所有 workspace 包
+bun run start      # 启动 Koishi
+bun run dev        # 开发模式
 ```
 
 ## 配置
@@ -78,6 +115,7 @@ curl -fsSL https://raw.githubusercontent.com/xxx/moebot-next/main/scripts/instal
 ## SEKAI API (可选)
 
 接入 SEKAI API 可解锁更多功能：
+
 - 实时排行查询
 - 玩家详细数据查询
 - Best 30 成绩展示
@@ -103,7 +141,7 @@ curl -fsSL https://raw.githubusercontent.com/xxx/moebot-next/main/scripts/instal
 
 ## 架构
 
-```
+```text
 moebot-next/
 ├── packages/
 │   ├── shared/     # 共享类型和工具

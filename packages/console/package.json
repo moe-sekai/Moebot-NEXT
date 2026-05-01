@@ -1,9 +1,9 @@
 {
-  "name": "@moebot/console",
+  "name": "koishi-plugin-moebot-console",
   "version": "0.1.0",
   "private": true,
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "koishi": {
     "browser": "./client/index.ts"
   },
@@ -14,7 +14,8 @@
   "peerDependencies": {
     "koishi": "^4.17.0",
     "@koishijs/plugin-console": "^5.0.0",
-    "@moebot/core": "workspace:*",
-    "@moebot/shared": "workspace:*"
+    "koishi-plugin-moebot-core": "*",
+    "@moebot/shared": "*",
+    "@moebot/renderer": "*"
   }
 }

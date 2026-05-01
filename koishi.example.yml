@@ -5,12 +5,24 @@
 # cp koishi.example.yml koishi.yml
 # ============================================================
 
-# Koishi Console WebUI
-host: 0.0.0.0
-port: 5140
-
-# ---- 数据库 (libSQL/SQLite) ----
 plugins:
+  # ---- Web 服务 ----
+  server:
+    port: 5140
+    host: 0.0.0.0
+
+  # ---- Koishi Console WebUI ----
+  console:
+    open: false
+    # Moebot 管理页目前以 Console 扩展源码方式注入，需要 devMode 开启 Vite 编译。
+    devMode: true
+    dev:
+      fs:
+        strict: true
+        allow:
+          - .
+
+  # ---- 数据库 (SQLite / libSQL 本地文件) ----
   database-sqlite:
     path: ./data/moebot.db
 
@@ -25,17 +37,14 @@ plugins:
     endpoint: ws://0.0.0.0:6700
 
   # ---- Moebot 核心插件 ----
+  # 对应 workspace 包: koishi-plugin-moebot-core
   moebot-core:
-    # Masterdata 数据源 URL
     masterDataUrl: https://sk.exmeaning.com/master
-    # 自动刷新间隔 (毫秒, 默认 1 小时)
     masterDataRefreshInterval: 3600000
-    # 图片缓存
     imageCache:
       enabled: true
-      maxSizeBytes: 1073741824    # 1GB
-      ttlMs: 86400000             # 24 小时
-    # 指令前缀
+      maxSizeBytes: 1073741824
+      ttlMs: 86400000
     commandPrefix: "/"
     # SEKAI API 配置 (可选 — 不配置不影响基本功能)
     # 也可以在管理面板 WebUI 中配置
@@ -48,8 +57,9 @@ plugins:
       rateLimit: 30
       # proxy: "http://127.0.0.1:7890"
 
-  # ---- 管理面板 ----
+  # ---- Moebot 管理面板扩展 ----
+  # 对应 workspace 包: koishi-plugin-moebot-console
   moebot-console:
     auth:
       username: admin
-      password: ""    # 首次登录时设置
+      password: ""

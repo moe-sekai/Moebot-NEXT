@@ -1,0 +1,103 @@
+{
+  "hash": "2ab545d9",
+  "configHash": "65135793",
+  "lockfileHash": "e3b0c442",
+  "browserHash": "b92a0eb9",
+  "optimized": {
+    "vue": {
+      "src": "../../../node_modules/.bun/vue@3.5.33+cc1f68d090f48582/node_modules/vue/dist/vue.runtime.esm-bundler.js",
+      "file": "vue.js",
+      "fileHash": "8974af9f",
+      "needsInterop": false
+    },
+    "vue-router": {
+      "src": "../../../node_modules/.bun/vue-router@4.6.4+cc1f68d090f48582/node_modules/vue-router/dist/vue-router.mjs",
+      "file": "vue-router.js",
+      "fileHash": "81e087f5",
+      "needsInterop": false
+    },
+    "element-plus": {
+      "src": "../../../node_modules/.bun/element-plus@2.7.7+cc1f68d090f48582/node_modules/element-plus/es/index.mjs",
+      "file": "element-plus.js",
+      "fileHash": "63dcc76a",
+      "needsInterop": false
+    },
+    "@vueuse/core": {
+      "src": "../../../node_modules/.bun/@vueuse+core@11.3.0+cc1f68d090f48582/node_modules/@vueuse/core/index.mjs",
+      "file": "@vueuse_core.js",
+      "fileHash": "a5e42130",
+      "needsInterop": false
+    },
+    "@popperjs/core": {
+      "src": "../../../node_modules/.bun/@popperjs+core@2.11.8/node_modules/@popperjs/core/lib/index.js",
+      "file": "@popperjs_core.js",
+      "fileHash": "4d619409",
+      "needsInterop": false
+    },
+    "marked": {
+      "src": "../../../node_modules/.bun/marked@9.1.6/node_modules/marked/lib/marked.esm.js",
+      "file": "marked.js",
+      "fileHash": "7ee53bd4",
+      "needsInterop": false
+    },
+    "xss": {
+      "src": "../../../node_modules/.bun/xss@1.0.15/node_modules/xss/lib/index.js",
+      "file": "xss.js",
+      "fileHash": "227794a6",
+      "needsInterop": true
+    },
+    "@koishijs/client": {
+      "src": "../../../node_modules/.bun/@koishijs+client@5.30.11+2dc76b59b67e6600/node_modules/@koishijs/client/client/index.ts",
+      "file": "@koishijs_client.js",
+      "fileHash": "3d9ef78f",
+      "needsInterop": false
+    },
+    "@koishijs/components": {
+      "src": "../../../node_modules/.bun/@koishijs+components@1.5.22+d2adbfbcd7c7907c/node_modules/@koishijs/components/client/index.ts",
+      "file": "@koishijs_components.js",
+      "fileHash": "f948877e",
+      "needsInterop": false
+    },
+    "vue-i18n": {
+      "src": "../../../node_modules/.bun/vue-i18n@9.14.5+cc1f68d090f48582/node_modules/vue-i18n/dist/vue-i18n.mjs",
+      "file": "vue-i18n.js",
+      "fileHash": "09120eed",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-VCYEKLNT": {
+      "file": "chunk-VCYEKLNT.js"
+    },
+    "chunk-NQ6HWGF3": {
+      "file": "chunk-NQ6HWGF3.js"
+    },
+    "chunk-VCM64KFY": {
+      "file": "chunk-VCM64KFY.js"
+    },
+    "chunk-XR2QTC5I": {
+      "file": "chunk-XR2QTC5I.js"
+    },
+    "chunk-AXCCOMI4": {
+      "file": "chunk-AXCCOMI4.js"
+    },
+    "chunk-ESMDUVAB": {
+      "file": "chunk-ESMDUVAB.js"
+    },
+    "chunk-BZ4TRKRY": {
+      "file": "chunk-BZ4TRKRY.js"
+    },
+    "chunk-OYU45GEP": {
+      "file": "chunk-OYU45GEP.js"
+    },
+    "chunk-5KG2YMYE": {
+      "file": "chunk-5KG2YMYE.js"
+    },
+    "chunk-QBIFJQ73": {
+      "file": "chunk-QBIFJQ73.js"
+    },
+    "chunk-Q4XP6UTR": {
+      "file": "chunk-Q4XP6UTR.js"
+    }
+  }
+}
