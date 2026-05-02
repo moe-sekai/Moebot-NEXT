@@ -229,6 +229,12 @@ func (s *Server) handlePublicConfig(c *fiber.Ctx) error {
 			"local_path":              s.Config.Masterdata.LocalPath,
 			"refresh_interval":        s.Config.Masterdata.RefreshInterval,
 		},
+		"sekai_api": fiber.Map{
+			"enabled":             s.Config.SekaiAPI.Enabled,
+			"base_url_configured": s.Config.SekaiAPI.BaseURL != "",
+			"region":              s.Config.SekaiAPI.Region,
+			"headers_configured":  len(s.Config.SekaiAPI.Headers) > 0,
+		},
 		"renderer": fiber.Map{
 			"base_url": rendererBaseURL(s.Renderer),
 			"host":     s.Config.Renderer.Host,

@@ -19,6 +19,7 @@
       <ConfigSection title="Renderer" description="Satori 渲染服务与缓存配置。" icon="renderer" :items="rendererItems" />
       <ConfigSection title="Web" description="Fiber 管理控制台监听配置。" icon="web" :items="webItems" />
       <ConfigSection title="Masterdata" description="基础数据来源、刷新与本地路径。" icon="masterdata" :items="masterdataItems" />
+      <ConfigSection title="SEKAI API" description="玩家资料接口开关、地区与请求头配置状态。" icon="web" :items="sekaiApiItems" />
       <ConfigSection title="资源" description="CDN、别名与贴纸资源配置。" icon="resources" :items="assetItems" />
     </div>
   </main>
@@ -75,6 +76,13 @@ const masterdataItems = computed<ConfigItem[]>(() => [
   { label: '备用 URL 已配置', value: Boolean(config.value?.masterdata.fallback_url_configured), badge: true },
   { label: '本地路径', value: config.value?.masterdata.local_path ?? '-' },
   { label: '刷新间隔', value: `${config.value?.masterdata.refresh_interval ?? '-'} 秒` },
+])
+
+const sekaiApiItems = computed<ConfigItem[]>(() => [
+  { label: '启用', value: Boolean(config.value?.sekai_api.enabled), badge: true },
+  { label: 'Base URL 已配置', value: Boolean(config.value?.sekai_api.base_url_configured), badge: true },
+  { label: '地区', value: config.value?.sekai_api.region ?? '-' },
+  { label: '请求头已配置', value: Boolean(config.value?.sekai_api.headers_configured), badge: true },
 ])
 
 const assetItems = computed<ConfigItem[]>(() => [

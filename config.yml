@@ -27,10 +27,16 @@ masterdata:
 
 sekai_api:
   enabled: false
-  base_url: ""
-  region: "jp"
+  base_url: "https://seka-api.exmeaning.com"
+  region: "cn"
+  headers: {}
   timeout: 10
   rate_limit: 30
+
+ranking_api:
+  base_url: "https://rks.exmeaning.com"
+  region: "cn"
+  timeout: 10
 
 renderer:
   host: "127.0.0.1"

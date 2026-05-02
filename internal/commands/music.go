@@ -12,14 +12,20 @@ import (
 	"github.com/wdvxdr1123/ZeroBot/message"
 )
 
-// RegisterMusic registers the /查曲 command.
+// RegisterMusic registers music-related query commands.
 func RegisterMusic(deps *Deps) {
-	zero.OnCommand("查曲").SetBlock(true).Handle(func(ctx *zero.Ctx) {
+	registerMusicDetailCommand(deps, "查曲")
+	registerMusicDetailCommand(deps, "查歌")
+	registerChartCommand(deps)
+}
+
+func registerMusicDetailCommand(deps *Deps, command string) {
+	zero.OnCommand(command).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 		start := time.Now()
 		keyword := strings.TrimSpace(fmt.Sprintf("%v", ctx.State["args"]))
 
 		if keyword == "" {
-			ctx.SendChain(message.Text("请输入要搜索的曲目关键词~\n例: /查曲 千本樱"))
+			ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的曲目关键词~\n例: /%s 千本樱", command)))
 			return
 		}
 
@@ -39,14 +45,52 @@ func RegisterMusic(deps *Deps) {
 			})
 			if err == nil {
 				ctx.SendChain(message.ImageBytes(png))
-				bot.RecordCommand(deps.DB, "查曲", ctx, start)
+				bot.RecordCommand(deps.DB, command, ctx, start)
 				return
 			}
 		}
 
 		ctx.SendChain(message.Text(formatMusicText(payload)))
-		bot.RecordCommand(deps.DB, "查曲", ctx, start)
+		bot.RecordCommand(deps.DB, command, ctx, start)
 	})
+}
+
+func registerChartCommand(deps *Deps) {
+	zero.OnCommand("查谱").SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		start := time.Now()
+		keyword := strings.TrimSpace(fmt.Sprintf("%v", ctx.State["args"]))
+
+		if keyword == "" {
+			ctx.SendChain(message.Text("请输入要搜索的谱面关键词~\n例: /查谱 千本樱"))
+			return
+		}
+
+		results := deps.Store.SearchMusics(keyword)
+		if len(results) == 0 {
+			ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的谱面", keyword)))
+			return
+		}
+
+		payload := renderer.BuildMusicDetailPayload(deps.Store, results[0])
+		if deps.Renderer != nil && deps.Renderer.Health() {
+			png, err := deps.Renderer.Render(buildChartRenderRequest(payload))
+			if err == nil {
+				ctx.SendChain(message.ImageBytes(png))
+				bot.RecordCommand(deps.DB, "查谱", ctx, start)
+				return
+			}
+		}
+
+		ctx.SendChain(message.Text(formatChartText(payload)))
+		bot.RecordCommand(deps.DB, "查谱", ctx, start)
+	})
+}
+
+func buildChartRenderRequest(payload renderer.MusicDetailPayload) renderer.RenderRequest {
+	return renderer.RenderRequest{
+		Template: "chart_detail",
+		Data:     payload,
+	}
 }
 
 func formatMusicText(music renderer.MusicDetailPayload) string {
@@ -72,6 +116,25 @@ func formatMusicText(music renderer.MusicDetailPayload) string {
 			diffs = append(diffs, fmt.Sprintf("%s Lv.%d/%d notes", d.MusicDifficulty, d.PlayLevel, d.TotalNoteCount))
 		}
 		lines = append(lines, "难度："+strings.Join(diffs, "，"))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatChartText(music renderer.MusicDetailPayload) string {
+	lines := []string{
+		fmt.Sprintf("谱面：%s", music.Title),
+		fmt.Sprintf("ID：%d", music.ID),
+	}
+	if len(music.Categories) > 0 {
+		lines = append(lines, "分类："+strings.Join(music.Categories, " / "))
+	}
+	if len(music.Difficulties) == 0 {
+		lines = append(lines, "暂无谱面难度数据")
+		return strings.Join(lines, "\n")
+	}
+	lines = append(lines, "难度：")
+	for _, d := range music.Difficulties {
+		lines = append(lines, fmt.Sprintf("%s：Lv.%d · %d notes", strings.ToUpper(d.MusicDifficulty), d.PlayLevel, d.TotalNoteCount))
 	}
 	return strings.Join(lines, "\n")
 }

@@ -3,7 +3,9 @@ package commands
 import (
 	"moebot-next/internal/database"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/ranking"
 	"moebot-next/internal/renderer"
+	"moebot-next/internal/sekai"
 
 	"github.com/rs/zerolog/log"
 )
@@ -13,6 +15,8 @@ type Deps struct {
 	Store    *masterdata.Store
 	DB       *database.DB
 	Renderer *renderer.Client
+	Sekai    *sekai.Client
+	Ranking  *ranking.Client
 }
 
 // RegisterAll registers all bot commands.
@@ -25,8 +29,8 @@ func RegisterAll(deps *Deps) {
 	RegisterEvent(deps)
 	RegisterGacha(deps)
 	RegisterProfile(deps)
+	RegisterRanking(deps)
 	RegisterBirthday()
-	// RegisterRanking(deps)  // Phase 2
 	// RegisterSticker(deps)  // Phase 2
 	// RegisterGuess(deps)    // Phase 3
 

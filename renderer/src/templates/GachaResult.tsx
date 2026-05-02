@@ -28,7 +28,6 @@ export function GachaResult({ results, pullType, assetSource = 'main-jp' }: Gach
       title="抽卡结果"
       subtitle={pullType === 'multi' ? `十连抽卡 · ★4/${highest}` : '单抽'}
       accentColor={theme.colors.warning}
-      footer="CardItem / SekaiCardThumbnail style · bright mode"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
         <div

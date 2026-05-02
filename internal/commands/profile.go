@@ -7,6 +7,7 @@ import (
 
 	"moebot-next/internal/bot"
 	"moebot-next/internal/models"
+	"moebot-next/internal/renderer"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
 	"github.com/wdvxdr1123/ZeroBot/message"
@@ -87,9 +88,59 @@ func RegisterProfile(deps *Deps) {
 			return
 		}
 
-		// TODO: fetch profile from SEKAI API and render image.
+		if deps.Sekai != nil && deps.Sekai.Enabled() {
+			profile, err := deps.Sekai.GetProfile(user.GameID)
+			if err == nil {
+				payload := renderer.BuildProfileCardPayloadWithStore(deps.Store, *profile)
+				if deps.Renderer != nil && deps.Renderer.Health() {
+					png, err := deps.Renderer.Render(renderer.RenderRequest{
+						Template: "profile_card",
+						Data:     payload,
+					})
+					if err == nil {
+						ctx.SendChain(message.ImageBytes(png))
+						bot.RecordCommand(deps.DB, "个人信息", ctx, start)
+						return
+					}
+				}
+				ctx.SendChain(message.Text(formatProfileText(payload)))
+				bot.RecordCommand(deps.DB, "个人信息", ctx, start)
+				return
+			}
+		}
+
 		ctx.SendChain(message.Text(fmt.Sprintf("👤 个人信息\n游戏 ID: %s\n绑定时间: %s",
 			user.GameID, user.CreatedAt.Format("2006-01-02 15:04"))))
 		bot.RecordCommand(deps.DB, "个人信息", ctx, start)
 	})
+}
+
+func formatProfileText(profile renderer.ProfileCardPayload) string {
+	lines := []string{
+		"👤 个人资料",
+		fmt.Sprintf("昵称：%s", profile.Name),
+		fmt.Sprintf("Rank：%d", profile.Rank),
+		fmt.Sprintf("用户 ID：%s", profile.UserID),
+	}
+	if profile.TotalPower > 0 {
+		lines = append(lines, fmt.Sprintf("总综合力：%s", formatNumber(profile.TotalPower)))
+	}
+	if profile.Signature != "" {
+		lines = append(lines, fmt.Sprintf("签名：%s", profile.Signature))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatNumber(value int) string {
+	raw := fmt.Sprintf("%d", value)
+	if len(raw) <= 3 {
+		return raw
+	}
+	parts := make([]string, 0, len(raw)/3+1)
+	for len(raw) > 3 {
+		parts = append([]string{raw[len(raw)-3:]}, parts...)
+		raw = raw[:len(raw)-3]
+	}
+	parts = append([]string{raw}, parts...)
+	return strings.Join(parts, ",")
 }

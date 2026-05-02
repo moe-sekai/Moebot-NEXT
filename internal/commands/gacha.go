@@ -12,20 +12,25 @@ import (
 	"github.com/wdvxdr1123/ZeroBot/message"
 )
 
-// RegisterGacha registers the /查卡池 command.
+// RegisterGacha registers gacha query commands.
 func RegisterGacha(deps *Deps) {
-	zero.OnCommand("查卡池").SetBlock(true).Handle(func(ctx *zero.Ctx) {
+	registerGachaCommand(deps, "查卡池")
+	registerGachaCommand(deps, "查扭蛋")
+}
+
+func registerGachaCommand(deps *Deps, command string) {
+	zero.OnCommand(command).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 		start := time.Now()
 		keyword := strings.TrimSpace(fmt.Sprintf("%v", ctx.State["args"]))
 
 		if keyword == "" {
-			ctx.SendChain(message.Text("请输入要搜索的卡池关键词~\n例: /查卡池 限定"))
+			ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的扭蛋关键词~\n例: /%s 限定", command)))
 			return
 		}
 
 		results := deps.Store.SearchGachas(keyword)
 		if len(results) == 0 {
-			ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的卡池", keyword)))
+			ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的扭蛋", keyword)))
 			return
 		}
 
@@ -39,20 +44,20 @@ func RegisterGacha(deps *Deps) {
 			})
 			if err == nil {
 				ctx.SendChain(message.ImageBytes(png))
-				bot.RecordCommand(deps.DB, "查卡池", ctx, start)
+				bot.RecordCommand(deps.DB, command, ctx, start)
 				return
 			}
 		}
 
 		ctx.SendChain(message.Text(formatGachaText(payload)))
-		bot.RecordCommand(deps.DB, "查卡池", ctx, start)
+		bot.RecordCommand(deps.DB, command, ctx, start)
 	})
 }
 
 func formatGachaText(gacha renderer.GachaInfoPayload) string {
 	lines := []string{
 		fmt.Sprintf("卡池：%s", gacha.Name),
-		fmt.Sprintf("类型：%s", gacha.GachaType),
+		fmt.Sprintf("类型：%s", gachaTypeLabel(gacha.GachaType)),
 		fmt.Sprintf("ID：%d", gacha.ID),
 	}
 	if gacha.StartAt > 0 {
@@ -76,4 +81,21 @@ func formatGachaText(gacha renderer.GachaInfoPayload) string {
 		lines = append(lines, "概率："+strings.Join(rates, "，"))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func gachaTypeLabel(value string) string {
+	switch value {
+	case "ceil":
+		return "天井扭蛋"
+	case "normal":
+		return "普通扭蛋"
+	case "limited":
+		return "限定扭蛋"
+	case "birthday":
+		return "生日扭蛋"
+	case "colorful_festival":
+		return "Colorful Festival"
+	default:
+		return value
+	}
 }

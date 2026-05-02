@@ -91,10 +91,11 @@ type MusicInfo struct {
 	Arranger            string   `json:"arranger"`
 	AssetbundleName     string   `json:"assetbundleName"`
 	Categories          []string `json:"categories"`
-	PublishedAt         int64    `json:"publishedAt"` // Unix ms
-	ReleasedAt          int64    `json:"releasedAt"`  // Unix ms
-	FillerSec           float64  `json:"fillerSec"`
-	IsNewlyWrittenMusic bool     `json:"isNewlyWrittenMusic"`
+	PublishedAt            int64    `json:"publishedAt"` // Unix ms
+	ReleasedAt             int64    `json:"releasedAt"`  // Unix ms
+	SecForMusicScoreMaker  int      `json:"secForMusicScoreMaker"`
+	FillerSec              float64  `json:"fillerSec"`
+	IsNewlyWrittenMusic    bool     `json:"isNewlyWrittenMusic"`
 	IsFullLength        bool     `json:"isFullLength"`
 }
 

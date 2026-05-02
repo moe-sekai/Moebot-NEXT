@@ -13,7 +13,9 @@ import (
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/ranking"
 	"moebot-next/internal/renderer"
+	"moebot-next/internal/sekai"
 	"moebot-next/internal/web"
 
 	"github.com/rs/zerolog"
@@ -62,11 +64,20 @@ func main() {
 		defer rendererClient.StopProcess()
 	}
 
+	sekaiClient := sekai.NewClient(cfg.SekaiAPI)
+	rankingClient := ranking.NewClient(ranking.Config{
+		BaseURL: cfg.RankingAPI.BaseURL,
+		Region:  cfg.RankingAPI.Region,
+		Timeout: cfg.RankingAPI.Timeout,
+	})
+
 	bot.RegisterMiddleware(db)
 	commands.RegisterAll(&commands.Deps{
 		Store:    store,
 		DB:       db,
 		Renderer: rendererClient,
+		Sekai:    sekaiClient,
+		Ranking:  rankingClient,
 	})
 
 	webServer := web.New(cfg, db, store, rendererClient)

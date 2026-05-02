@@ -124,6 +124,12 @@ export interface PublicConfig {
     local_path: string
     refresh_interval: number
   }
+  sekai_api: {
+    enabled: boolean
+    base_url_configured: boolean
+    region: string
+    headers_configured: boolean
+  }
   renderer: {
     base_url: string
     host: string

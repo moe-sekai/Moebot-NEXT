@@ -24,9 +24,10 @@ import UiCard from './ui/UiCard.vue'
 const commands = [
   { name: '/帮助', description: '查看 Moebot NEXT 指令菜单' },
   { name: '/查卡', description: '搜索并渲染卡牌详情' },
-  { name: '/查曲', description: '查询曲目信息与谱面难度' },
+  { name: '/查曲 / 查歌', description: '查询曲目信息与谱面难度' },
+  { name: '/查谱', description: '查询谱面等级与 notes' },
   { name: '/查活动', description: '查看活动时间与加成信息' },
-  { name: '/查卡池', description: '查看卡池与 Pickup 卡牌' },
+  { name: '/查卡池 / 查扭蛋', description: '查看扭蛋与 Pickup 卡牌' },
   { name: '/绑定', description: '绑定 PJSK 游戏账号' },
   { name: '/解绑', description: '解除当前账号绑定' },
   { name: '/个人信息', description: '查看绑定资料与概况' },

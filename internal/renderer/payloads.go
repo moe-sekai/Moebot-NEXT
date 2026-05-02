@@ -2,9 +2,12 @@ package renderer
 
 import (
 	"fmt"
+	"time"
 
 	"moebot-next/internal/assets"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/ranking"
+	"moebot-next/internal/sekai"
 )
 
 const defaultAssetSource = "main-jp"
@@ -44,6 +47,7 @@ type MusicDetailPayload struct {
 	Difficulties        []MusicDifficultyPayload `json:"difficulties,omitempty"`
 	PublishedAt         int64                    `json:"publishedAt,omitempty"`
 	ReleasedAt          int64                    `json:"releasedAt,omitempty"`
+	DurationSec         int                      `json:"durationSec,omitempty"`
 	FillerSec           float64                  `json:"fillerSec,omitempty"`
 	IsNewlyWrittenMusic bool                     `json:"isNewlyWrittenMusic,omitempty"`
 	IsFullLength        bool                     `json:"isFullLength,omitempty"`
@@ -142,6 +146,309 @@ type GachaRatePayload struct {
 	Rate           float64 `json:"rate"`
 }
 
+type RankingListPayload struct {
+	Title       string                `json:"title"`
+	Subtitle    string                `json:"subtitle,omitempty"`
+	Rankings    []RankingEntryPayload `json:"rankings"`
+	EventID     int                   `json:"eventId,omitempty"`
+	UpdatedAt   int64                 `json:"updatedAt,omitempty"`
+	AssetSource string                `json:"assetSource,omitempty"`
+}
+
+type RankingEntryPayload struct {
+	Rank                int                     `json:"rank"`
+	Name                string                  `json:"name,omitempty"`
+	DisplayName         string                  `json:"displayName,omitempty"`
+	Signature           string                  `json:"signature,omitempty"`
+	Score               int64                   `json:"score"`
+	UserID              string                  `json:"userId,omitempty"`
+	ScoreDelta          int64                   `json:"scoreDelta,omitempty"`
+	LeaderCard          *ProfileDeckCardPayload `json:"leaderCard,omitempty"`
+	Churn48h            int                     `json:"churn48h,omitempty"`
+	RecentActivityCount int                     `json:"recentActivityCount,omitempty"`
+	Growth1h            int64                   `json:"growth1h,omitempty"`
+	Speed20m3           int64                   `json:"speed20m3,omitempty"`
+	Churn1h             int                     `json:"churn1h,omitempty"`
+	Churn20m3           int                     `json:"churn20m3,omitempty"`
+	Trend               string                  `json:"trend,omitempty"`
+	IsTierLine          bool                    `json:"isTierLine,omitempty"`
+}
+
+func BuildRankingListPayload(title string, board ranking.Board) RankingListPayload {
+	payload := RankingListPayload{Title: title, EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: defaultAssetSource}
+	for _, entry := range board.Rankings {
+		payload.Rankings = append(payload.Rankings, buildRankingEntryPayload(entry))
+	}
+	return payload
+}
+
+func BuildChurnRankingListPayload(board ranking.Board) RankingListPayload {
+	payload := RankingListPayload{Title: "查房", Subtitle: "活跃度 / 时速 / 最近分数变化", EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: defaultAssetSource}
+	for _, entry := range board.Rankings {
+		item := buildRankingEntryPayload(entry)
+		if entry.LastChange != nil {
+			item.ScoreDelta = entry.LastChange.Delta
+		}
+		recentCount := 0
+		if entry.RecentActivity != nil {
+			recentCount = entry.RecentActivity.Count
+		}
+		item.Churn48h = entry.Churn48h
+		item.RecentActivityCount = recentCount
+		item.Growth1h = entry.Growth1h
+		item.Speed20m3 = calcRecentGrowth(entry.RecentScoreChanges, 20) * 3
+		item.Churn1h = calcRecentChurnCount(entry.RecentScoreChanges, 60)
+		item.Churn20m3 = calcRecentChurnCount(entry.RecentScoreChanges, 20) * 3
+		if item.Churn1h == 0 {
+			item.Churn1h = currentHourChurn(entry.HourlyChurn)
+		}
+		item.Trend = speedTrend(item.Growth1h, item.Speed20m3)
+		item.IsTierLine = entry.Rank > 100 && entry.UserID.String() == ""
+		item.Signature = fmt.Sprintf("48H %d · 1H速 %s · 20m×3 %s", entry.Churn48h, formatCompactSpeed(item.Growth1h), formatCompactSpeed(item.Speed20m3))
+		payload.Rankings = append(payload.Rankings, item)
+	}
+	return payload
+}
+
+func calcRecentGrowth(changes []ranking.ScoreChange, minutes int) int64 {
+	cutoff := time.Now().Add(-time.Duration(minutes) * time.Minute).UnixMilli()
+	var total int64
+	for _, change := range changes {
+		if normalizeTimestampMillis(change.Time) >= cutoff && change.Delta > 0 {
+			total += change.Delta
+		}
+	}
+	return total
+}
+
+func calcRecentChurnCount(changes []ranking.ScoreChange, minutes int) int {
+	cutoff := time.Now().Add(-time.Duration(minutes) * time.Minute).UnixMilli()
+	count := 0
+	for _, change := range changes {
+		if normalizeTimestampMillis(change.Time) >= cutoff && change.Delta > 0 {
+			count++
+		}
+	}
+	return count
+}
+
+func currentHourChurn(hourly []ranking.HourlyChurn) int {
+	now := time.Now().UTC().Truncate(time.Hour).Format("2006-01-02T15:04:05Z")
+	for _, item := range hourly {
+		if item.Hour == now {
+			return item.Count
+		}
+	}
+	return 0
+}
+
+func speedTrend(speed1h int64, speed20m3 int64) string {
+	if speed1h == 0 && speed20m3 == 0 {
+		return "flat"
+	}
+	if speed1h == 0 {
+		return "up"
+	}
+	if speed20m3*100 > speed1h*108 {
+		return "up"
+	}
+	if speed20m3*100 < speed1h*92 {
+		return "down"
+	}
+	return "flat"
+}
+
+func normalizeTimestampMillis(value int64) int64 {
+	if value > 0 && value < 1_000_000_000_000 {
+		return value * 1000
+	}
+	return value
+}
+
+func formatCompactSpeed(value int64) string {
+	return fmt.Sprintf("%dk", value/1000)
+}
+
+func buildRankingEntryPayload(entry ranking.RankingEntry) RankingEntryPayload {
+	payload := RankingEntryPayload{
+		Rank:      entry.Rank,
+		Name:      entry.Name,
+		Signature: entry.Word,
+		Score:     entry.Score,
+		UserID:    entry.UserID.String(),
+	}
+	if entry.LeaderCard != nil {
+		payload.LeaderCard = &ProfileDeckCardPayload{
+			CardID:       entry.LeaderCard.CardID,
+			ID:           entry.LeaderCard.CardID,
+			Level:        entry.LeaderCard.Level,
+			Mastery:      entry.LeaderCard.MasterRank,
+			IsTrained:    entry.LeaderCard.DefaultImage == "special_training",
+			DefaultImage: entry.LeaderCard.DefaultImage,
+		}
+	}
+	return payload
+}
+
+// ProfileCardPayload is the normalized data contract consumed by ProfileCard.tsx.
+type ProfileCardPayload struct {
+	Name             string                   `json:"name"`
+	Rank             int                      `json:"rank"`
+	UserID           string                   `json:"userId"`
+	TwitterID        string                   `json:"twitterId,omitempty"`
+	Signature        string                   `json:"signature,omitempty"`
+	TotalPower       int                      `json:"totalPower,omitempty"`
+	Stats            *ProfileStatsPayload     `json:"stats,omitempty"`
+	MusicClearCounts []MusicClearCountPayload `json:"musicClearCounts,omitempty"`
+	CharacterRanks   []CharacterRankPayload   `json:"characterRanks,omitempty"`
+	ChallengeLive    *ChallengeLivePayload    `json:"challengeLive,omitempty"`
+	ProfileHonors    []ProfileHonorPayload    `json:"profileHonors,omitempty"`
+	LeaderCard       *ProfileDeckCardPayload  `json:"leaderCard,omitempty"`
+	DeckCards        []ProfileDeckCardPayload `json:"deckCards,omitempty"`
+	AssetSource      string                   `json:"assetSource,omitempty"`
+}
+
+type ProfileStatsPayload struct {
+	MvpCount       int `json:"mvpCount,omitempty"`
+	SuperStarCount int `json:"superStarCount,omitempty"`
+}
+
+type MusicClearCountPayload struct {
+	Difficulty string `json:"difficulty"`
+	LiveClear  int    `json:"liveClear"`
+	FullCombo  int    `json:"fullCombo"`
+	AllPerfect int    `json:"allPerfect"`
+}
+
+type CharacterRankPayload struct {
+	CharacterID   int    `json:"characterId"`
+	CharacterName string `json:"characterName"`
+	Rank          int    `json:"rank"`
+}
+
+type ChallengeLivePayload struct {
+	CharacterID   int    `json:"characterId"`
+	CharacterName string `json:"characterName"`
+	HighScore     int    `json:"highScore"`
+}
+
+type ProfileHonorPayload struct {
+	Seq             int    `json:"seq"`
+	HonorType       string `json:"honorType,omitempty"`
+	HonorID         int    `json:"honorId"`
+	Level           int    `json:"level"`
+	Name            string `json:"name,omitempty"`
+	HonorRarity     string `json:"honorRarity,omitempty"`
+	AssetbundleName string `json:"assetbundleName,omitempty"`
+}
+
+type ProfileDeckCardPayload struct {
+	CardID              int    `json:"cardId,omitempty"`
+	ID                  int    `json:"id,omitempty"`
+	CharacterName       string `json:"characterName,omitempty"`
+	Rarity              string `json:"rarity,omitempty"`
+	CardRarityType      string `json:"cardRarityType,omitempty"`
+	Attr                string `json:"attr,omitempty"`
+	AssetbundleName     string `json:"assetbundleName,omitempty"`
+	ThumbnailURL        string `json:"thumbnailUrl,omitempty"`
+	TrainedThumbnailURL string `json:"trainedThumbnailUrl,omitempty"`
+	Level               int    `json:"level,omitempty"`
+	Mastery             int    `json:"mastery,omitempty"`
+	IsTrained           bool   `json:"isTrained,omitempty"`
+	DefaultImage        string `json:"defaultImage,omitempty"`
+}
+
+// BuildProfileCardPayload adapts an API profile into ProfileCard renderer props.
+func BuildProfileCardPayload(profile sekai.Profile) ProfileCardPayload {
+	return BuildProfileCardPayloadWithStore(nil, profile)
+}
+
+// BuildProfileCardPayloadWithStore enriches profile card IDs with masterdata card display fields.
+func BuildProfileCardPayloadWithStore(store *masterdata.Store, profile sekai.Profile) ProfileCardPayload {
+	payload := ProfileCardPayload{
+		Name:       profile.Name,
+		Rank:       profile.Rank,
+		UserID:     profile.UserID,
+		TwitterID:  profile.TwitterID,
+		Signature:  profile.Signature,
+		TotalPower: profile.TotalPower,
+		Stats: &ProfileStatsPayload{
+			MvpCount:       profile.Stats.MvpCount,
+			SuperStarCount: profile.Stats.SuperStarCount,
+		},
+		AssetSource: defaultAssetSource,
+	}
+	for _, count := range profile.MusicClearCounts {
+		payload.MusicClearCounts = append(payload.MusicClearCounts, MusicClearCountPayload{
+			Difficulty: count.Difficulty,
+			LiveClear:  count.LiveClear,
+			FullCombo:  count.FullCombo,
+			AllPerfect: count.AllPerfect,
+		})
+	}
+	for _, rank := range profile.CharacterRanks {
+		payload.CharacterRanks = append(payload.CharacterRanks, CharacterRankPayload{
+			CharacterID:   rank.CharacterID,
+			CharacterName: characterName(rank.CharacterID),
+			Rank:          rank.Rank,
+		})
+	}
+	if profile.ChallengeLive != nil {
+		payload.ChallengeLive = &ChallengeLivePayload{
+			CharacterID:   profile.ChallengeLive.CharacterID,
+			CharacterName: characterName(profile.ChallengeLive.CharacterID),
+			HighScore:     profile.ChallengeLive.HighScore,
+		}
+	}
+	for _, honor := range profile.ProfileHonors {
+		honorPayload := ProfileHonorPayload{
+			Seq:       honor.Seq,
+			HonorType: honor.HonorType,
+			HonorID:   honor.HonorID,
+			Level:     honor.Level,
+		}
+		if store != nil {
+			if masterHonor := store.GetHonor(honor.HonorID); masterHonor != nil {
+				honorPayload.Name = masterHonor.Name
+				honorPayload.HonorRarity = masterHonor.HonorRarity
+				honorPayload.AssetbundleName = masterHonor.AssetbundleName
+			}
+		}
+		payload.ProfileHonors = append(payload.ProfileHonors, honorPayload)
+	}
+	if profile.LeaderCard != nil {
+		leader := buildProfileDeckCardPayload(store, *profile.LeaderCard)
+		payload.LeaderCard = &leader
+	}
+	for _, card := range profile.DeckCards {
+		payload.DeckCards = append(payload.DeckCards, buildProfileDeckCardPayload(store, card))
+	}
+	return payload
+}
+
+func buildProfileDeckCardPayload(store *masterdata.Store, card sekai.ProfileDeckCard) ProfileDeckCardPayload {
+	payload := ProfileDeckCardPayload{
+		CardID:       card.CardID,
+		ID:           card.CardID,
+		Level:        card.Level,
+		Mastery:      card.Mastery,
+		IsTrained:    card.DefaultImage == "special_training",
+		DefaultImage: card.DefaultImage,
+	}
+	if store != nil {
+		if masterCard := store.GetCard(card.CardID); masterCard != nil {
+			payload.CharacterName = characterName(masterCard.CharacterID)
+			payload.Rarity = masterCard.CardRarityType
+			payload.CardRarityType = masterCard.CardRarityType
+			payload.Attr = masterCard.Attr
+			payload.AssetbundleName = masterCard.AssetbundleName
+			payload.ThumbnailURL = assets.GetCardThumbnailURL(masterCard.AssetbundleName, false)
+			payload.TrainedThumbnailURL = assets.GetCardThumbnailURL(masterCard.AssetbundleName, true)
+		}
+	}
+	return payload
+}
+
 // BuildCardDetailPayload adapts a masterdata card into CardDetail renderer props.
 func BuildCardDetailPayload(_ *masterdata.Store, card masterdata.CardInfo) CardDetailPayload {
 	payload := CardDetailPayload{
@@ -184,6 +491,7 @@ func BuildMusicDetailPayload(store *masterdata.Store, music masterdata.MusicInfo
 		AssetbundleName:     music.AssetbundleName,
 		PublishedAt:         music.PublishedAt,
 		ReleasedAt:          music.ReleasedAt,
+		DurationSec:         music.SecForMusicScoreMaker,
 		FillerSec:           music.FillerSec,
 		IsNewlyWrittenMusic: music.IsNewlyWrittenMusic,
 		IsFullLength:        music.IsFullLength,

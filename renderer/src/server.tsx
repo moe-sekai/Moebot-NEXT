@@ -1,6 +1,6 @@
 import { renderToImage } from './engine'
 import { listRenderPreviews, renderPreviewTemplate } from './preview'
-import { CardDetail, EventInfo, GachaInfo, HelpCard, MusicDetail } from './templates'
+import { CardDetail, ChartDetail, ChurnRankingList, EventInfo, GachaInfo, HelpCard, MusicDetail, ProfileCard, RankingList } from './templates'
 
 interface RenderRequest {
   template: string
@@ -15,9 +15,10 @@ function defaultHelpData() {
   return {
     commands: [
       { name: '查卡', usage: '/查卡 初音未来', description: '搜索卡牌信息，支持角色名/卡名/ID 模糊匹配' },
-      { name: '查曲', usage: '/查曲 千本樱', description: '搜索曲目信息，支持别名/日文/罗马音' },
+      { name: '查曲/查歌', usage: '/查歌 千本樱', description: '搜索曲目信息，支持别名/日文/罗马音' },
+      { name: '查谱', usage: '/查谱 千本樱', description: '查询谱面等级与 notes' },
       { name: '查活动', usage: '/查活动 周年', description: '查询活动时间、类型、加成等信息' },
-      { name: '查卡池', usage: '/查卡池 限定', description: '查询卡池和 Pick Up 信息' },
+      { name: '查卡池/查扭蛋', usage: '/查扭蛋 限定', description: '查询扭蛋和 Pick Up 信息' },
       { name: '绑定', usage: '/绑定 123456789', description: '绑定 PJSK 游戏账号' },
       { name: '生日', usage: '/生日', description: '查看今日和近期角色生日' },
     ],
@@ -63,7 +64,7 @@ function normalizeMusic(data: any) {
     difficulties: data.difficulties ?? data.Difficulties ?? [],
     publishedAt: data.publishedAt ?? data.PublishedAt,
     releasedAt: data.releasedAt ?? data.ReleasedAt,
-    fillerSec: data.fillerSec ?? data.FillerSec,
+    durationSec: data.durationSec ?? data.DurationSec ?? data.secForMusicScoreMaker ?? data.SecForMusicScoreMaker,
     isNewlyWrittenMusic: data.isNewlyWrittenMusic ?? data.IsNewlyWrittenMusic,
     isFullLength: data.isFullLength ?? data.IsFullLength,
   }
@@ -86,6 +87,41 @@ function normalizeEvent(data: any) {
     deckBonuses: data.deckBonuses ?? data.DeckBonuses ?? [],
     bonusAttr: data.bonusAttr ?? data.BonusAttr,
     bonusCharacters: data.bonusCharacters ?? data.BonusCharacters ?? deriveBonusCharacters(data.deckBonuses ?? data.DeckBonuses ?? []),
+  }
+}
+
+function normalizeRankingList(data: any) {
+  return {
+    title: data.title ?? data.Title ?? '活动榜线',
+    subtitle: data.subtitle ?? data.Subtitle,
+    rankings: data.rankings ?? data.Rankings ?? [],
+    eventId: data.eventId ?? data.EventID,
+    eventName: data.eventName ?? data.EventName,
+    updatedAt: data.updatedAt ?? data.UpdatedAt,
+    assetSource: data.assetSource ?? data.AssetSource,
+  }
+}
+
+function normalizeProfile(data: any) {
+  return {
+    name: data.name ?? data.Name ?? '未知玩家',
+    rank: data.rank ?? data.Rank ?? 0,
+    userId: data.userId ?? data.UserID ?? data.userID ?? data.ID ?? data.id ?? '-',
+    twitterId: data.twitterId ?? data.TwitterID,
+    bio: data.bio ?? data.Bio,
+    signature: data.signature ?? data.Signature,
+    totalPower: data.totalPower ?? data.TotalPower,
+    characterId: data.characterId ?? data.CharacterID,
+    avatarUrl: data.avatarUrl ?? data.AvatarURL,
+    assetSource: data.assetSource ?? data.AssetSource,
+    stats: data.stats ?? data.Stats,
+    musicClearCounts: data.musicClearCounts ?? data.MusicClearCounts,
+    characterRanks: data.characterRanks ?? data.CharacterRanks,
+    challengeLive: data.challengeLive ?? data.ChallengeLive,
+    profileHonors: data.profileHonors ?? data.ProfileHonors,
+    leaderCard: data.leaderCard ?? data.LeaderCard,
+    deckCards: data.deckCards ?? data.DeckCards,
+    honors: data.honors ?? data.Honors,
   }
 }
 
@@ -165,12 +201,24 @@ function createElement(req: RenderRequest) {
     case 'music_detail':
     case 'music':
       return <MusicDetail music={normalizeMusic(req.data)} />
+    case 'chart_detail':
+    case 'chart':
+      return <ChartDetail music={normalizeMusic(req.data)} />
     case 'event_info':
     case 'event':
       return <EventInfo event={normalizeEvent(req.data)} />
     case 'gacha_info':
     case 'gacha':
       return <GachaInfo gacha={normalizeGacha(req.data)} />
+    case 'profile_card':
+    case 'profile':
+      return <ProfileCard profile={normalizeProfile(req.data)} />
+    case 'ranking_list':
+    case 'ranking':
+      return <RankingList {...normalizeRankingList(req.data)} />
+    case 'churn_ranking_list':
+    case 'churn_ranking':
+      return <ChurnRankingList {...normalizeRankingList(req.data)} />
     default:
       return <HelpCard {...defaultHelpData()} />
   }

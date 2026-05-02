@@ -102,7 +102,7 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
           color: theme.colors.textMuted,
         }}
       >
-        <span style={{ display: 'flex' }}>{footer ?? 'Moebot NEXT · pjsk.moe'}</span>
+        <span style={{ display: 'flex' }}>{footer ?? 'Moebot NEXT'}</span>
       </div>
     </div>
   )

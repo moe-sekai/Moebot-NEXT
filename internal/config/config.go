@@ -14,6 +14,7 @@ type Config struct {
 	Database   DatabaseConfig   `yaml:"database"`
 	Masterdata MasterdataConfig `yaml:"masterdata"`
 	SekaiAPI   SekaiAPIConfig   `yaml:"sekai_api"`
+	RankingAPI RankingAPIConfig `yaml:"ranking_api"`
 	Renderer   RendererConfig   `yaml:"renderer"`
 	Assets     AssetsConfig     `yaml:"assets"`
 	Log        LogConfig        `yaml:"log"`
@@ -64,11 +65,18 @@ type MasterdataConfig struct {
 
 // SekaiAPIConfig holds optional SEKAI API client settings.
 type SekaiAPIConfig struct {
-	Enabled   bool   `yaml:"enabled"`
-	BaseURL   string `yaml:"base_url"`
-	Region    string `yaml:"region"`     // "jp" or "cn"
-	Timeout   int    `yaml:"timeout"`    // seconds
-	RateLimit int    `yaml:"rate_limit"` // requests per minute
+	Enabled   bool              `yaml:"enabled"`
+	BaseURL   string            `yaml:"base_url"`
+	Region    string            `yaml:"region"`     // "jp" or "cn"
+	Headers   map[string]string `yaml:"headers"`    // optional API request headers
+	Timeout   int               `yaml:"timeout"`    // seconds
+	RateLimit int               `yaml:"rate_limit"` // requests per minute
+}
+
+type RankingAPIConfig struct {
+	BaseURL string `yaml:"base_url"`
+	Region  string `yaml:"region"`
+	Timeout int    `yaml:"timeout"`
 }
 
 // RendererConfig holds the Bun renderer service settings.
@@ -128,9 +136,16 @@ func DefaultConfig() *Config {
 			RefreshInterval: 3600,
 		},
 		SekaiAPI: SekaiAPIConfig{
-			Region:    "jp",
+			BaseURL:   "https://seka-api.exmeaning.com",
+			Region:    "cn",
+			Headers:   map[string]string{},
 			Timeout:   10,
 			RateLimit: 30,
+		},
+		RankingAPI: RankingAPIConfig{
+			BaseURL: "https://rks.exmeaning.com",
+			Region:  "cn",
+			Timeout: 10,
 		},
 		Renderer: RendererConfig{
 			Host: "127.0.0.1",

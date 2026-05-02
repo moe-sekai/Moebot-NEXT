@@ -16,6 +16,14 @@ export interface RankingListProps {
     scoreDelta?: number
     rankDelta?: number
     avatarUrl?: string
+    churn48h?: number
+    recentActivityCount?: number
+    growth1h?: number
+    speed20m3?: number
+    churn1h?: number
+    churn20m3?: number
+    trend?: string
+    isTierLine?: boolean
     leaderCharacterId?: number
     leaderCard?: {
       cardId?: number
@@ -44,7 +52,7 @@ const TOP_COLORS: Record<number, { bg: string; text: string; border: string }> =
   3: { bg: '#fff0df', text: '#a7561b', border: '#e8a56b' },
 }
 
-export function RankingList({ title, subtitle, rankings, eventId, eventName, updatedAt, assetSource = 'main-jp' }: RankingListProps) {
+export function RankingList({ title, subtitle, rankings, eventId, eventName, assetSource = 'main-jp' }: RankingListProps) {
   const topThree = rankings.slice(0, 3)
   const rest = rankings.slice(3)
 
@@ -53,7 +61,6 @@ export function RankingList({ title, subtitle, rankings, eventId, eventName, upd
       title={title}
       subtitle={subtitle ?? `${eventName ?? '活动实时排行'}${eventId ? ` · Event #${eventId}` : ''}`}
       accentColor={theme.colors.accent}
-      footer={updatedAt ? `Updated: ${formatUpdatedAt(updatedAt)} · Moebot NEXT` : 'Realtime ranking · Moebot NEXT'}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
         {topThree.length > 0 && (
@@ -177,7 +184,7 @@ function RankingAvatar({ entry, size, assetSource }: { entry: RankingListProps['
   if (card) {
     const rarity = card.cardRarityType ?? card.rarity ?? 'rarity_1'
     const attr = card.attr ?? 'cute'
-    const isTrained = card.isTrained ?? card.defaultImage === 'special_training'
+    const isTrained = shouldUseTrainedImage(card)
     const thumbnailUrl = card.thumbnailUrl
       ?? (card.assetbundleName ? getCardThumbnailUrl(card.assetbundleName, false, assetSource, 'png') : undefined)
     const trainedThumbnailUrl = card.trainedThumbnailUrl
@@ -219,6 +226,12 @@ function RankingAvatar({ entry, size, assetSource }: { entry: RankingListProps['
   )
 }
 
+function shouldUseTrainedImage(card: NonNullable<RankingListProps['rankings'][number]['leaderCard']>): boolean {
+  if (card.defaultImage === 'special_training') return true
+  if (card.defaultImage === 'original') return false
+  return Boolean(card.isTrained)
+}
+
 function DeltaLine({ scoreDelta, rankDelta, compact = false }: { scoreDelta?: number; rankDelta?: number; compact?: boolean }) {
   const hasScore = typeof scoreDelta === 'number' && scoreDelta !== 0
   const hasRank = typeof rankDelta === 'number' && rankDelta !== 0
@@ -240,16 +253,4 @@ function DeltaLine({ scoreDelta, rankDelta, compact = false }: { scoreDelta?: nu
       )}
     </div>
   )
-}
-
-function formatUpdatedAt(value: number | string): string {
-  if (typeof value === 'string') return value
-  const normalized = value < 1_000_000_000_000 ? value * 1000 : value
-  return new Date(normalized).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }

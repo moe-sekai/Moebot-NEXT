@@ -51,7 +51,6 @@ export function CardDetail({ card }: CardDetailProps) {
       title={card.prefix}
       subtitle={`${card.characterName} · ID: ${card.id} · ${rarity}`}
       accentColor={attrColor}
-      footer="Snowy Viewer asset mapping · normal / after_training"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
         <div style={{ display: 'flex', gap: theme.spacing.md }}>

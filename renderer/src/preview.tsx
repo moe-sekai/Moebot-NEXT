@@ -180,7 +180,7 @@ function createPreviewElement(id: string) {
             assetSource: 'main-jp',
             jacketUrl: getMusicJacketUrl('jacket_s_001', 'main-jp'),
             publishedAt: Date.UTC(2020, 8, 30, 6, 0, 0),
-            fillerSec: 2,
+            durationSec: 127,
             difficulties: [
               { musicDifficulty: 'easy', playLevel: 5, totalNoteCount: 158 },
               { musicDifficulty: 'normal', playLevel: 10, totalNoteCount: 305 },
@@ -280,9 +280,10 @@ function createPreviewElement(id: string) {
           version="0.1.0"
           commands={[
             { name: '查卡', usage: '<关键词>', description: '搜索卡牌，支持角色名、卡名与 ID。' },
-            { name: '查曲', usage: '<关键词>', description: '搜索曲目，支持别名、日文、罗马音与模糊匹配。' },
+            { name: '查曲/查歌', usage: '<关键词>', description: '搜索曲目，支持别名、日文、罗马音与模糊匹配。' },
+            { name: '查谱', usage: '<关键词>', description: '查询谱面等级与 notes。' },
             { name: '查活动', usage: '[关键词/ID]', description: '查询活动信息、活动类型与时间范围。' },
-            { name: '查卡池', usage: '[关键词/ID]', description: '查询招募卡池与 pickup 卡。' },
+            { name: '查卡池/查扭蛋', usage: '[关键词/ID]', description: '查询招募扭蛋与 pickup 卡。' },
             { name: '绑定', usage: '<游戏ID>', description: '绑定 Project SEKAI 游戏账号。' },
             { name: '个人信息', usage: '', description: '查看已绑定账号的玩家资料。' },
             { name: '排行', usage: '[排名]', description: '查询活动实时排行榜。' },

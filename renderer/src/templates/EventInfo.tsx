@@ -78,7 +78,6 @@ export function EventInfo({ event }: EventInfoProps) {
       title={event.name}
       subtitle={`${EVENT_TYPE_NAMES[event.eventType] ?? event.eventType} · ID: ${event.id}`}
       accentColor={accent}
-      footer="Snowy Viewer event detail assets · background + logo"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
         <div

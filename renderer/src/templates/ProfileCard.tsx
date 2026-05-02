@@ -22,6 +22,10 @@ export interface ProfileCardProps {
       fullComboCount?: number
       allPerfectCount?: number
     }
+    musicClearCounts?: MusicClearCount[]
+    characterRanks?: CharacterRank[]
+    challengeLive?: ChallengeLive
+    profileHonors?: ProfileHonor[]
     leaderCard?: ProfileDeckCard
     deckCards?: ProfileDeckCard[]
     honors?: Array<{
@@ -32,6 +36,35 @@ export interface ProfileCardProps {
       imageUrl?: string
     }>
   }
+}
+
+interface MusicClearCount {
+  difficulty: string
+  liveClear: number
+  fullCombo: number
+  allPerfect: number
+}
+
+interface CharacterRank {
+  characterId: number
+  characterName: string
+  rank: number
+}
+
+interface ChallengeLive {
+  characterId: number
+  characterName: string
+  highScore: number
+}
+
+interface ProfileHonor {
+  seq?: number
+  honorType?: string
+  honorId: number
+  level: number
+  name?: string
+  honorRarity?: string
+  assetbundleName?: string
 }
 
 interface ProfileDeckCard {
@@ -58,9 +91,12 @@ export function ProfileCard({ profile }: ProfileCardProps) {
     ?? (profile.characterId ? getCharacterIconUrl(profile.characterId) : undefined)
   const deckCards = profile.deckCards ?? (leader ? [leader] : [])
   const bio = profile.bio ?? profile.signature
+  const musicClearCounts = normalizeMusicClearCounts(profile.musicClearCounts ?? [])
+  const characterRanks = (profile.characterRanks ?? []).slice(0, 6)
+  const profileHonors = profile.profileHonors ?? []
 
   return (
-    <BaseCard title={profile.name} subtitle={`UID: ${profile.userId}`} accentColor={theme.colors.accentLight} footer="Player profile · Moebot NEXT">
+    <BaseCard title={profile.name} subtitle={`UID: ${profile.userId}`} accentColor={theme.colors.accentLight}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
         <div
           style={{
@@ -136,9 +172,9 @@ export function ProfileCard({ profile }: ProfileCardProps) {
 
         <div style={{ display: 'flex', gap: theme.spacing.md }}>
           <StatCard label="总综合力" value={profile.totalPower?.toLocaleString() ?? '-'} highlight />
-          <StatCard label="协力次数" value={profile.stats?.multiLiveCount?.toLocaleString() ?? '-'} />
           <StatCard label="MVP" value={profile.stats?.mvpCount?.toLocaleString() ?? '-'} />
           <StatCard label="Super Star" value={profile.stats?.superStarCount?.toLocaleString() ?? '-'} />
+          <StatCard label="挑战 Live" value={profile.challengeLive?.highScore?.toLocaleString() ?? '-'} />
         </div>
 
         {deckCards.length > 0 && (
@@ -159,6 +195,20 @@ export function ProfileCard({ profile }: ProfileCardProps) {
                 <DeckCard key={`${card.cardId ?? card.id ?? index}`} card={card} source={source} leader={index === 0} />
               ))}
             </div>
+          </div>
+        )}
+
+        {(musicClearCounts.length > 0 || characterRanks.length > 0) && (
+          <div style={{ display: 'flex', gap: theme.spacing.md, alignItems: 'stretch' }}>
+            {musicClearCounts.length > 0 && <MusicClearPanel counts={musicClearCounts} />}
+            {characterRanks.length > 0 && <CharacterRankPanel ranks={characterRanks} />}
+          </div>
+        )}
+
+        {(profile.challengeLive || profileHonors.length > 0) && (
+          <div style={{ display: 'flex', gap: theme.spacing.md, alignItems: 'stretch' }}>
+            {profile.challengeLive && <ChallengeLivePanel challenge={profile.challengeLive} />}
+            {profileHonors.length > 0 && <ProfileHonorPanel honors={profileHonors} />}
           </div>
         )}
 
@@ -190,10 +240,135 @@ export function ProfileCard({ profile }: ProfileCardProps) {
   )
 }
 
+function ChallengeLivePanel({ challenge }: { challenge: ChallengeLive }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        gap: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+        border: `1px solid ${theme.colors.border}`,
+        borderRadius: theme.borderRadius.xl,
+        padding: theme.spacing.md,
+      }}
+    >
+      <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>挑战 Live</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: theme.spacing.md, alignItems: 'baseline' }}>
+        <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: 800 }}>{challenge.characterName}</span>
+        <span style={{ display: 'flex', color: theme.colors.accent, fontSize: theme.fontSize.lg, fontWeight: 900 }}>{challenge.highScore.toLocaleString()}</span>
+      </div>
+    </div>
+  )
+}
+
+function ProfileHonorPanel({ honors }: { honors: ProfileHonor[] }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1.6,
+        gap: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+        border: `1px solid ${theme.colors.border}`,
+        borderRadius: theme.borderRadius.xl,
+        padding: theme.spacing.md,
+      }}
+    >
+      <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>展示称号</span>
+      <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+        {honors.slice(0, 3).map((honor) => (
+          <span
+            key={`${honor.seq ?? honor.honorId}`}
+            style={{
+              display: 'flex',
+              padding: '6px 10px',
+              borderRadius: theme.borderRadius.round,
+              backgroundColor: theme.colors.surfaceLight,
+              border: `1px solid ${theme.colors.border}`,
+              color: theme.colors.textSecondary,
+              fontSize: theme.fontSize.xs,
+              fontWeight: 800,
+            }}
+          >
+            {honor.name ?? `称号 #${honor.honorId}`}{honor.level ? ` Lv.${honor.level}` : ''}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MusicClearPanel({ counts }: { counts: MusicClearCount[] }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1.4,
+        gap: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+        border: `1px solid ${theme.colors.border}`,
+        borderRadius: theme.borderRadius.xl,
+        padding: theme.spacing.md,
+      }}
+    >
+      <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>通关统计</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {counts.map((count) => (
+          <div key={count.difficulty} style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+            <span style={{ display: 'flex', width: 66, color: difficultyColor(count.difficulty), fontSize: theme.fontSize.xs, fontWeight: 900 }}>
+              {difficultyLabel(count.difficulty)}
+            </span>
+            <span style={{ display: 'flex', flex: 1, color: theme.colors.textSecondary, fontSize: 11, fontWeight: 800 }}>
+              Clear {count.liveClear.toLocaleString()}
+            </span>
+            <span style={{ display: 'flex', flex: 1, color: theme.colors.textSecondary, fontSize: 11, fontWeight: 800 }}>
+              FC {count.fullCombo.toLocaleString()}
+            </span>
+            <span style={{ display: 'flex', flex: 1, color: theme.colors.textSecondary, fontSize: 11, fontWeight: 800 }}>
+              AP {count.allPerfect.toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CharacterRankPanel({ ranks }: { ranks: CharacterRank[] }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        gap: theme.spacing.sm,
+        backgroundColor: theme.colors.surface,
+        border: `1px solid ${theme.colors.border}`,
+        borderRadius: theme.borderRadius.xl,
+        padding: theme.spacing.md,
+      }}
+    >
+      <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>角色等级 TOP</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {ranks.map((rank) => (
+          <div key={rank.characterId} style={{ display: 'flex', justifyContent: 'space-between', gap: theme.spacing.sm }}>
+            <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: 800, maxWidth: 130 }}>{rank.characterName}</span>
+            <span style={{ display: 'flex', color: theme.colors.accent, fontSize: theme.fontSize.xs, fontWeight: 900 }}>Lv.{rank.rank}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function DeckCard({ card, source, leader }: { card: ProfileDeckCard; source: AssetSourceType | string; leader?: boolean }) {
   const rarity = card.cardRarityType ?? card.rarity ?? 'rarity_1'
   const attr = card.attr ?? 'cute'
-  const isTrained = card.isTrained ?? card.defaultImage === 'special_training'
+  const isTrained = shouldUseTrainedImage(card)
   const thumbnailUrl = card.thumbnailUrl
     ?? (card.assetbundleName ? getCardThumbnailUrl(card.assetbundleName, false, source, 'png') : undefined)
   const trainedThumbnailUrl = card.trainedThumbnailUrl
@@ -235,6 +410,42 @@ function DeckCard({ card, source, leader }: { card: ProfileDeckCard; source: Ass
       </span>
     </div>
   )
+}
+
+const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'expert', 'master', 'append']
+
+function shouldUseTrainedImage(card: ProfileDeckCard): boolean {
+  if (card.defaultImage === 'special_training') return true
+  if (card.defaultImage === 'original') return false
+  return Boolean(card.isTrained)
+}
+
+function normalizeMusicClearCounts(counts: MusicClearCount[]): MusicClearCount[] {
+  return [...counts].sort((a, b) => DIFFICULTY_ORDER.indexOf(a.difficulty) - DIFFICULTY_ORDER.indexOf(b.difficulty))
+}
+
+function difficultyLabel(difficulty: string): string {
+  const labels: Record<string, string> = {
+    easy: 'EASY',
+    normal: 'NORMAL',
+    hard: 'HARD',
+    expert: 'EXPERT',
+    master: 'MASTER',
+    append: 'APPEND',
+  }
+  return labels[difficulty] ?? difficulty.toUpperCase()
+}
+
+function difficultyColor(difficulty: string): string {
+  const colors: Record<string, string> = {
+    easy: '#5AC06E',
+    normal: '#56A4D4',
+    hard: '#EFAF28',
+    expert: '#E84D53',
+    master: '#BB58B8',
+    append: '#EE92BC',
+  }
+  return colors[difficulty] ?? theme.colors.textMuted
 }
 
 function StatCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {

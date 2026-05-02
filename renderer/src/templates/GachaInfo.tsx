@@ -47,7 +47,6 @@ export function GachaInfo({ gacha }: GachaInfoProps) {
       title={gacha.name}
       subtitle={`${formatGachaType(gacha.gachaType)} · ID: ${gacha.id}`}
       accentColor={theme.colors.warning}
-      footer="Snowy Viewer gacha detail asset · logo"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
         <div

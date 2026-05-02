@@ -60,7 +60,8 @@ export interface MusicDetailProps {
     releasedAt?: number
     isNewlyWrittenMusic?: boolean
     isFullLength?: boolean
-    fillerSec?: number
+    durationSec?: number
+    secForMusicScoreMaker?: number
   }
 }
 
@@ -71,6 +72,7 @@ export function MusicDetail({ music }: MusicDetailProps) {
   const categories = Array.from(new Set(music.categories ?? []))
   const difficulties = normalizeDifficulties(music.difficulties ?? [])
   const publishedAt = music.publishedAt ?? music.releasedAt
+  const durationSec = music.durationSec ?? music.secForMusicScoreMaker
   const accent = categories[0] ? MUSIC_CATEGORY_COLORS[categories[0]] ?? theme.colors.accent : theme.colors.accent
 
   return (
@@ -78,7 +80,6 @@ export function MusicDetail({ music }: MusicDetailProps) {
       title={music.title}
       subtitle={music.pronunciation ? `${music.pronunciation} · ID: ${music.id}` : `ID: ${music.id}`}
       accentColor={accent}
-      footer="Snowy Viewer music assets · Satori renderer"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
         <div style={{ display: 'flex', gap: theme.spacing.lg, alignItems: 'stretch' }}>
@@ -143,7 +144,7 @@ export function MusicDetail({ music }: MusicDetailProps) {
               <InfoRow label="作曲" value={music.composer || '-'} />
               <InfoRow label="编曲" value={music.arranger || '-'} />
               {publishedAt && <InfoRow label="发布时间" value={formatDate(publishedAt)} />}
-              {typeof music.fillerSec === 'number' && <InfoRow label="Filler" value={`${music.fillerSec}s`} />}
+              {typeof durationSec === 'number' && <InfoRow label="歌曲长度" value={formatDuration(durationSec)} />}
             </div>
           </div>
         </div>
@@ -252,6 +253,13 @@ function normalizeDifficulties(input: NonNullable<MusicDetailProps['music']['dif
 function formatDate(timestamp: number): string {
   const normalized = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp
   return new Date(normalized).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
+function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds))
+  const minutes = Math.floor(total / 60)
+  const rest = total % 60
+  return `${minutes}:${String(rest).padStart(2, '0')}`
 }
 
 function placeholderImage(label: string, color: string, width: number, height: number): string {
