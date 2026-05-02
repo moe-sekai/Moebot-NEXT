@@ -16,7 +16,7 @@
     </div>
 
     <div v-else-if="previews.length === 0" class="empty-state">
-      <div class="empty-state__icon">🖼</div>
+      <div class="empty-state__icon"><SvgIcon name="preview" :size="22" /></div>
       <p>{{ message || '暂无可预览模板。' }}</p>
     </div>
 
@@ -44,14 +44,14 @@
             <div class="preview-title">{{ selectedPreview?.name }}</div>
             <div class="preview-subtitle">{{ selectedPreview?.description }}</div>
           </div>
-          <UiButton variant="secondary" size="sm" @click="refreshImage">重新渲染</UiButton>
+          <UiButton variant="secondary" size="sm" :loading="imageLoading" @click="refreshImage">重新渲染</UiButton>
         </div>
 
         <div class="preview-image-wrap">
           <UiSkeleton v-if="imageLoading" height="420px" radius="1rem" />
           <UiAlert v-if="imageError" variant="destructive" title="图片加载失败">{{ imageError }}</UiAlert>
           <img
-            v-show="!imageLoading && !imageError"
+            v-show="!imageLoading && !imageError && imageUrl"
             class="preview-image"
             :src="imageUrl"
             :alt="selectedPreview?.name || 'Satori preview'"
@@ -60,10 +60,27 @@
           />
         </div>
 
+        <div v-if="timingItems.length > 0" class="timing-panel">
+          <div class="timing-panel__header">
+            <div>
+              <div class="timing-panel__title">渲染时间</div>
+              <div class="timing-panel__subtitle">从 Renderer 响应头读取，网络耗时由浏览器侧估算。</div>
+            </div>
+            <UiBadge variant="secondary">{{ formatMs(timings.total_ms) }}</UiBadge>
+          </div>
+          <div class="timing-grid">
+            <div v-for="item in timingItems" :key="item.key" class="timing-item">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+          </div>
+        </div>
+
         <dl v-if="selectedPreview" class="preview-meta">
           <div><dt>命令</dt><dd>{{ selectedPreview.command }}</dd></div>
           <div><dt>模板</dt><dd>{{ selectedPreview.templatePath }}</dd></div>
           <div><dt>来源</dt><dd>{{ selectedPreview.viewerSource }}</dd></div>
+          <div><dt>图片大小</dt><dd>{{ formatBytes(timings.size_bytes) }}</dd></div>
         </dl>
       </div>
     </div>
@@ -71,9 +88,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { getRendererPreviewImageUrl, getRendererPreviews } from '../api/client'
-import type { RenderPreviewMeta } from '../api/types'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { getRendererPreviews, renderRendererPreview } from '../api/client'
+import type { RenderPreviewMeta, RenderTiming } from '../api/types'
+import SvgIcon from './icons/SvgIcon.vue'
 import UiAlert from './ui/UiAlert.vue'
 import UiBadge from './ui/UiBadge.vue'
 import UiButton from './ui/UiButton.vue'
@@ -88,10 +106,19 @@ const imageLoading = ref(false)
 const error = ref('')
 const imageError = ref('')
 const message = ref('')
+const timings = ref<RenderTiming>(emptyTiming())
 
 const selectedPreview = computed(() => previews.value.find(item => item.id === selectedId.value) ?? null)
+const timingItems = computed(() => [
+  { key: 'fonts', label: '字体加载', value: formatMs(timings.value.fonts_ms) },
+  { key: 'satori', label: 'Satori', value: formatMs(timings.value.satori_ms) },
+  { key: 'resvg', label: 'resvg', value: formatMs(timings.value.resvg_ms) },
+  { key: 'proxy', label: 'Go 代理', value: formatMs(timings.value.proxy_ms) },
+  { key: 'network', label: '浏览器请求', value: formatMs(timings.value.network_ms) },
+].filter(item => item.value !== '-'))
 
 onMounted(loadPreviews)
+onBeforeUnmount(() => revokeImageUrl())
 
 async function loadPreviews() {
   loading.value = true
@@ -103,7 +130,7 @@ async function loadPreviews() {
     if (!selectedId.value && previews.value.length > 0) {
       selectedId.value = previews.value[0].id
     }
-    refreshImage()
+    await refreshImage()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载预览模板失败。'
   } finally {
@@ -113,19 +140,59 @@ async function loadPreviews() {
 
 function selectPreview(id: string) {
   selectedId.value = id
-  refreshImage()
+  void refreshImage()
 }
 
-function refreshImage() {
+async function refreshImage() {
   const preview = selectedPreview.value
   if (!preview) return
   imageError.value = ''
   imageLoading.value = true
-  imageUrl.value = getRendererPreviewImageUrl(preview.id, preview.width, preview.height)
+  try {
+    const result = await renderRendererPreview(preview.id, preview.width, preview.height)
+    revokeImageUrl()
+    imageUrl.value = result.url
+    timings.value = result.timings
+  } catch (err) {
+    imageError.value = err instanceof Error ? err.message : '无法获取预览图，请确认 renderer 进程已启动且模板渲染没有报错。'
+    timings.value = emptyTiming()
+  } finally {
+    imageLoading.value = false
+  }
 }
 
 function handleImageError() {
   imageLoading.value = false
-  imageError.value = '无法获取预览图，请确认 renderer 进程已启动且模板渲染没有报错。'
+  imageError.value = '预览图已返回，但浏览器无法解码图片。'
+}
+
+function revokeImageUrl() {
+  if (imageUrl.value) {
+    URL.revokeObjectURL(imageUrl.value)
+    imageUrl.value = ''
+  }
+}
+
+function emptyTiming(): RenderTiming {
+  return {
+    fonts_ms: null,
+    satori_ms: null,
+    resvg_ms: null,
+    total_ms: null,
+    proxy_ms: null,
+    network_ms: null,
+    size_bytes: null,
+  }
+}
+
+function formatMs(value: number | null) {
+  return typeof value === 'number' ? `${value} ms` : '-'
+}
+
+function formatBytes(value: number | null) {
+  if (typeof value !== 'number') return '-'
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / 1024 / 1024).toFixed(2)} MB`
 }
 </script>

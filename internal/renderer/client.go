@@ -51,6 +51,17 @@ type PreviewListResponse struct {
 	Total int           `json:"total"`
 }
 
+// PreviewRenderResult contains a rendered preview image and renderer timing metadata.
+type PreviewRenderResult struct {
+	PNG        []byte
+	TotalMS    string
+	FontsMS    string
+	SatoriMS   string
+	ResvgMS    string
+	SizeBytes  string
+	StatusCode int
+}
+
 // New creates a new renderer client.
 func New(cfg config.RendererConfig) *Client {
 	return &Client{
@@ -151,6 +162,15 @@ func (c *Client) ListPreviews() ([]PreviewMeta, error) {
 
 // RenderPreview renders a named Satori preview template to PNG.
 func (c *Client) RenderPreview(id string, width int, height int) ([]byte, error) {
+	result, err := c.RenderPreviewWithTrace(id, width, height)
+	if err != nil {
+		return nil, err
+	}
+	return result.PNG, nil
+}
+
+// RenderPreviewWithTrace renders a preview and preserves renderer timing headers.
+func (c *Client) RenderPreviewWithTrace(id string, width int, height int) (*PreviewRenderResult, error) {
 	previewURL := c.baseURL + "/preview/" + url.PathEscape(id)
 	query := url.Values{}
 	if width > 0 {
@@ -174,7 +194,20 @@ func (c *Client) RenderPreview(id string, width int, height int) ([]byte, error)
 		return nil, fmt.Errorf("renderer returned %d: %s", resp.StatusCode, string(errBody))
 	}
 
-	return io.ReadAll(resp.Body)
+	png, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read preview image: %w", err)
+	}
+
+	return &PreviewRenderResult{
+		PNG:        png,
+		TotalMS:    resp.Header.Get("x-render-total-ms"),
+		FontsMS:    resp.Header.Get("x-render-fonts-ms"),
+		SatoriMS:   resp.Header.Get("x-render-satori-ms"),
+		ResvgMS:    resp.Header.Get("x-render-resvg-ms"),
+		SizeBytes:  resp.Header.Get("x-render-size-bytes"),
+		StatusCode: resp.StatusCode,
+	}, nil
 }
 
 // BaseURL returns the renderer service base URL.

@@ -13,7 +13,7 @@
       <UiSkeleton v-for="item in 5" :key="item" height="42px" />
     </div>
     <div v-else-if="commands.length === 0" class="empty-state">
-      <div class="empty-state__icon">⌘</div>
+      <div class="empty-state__icon"><SvgIcon name="command" :size="22" /></div>
       <p>暂无命令记录，等机器人收到指令后这里会自动显示。</p>
     </div>
     <div v-else class="table-wrap">
@@ -47,6 +47,7 @@
 
 <script setup lang="ts">
 import type { RecentCommand } from '../api/types'
+import SvgIcon from './icons/SvgIcon.vue'
 import UiAlert from './ui/UiAlert.vue'
 import UiButton from './ui/UiButton.vue'
 import UiCard from './ui/UiCard.vue'

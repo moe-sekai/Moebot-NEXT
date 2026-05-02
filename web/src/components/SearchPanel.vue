@@ -23,7 +23,7 @@
 
     <UiAlert v-if="error" variant="destructive" title="搜索失败">{{ error }}</UiAlert>
     <div v-else-if="searched && rows.length === 0" class="empty-state compact">
-      <div class="empty-state__icon">⌕</div>
+      <div class="empty-state__icon"><SvgIcon name="search" :size="22" /></div>
       <p>{{ message || '没有找到匹配结果。' }}</p>
     </div>
     <div v-else-if="rows.length > 0" class="table-wrap">
@@ -57,6 +57,7 @@ import { ref } from 'vue'
 import { useMessage } from 'naive-ui'
 import { searchMasterdata } from '../api/client'
 import type { SearchResult, SearchType } from '../api/types'
+import SvgIcon from './icons/SvgIcon.vue'
 import UiAlert from './ui/UiAlert.vue'
 import UiBadge from './ui/UiBadge.vue'
 import UiButton from './ui/UiButton.vue'

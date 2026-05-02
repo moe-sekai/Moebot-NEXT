@@ -15,7 +15,9 @@ function loadLogoSvg(): string {
   const candidates = [
     resolve(process.cwd(), 'assets/moebot.svg'),
     resolve(process.cwd(), '..', 'assets/moebot.svg'),
+    resolve(process.cwd(), '..', '..', 'assets/moebot.svg'),
     resolve(__dirname, '../../../../assets/moebot.svg'),
+    resolve(__dirname, '../../../../../assets/moebot.svg'),
   ]
 
   const logoPath = candidates.find(path => existsSync(path))

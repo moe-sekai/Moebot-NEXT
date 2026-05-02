@@ -1,49 +1,47 @@
 <template>
   <n-config-provider>
     <n-message-provider>
-      <n-layout class="app-shell" has-sider>
-        <n-layout-sider class="app-sider" bordered :width="248" collapse-mode="width" :collapsed-width="72" show-trigger="bar">
-          <div class="brand"><span class="brand-mark">M</span><span>Moebot NEXT</span></div>
-          <n-menu :options="menuOptions" :value="route.name as string" @update:value="go" />
-        </n-layout-sider>
-        <n-layout class="main-layout">
-          <n-layout-header bordered class="header">
+      <div class="app-shell">
+        <aside class="app-sidebar" aria-label="Moebot NEXT 控制台侧边栏">
+          <RouterLink to="/" class="brand" aria-label="返回概览">
+            <MoebotLogo color="var(--accent-pink)" :height="40" />
+            <small>Go Console</small>
+          </RouterLink>
+          <ConsoleNav />
+        </aside>
+
+        <div class="app-main">
+          <header class="topbar">
             <div>
-              <div class="header__title">Moebot NEXT</div>
-              <div class="header__subtitle">8080 管理首页 · 6700 OneBot 反向 WS · 3001 Satori Renderer</div>
+              <div class="topbar__eyebrow">{{ page.eyebrow }}</div>
+              <div class="topbar__title">{{ page.title }}</div>
             </div>
-          </n-layout-header>
-          <n-layout-content class="content">
-            <router-view />
-          </n-layout-content>
-        </n-layout>
-      </n-layout>
+            <div class="topbar__status">
+              <span class="pulse-dot" aria-hidden="true" />
+              <span>Console Ready</span>
+            </div>
+          </header>
+
+          <div class="mobile-nav-wrap">
+            <ConsoleNav />
+          </div>
+
+          <main class="content">
+            <RouterView />
+          </main>
+        </div>
+      </div>
     </n-message-provider>
   </n-config-provider>
 </template>
 
 <script setup lang="ts">
-import { h } from 'vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
-import type { MenuOption } from 'naive-ui'
+import { computed } from 'vue'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
+import ConsoleNav from './components/layout/ConsoleNav.vue'
+import MoebotLogo from './components/MoebotLogo.vue'
+import { getPageDescription } from './navigation'
 
-const router = useRouter()
 const route = useRoute()
-
-const menuOptions: MenuOption[] = [
-  { label: () => h(RouterLink, { to: '/' }, { default: () => '仪表盘' }), key: 'dashboard' },
-  { label: () => h(RouterLink, { to: '/groups' }, { default: () => '群组管理' }), key: 'groups' },
-  { label: () => h(RouterLink, { to: '/users' }, { default: () => '用户管理' }), key: 'users' },
-  { label: () => h(RouterLink, { to: '/stats' }, { default: () => '指令统计' }), key: 'stats' },
-]
-
-function go(key: string) {
-  const routes: Record<string, string> = {
-    dashboard: '/',
-    groups: '/groups',
-    users: '/users',
-    stats: '/stats',
-  }
-  router.push(routes[key] ?? '/')
-}
+const page = computed(() => getPageDescription(route.name))
 </script>

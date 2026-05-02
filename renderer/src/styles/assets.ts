@@ -7,7 +7,9 @@ function assetPath(...segments: string[]): string | null {
   const candidates = [
     resolve(process.cwd(), 'assets', ...segments),
     resolve(process.cwd(), '..', 'assets', ...segments),
+    resolve(process.cwd(), '..', '..', 'assets', ...segments),
     resolve(__dirname, '../../../../assets', ...segments),
+    resolve(__dirname, '../../../../../assets', ...segments),
   ]
   return candidates.find(path => existsSync(path)) ?? null
 }

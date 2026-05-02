@@ -1,7 +1,7 @@
 <template>
   <UiCard class-name="status-card">
     <div class="status-card__header">
-      <div class="status-card__icon">{{ icon }}</div>
+      <div class="status-card__icon"><SvgIcon :name="icon" :size="22" /></div>
       <UiBadge :variant="badgeVariant">{{ statusLabel }}</UiBadge>
     </div>
     <div class="status-card__title">{{ title }}</div>
@@ -12,12 +12,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { IconName } from './icons/SvgIcon.vue'
+import SvgIcon from './icons/SvgIcon.vue'
 import UiBadge from './ui/UiBadge.vue'
 import UiCard from './ui/UiCard.vue'
 
 const props = defineProps<{
   title: string
-  icon: string
+  icon: IconName
   ok?: boolean
   status?: string
   message?: string

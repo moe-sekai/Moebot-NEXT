@@ -171,9 +171,59 @@ export interface RenderPreviewMeta {
   height: number
 }
 
+export interface RenderTiming {
+  fonts_ms: number | null
+  satori_ms: number | null
+  resvg_ms: number | null
+  total_ms: number | null
+  proxy_ms: number | null
+  network_ms: number | null
+  size_bytes: number | null
+}
+
+export interface RendererPreviewImageResult {
+  url: string
+  blob: Blob
+  timings: RenderTiming
+}
+
 export interface RendererPreviewsResponse {
   data: RenderPreviewMeta[]
   total: number
   ok: boolean
   message: string
+}
+
+export interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  limit: number
+}
+
+export interface GroupRow {
+  id: number
+  platform: string
+  group_id: string
+  name: string
+  enabled: boolean
+}
+
+export interface UserRow {
+  id: number
+  platform: string
+  platform_id: string
+  game_id: string
+  nickname: string
+}
+
+export interface CommandStatRow {
+  command: string
+  count: number
+  avg_ms: number
+}
+
+export interface CommandStatsResponse {
+  data: CommandStatRow[]
+  since: string
 }

@@ -212,8 +212,10 @@ Bun.serve({
             'content-type': 'image/png',
             'cache-control': 'no-store',
             'x-render-total-ms': String(result.trace.timings.totalMs),
+            'x-render-fonts-ms': String(result.trace.timings.fontsMs),
             'x-render-satori-ms': String(result.trace.timings.satoriMs),
             'x-render-resvg-ms': String(result.trace.timings.resvgMs),
+            'x-render-size-bytes': String(result.trace.sizeBytes),
           },
         })
       } catch (error) {

@@ -14,7 +14,7 @@
     </div>
     <div v-else class="summary-grid">
       <div v-for="item in items" :key="item.key" class="summary-tile">
-        <div class="summary-tile__icon">{{ item.icon }}</div>
+        <div class="summary-tile__icon"><SvgIcon :name="item.icon" :size="22" /></div>
         <div>
           <div class="summary-tile__label">{{ item.label }}</div>
           <div class="summary-tile__value">{{ item.value.toLocaleString() }}</div>
@@ -29,6 +29,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { MasterdataSummary } from '../api/types'
+import SvgIcon from './icons/SvgIcon.vue'
 import UiAlert from './ui/UiAlert.vue'
 import UiBadge from './ui/UiBadge.vue'
 import UiCard from './ui/UiCard.vue'
@@ -43,10 +44,10 @@ const props = defineProps<{
 const counts = computed(() => props.summary?.counts ?? { cards: 0, musics: 0, events: 0, gachas: 0 })
 
 const items = computed(() => [
-  { key: 'cards', label: '卡牌数量', icon: '🎴', value: counts.value.cards },
-  { key: 'musics', label: '曲目数量', icon: '🎧', value: counts.value.musics },
-  { key: 'events', label: '活动数量', icon: '🎪', value: counts.value.events },
-  { key: 'gachas', label: '卡池数量', icon: '✨', value: counts.value.gachas },
+  { key: 'cards', label: '卡牌数量', icon: 'preview' as const, value: counts.value.cards },
+  { key: 'musics', label: '曲目数量', icon: 'resources' as const, value: counts.value.musics },
+  { key: 'events', label: '活动数量', icon: 'clock' as const, value: counts.value.events },
+  { key: 'gachas', label: '卡池数量', icon: 'sparkle' as const, value: counts.value.gachas },
 ])
 
 const loadedAt = computed(() => {

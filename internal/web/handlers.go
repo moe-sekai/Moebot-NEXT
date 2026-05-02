@@ -170,14 +170,21 @@ func (s *Server) handleRendererPreviewImage(c *fiber.Ctx) error {
 
 	width, _ := strconv.Atoi(c.Query("width"))
 	height, _ := strconv.Atoi(c.Query("height"))
-	png, err := s.Renderer.RenderPreview(c.Params("id"), width, height)
+	started := time.Now()
+	result, err := s.Renderer.RenderPreviewWithTrace(c.Params("id"), width, height)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadGateway, err.Error())
 	}
 
 	c.Set(fiber.HeaderContentType, "image/png")
 	c.Set(fiber.HeaderCacheControl, "no-store")
-	return c.Send(png)
+	setOptionalHeader(c, "x-render-total-ms", result.TotalMS)
+	setOptionalHeader(c, "x-render-fonts-ms", result.FontsMS)
+	setOptionalHeader(c, "x-render-satori-ms", result.SatoriMS)
+	setOptionalHeader(c, "x-render-resvg-ms", result.ResvgMS)
+	setOptionalHeader(c, "x-render-size-bytes", result.SizeBytes)
+	c.Set("x-render-proxy-ms", strconv.FormatInt(time.Since(started).Milliseconds(), 10))
+	return c.Send(result.PNG)
 }
 
 // handleRecentCommands returns recent command invocation rows.
@@ -529,6 +536,12 @@ func nullableTime(t time.Time) any {
 		return nil
 	}
 	return t
+}
+
+func setOptionalHeader(c *fiber.Ctx, key string, value string) {
+	if value != "" {
+		c.Set(key, value)
+	}
 }
 
 func nonEmptyStrings(values ...string) []string {
