@@ -1,0 +1,351 @@
+package masterdata
+
+import (
+	"sync"
+	"time"
+)
+
+// ---------------------------------------------------------------------------
+// store.go — Thread-safe in-memory masterdata store
+//
+// All public getters acquire an RLock so they are safe for concurrent reads.
+// SetAll acquires a full write Lock and atomically swaps all data + indexes.
+// ---------------------------------------------------------------------------
+
+// Store holds all loaded masterdata in memory with thread-safe access.
+type Store struct {
+	mu sync.RWMutex
+
+	// ---- raw slices (source of truth) ----
+	loadedAt          time.Time
+	cards             []CardInfo
+	musics            []MusicInfo
+	musicDifficulties []MusicDifficulty
+	events            []EventInfo
+	eventDeckBonuses  []EventDeckBonus
+	gachas            []GachaInfo
+	skills            []SkillInfo
+	characterUnits    []GameCharacterUnit
+	honors            []HonorInfo
+	musicVocals       []MusicVocal
+
+	// ---- primary-key indexes (ID → *element inside slice) ----
+	cardByID          map[int]*CardInfo
+	musicByID         map[int]*MusicInfo
+	eventByID         map[int]*EventInfo
+	gachaByID         map[int]*GachaInfo
+	skillByID         map[int]*SkillInfo
+	characterUnitByID map[int]*GameCharacterUnit
+	honorByID         map[int]*HonorInfo
+	musicVocalByID    map[int]*MusicVocal
+
+	// ---- derived / relation indexes ----
+	diffsByMusicID     map[int][]MusicDifficulty
+	bonusesByEventID   map[int][]EventDeckBonus
+	unitsByCharacterID map[int][]GameCharacterUnit
+	vocalsByMusicID    map[int][]MusicVocal
+}
+
+// NewStore creates an empty Store ready for use.
+func NewStore() *Store {
+	s := &Store{}
+	s.initMaps()
+	return s
+}
+
+// initMaps allocates all index maps so they are never nil.
+func (s *Store) initMaps() {
+	s.cardByID = make(map[int]*CardInfo)
+	s.musicByID = make(map[int]*MusicInfo)
+	s.eventByID = make(map[int]*EventInfo)
+	s.gachaByID = make(map[int]*GachaInfo)
+	s.skillByID = make(map[int]*SkillInfo)
+	s.characterUnitByID = make(map[int]*GameCharacterUnit)
+	s.honorByID = make(map[int]*HonorInfo)
+	s.musicVocalByID = make(map[int]*MusicVocal)
+	s.diffsByMusicID = make(map[int][]MusicDifficulty)
+	s.bonusesByEventID = make(map[int][]EventDeckBonus)
+	s.unitsByCharacterID = make(map[int][]GameCharacterUnit)
+	s.vocalsByMusicID = make(map[int][]MusicVocal)
+}
+
+// ---------- Atomic Data Swap -----------------------------------------------
+
+// SetAll replaces every slice and rebuilds all indexes under a write lock.
+// It is designed to be called by the Loader after a full refresh.
+func (s *Store) SetAll(data *MasterData) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Copy slices from the incoming snapshot.
+	s.loadedAt = time.Now()
+	s.cards = data.Cards
+	s.musics = data.Musics
+	s.musicDifficulties = data.MusicDifficulties
+	s.events = data.Events
+	s.eventDeckBonuses = data.EventDeckBonuses
+	s.gachas = data.Gachas
+	s.skills = data.Skills
+	s.characterUnits = data.CharacterUnits
+	s.honors = data.Honors
+	s.musicVocals = data.MusicVocals
+
+	s.buildIndexes()
+}
+
+// buildIndexes (re)builds all lookup maps from the current slices.
+// MUST be called while holding s.mu in write mode.
+func (s *Store) buildIndexes() {
+	// Reset maps.
+	s.initMaps()
+
+	// --- primary-key indexes ---
+	for i := range s.cards {
+		s.cardByID[s.cards[i].ID] = &s.cards[i]
+	}
+	for i := range s.musics {
+		s.musicByID[s.musics[i].ID] = &s.musics[i]
+	}
+	for i := range s.events {
+		s.eventByID[s.events[i].ID] = &s.events[i]
+	}
+	for i := range s.gachas {
+		s.gachaByID[s.gachas[i].ID] = &s.gachas[i]
+	}
+	for i := range s.skills {
+		s.skillByID[s.skills[i].ID] = &s.skills[i]
+	}
+	for i := range s.characterUnits {
+		s.characterUnitByID[s.characterUnits[i].ID] = &s.characterUnits[i]
+	}
+	for i := range s.honors {
+		s.honorByID[s.honors[i].ID] = &s.honors[i]
+	}
+	for i := range s.musicVocals {
+		s.musicVocalByID[s.musicVocals[i].ID] = &s.musicVocals[i]
+	}
+
+	// --- relation indexes ---
+	for _, d := range s.musicDifficulties {
+		s.diffsByMusicID[d.MusicID] = append(s.diffsByMusicID[d.MusicID], d)
+	}
+	for _, b := range s.eventDeckBonuses {
+		s.bonusesByEventID[b.EventID] = append(s.bonusesByEventID[b.EventID], b)
+	}
+	for _, u := range s.characterUnits {
+		s.unitsByCharacterID[u.GameCharacterID] = append(s.unitsByCharacterID[u.GameCharacterID], u)
+	}
+	for _, v := range s.musicVocals {
+		s.vocalsByMusicID[v.MusicID] = append(s.vocalsByMusicID[v.MusicID], v)
+	}
+}
+
+// ---------- Single-item Getters (by ID) ------------------------------------
+// All getters return nil when the ID is not found.
+// The returned pointer refers to internal data — callers MUST NOT modify it.
+
+// GetCard returns the card with the given ID, or nil.
+func (s *Store) GetCard(id int) *CardInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cardByID[id]
+}
+
+// GetMusic returns the music with the given ID, or nil.
+func (s *Store) GetMusic(id int) *MusicInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.musicByID[id]
+}
+
+// GetEvent returns the event with the given ID, or nil.
+func (s *Store) GetEvent(id int) *EventInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.eventByID[id]
+}
+
+// GetGacha returns the gacha with the given ID, or nil.
+func (s *Store) GetGacha(id int) *GachaInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.gachaByID[id]
+}
+
+// GetSkill returns the skill with the given ID, or nil.
+func (s *Store) GetSkill(id int) *SkillInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.skillByID[id]
+}
+
+// GetCharacterUnit returns the game-character-unit with the given ID, or nil.
+func (s *Store) GetCharacterUnit(id int) *GameCharacterUnit {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.characterUnitByID[id]
+}
+
+// GetHonor returns the honor with the given ID, or nil.
+func (s *Store) GetHonor(id int) *HonorInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.honorByID[id]
+}
+
+// GetMusicVocal returns the music-vocal with the given ID, or nil.
+func (s *Store) GetMusicVocal(id int) *MusicVocal {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.musicVocalByID[id]
+}
+
+// ---------- Relation Getters -----------------------------------------------
+
+// GetMusicDifficulties returns all difficulty entries for a music ID.
+func (s *Store) GetMusicDifficulties(musicID int) []MusicDifficulty {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.diffsByMusicID[musicID]
+}
+
+// GetEventDeckBonuses returns all deck-bonus entries for an event ID.
+func (s *Store) GetEventDeckBonuses(eventID int) []EventDeckBonus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.bonusesByEventID[eventID]
+}
+
+// GetCharacterUnits returns all unit memberships for a character ID.
+func (s *Store) GetCharacterUnits(characterID int) []GameCharacterUnit {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.unitsByCharacterID[characterID]
+}
+
+// GetMusicVocals returns all vocal versions for a music ID.
+func (s *Store) GetMusicVocals(musicID int) []MusicVocal {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.vocalsByMusicID[musicID]
+}
+
+// ---------- List Getters (all items) ---------------------------------------
+// Returned slices are shallow copies — safe to iterate without holding the lock,
+// but the element values should not be mutated.
+
+// AllCards returns a copy of the full card list.
+func (s *Store) AllCards() []CardInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]CardInfo, len(s.cards))
+	copy(out, s.cards)
+	return out
+}
+
+// AllMusics returns a copy of the full music list.
+func (s *Store) AllMusics() []MusicInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]MusicInfo, len(s.musics))
+	copy(out, s.musics)
+	return out
+}
+
+// AllEvents returns a copy of the full event list.
+func (s *Store) AllEvents() []EventInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]EventInfo, len(s.events))
+	copy(out, s.events)
+	return out
+}
+
+// AllGachas returns a copy of the full gacha list.
+func (s *Store) AllGachas() []GachaInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]GachaInfo, len(s.gachas))
+	copy(out, s.gachas)
+	return out
+}
+
+// AllSkills returns a copy of the full skill list.
+func (s *Store) AllSkills() []SkillInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]SkillInfo, len(s.skills))
+	copy(out, s.skills)
+	return out
+}
+
+// AllCharacterUnits returns a copy of the full character-unit list.
+func (s *Store) AllCharacterUnits() []GameCharacterUnit {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]GameCharacterUnit, len(s.characterUnits))
+	copy(out, s.characterUnits)
+	return out
+}
+
+// AllHonors returns a copy of the full honor list.
+func (s *Store) AllHonors() []HonorInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]HonorInfo, len(s.honors))
+	copy(out, s.honors)
+	return out
+}
+
+// AllMusicVocals returns a copy of the full music-vocal list.
+func (s *Store) AllMusicVocals() []MusicVocal {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]MusicVocal, len(s.musicVocals))
+	copy(out, s.musicVocals)
+	return out
+}
+
+// ---------- Count Helpers --------------------------------------------------
+
+// LoadedAt returns the time when masterdata was last loaded into the store.
+func (s *Store) LoadedAt() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.loadedAt
+}
+
+// CardCount returns the number of loaded cards.
+func (s *Store) CardCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.cards)
+}
+
+// MusicCount returns the number of loaded musics.
+func (s *Store) MusicCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.musics)
+}
+
+// EventCount returns the number of loaded events.
+func (s *Store) EventCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.events)
+}
+
+// GachaCount returns the number of loaded gachas.
+func (s *Store) GachaCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.gachas)
+}
+
+// IsLoaded reports whether any masterdata has been loaded into the store.
+func (s *Store) IsLoaded() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.cards) > 0 || len(s.musics) > 0
+}

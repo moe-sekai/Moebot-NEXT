@@ -1,0 +1,23 @@
+# Runtime data
+/data/*.db
+/data/*.db-*
+/data/cache/
+/data/master/
+
+# Go
+/moebot
+/moebot.exe
+/bin/
+
+# Node/Bun
+node_modules/
+renderer/node_modules/
+web/node_modules/
+web/dist/
+
+# Env/config local secrets
+.env
+*.local.yml
+
+# Logs
+*.log

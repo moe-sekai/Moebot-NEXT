@@ -1,0 +1,13 @@
+// Template registry - exports all card templates
+export { BaseCard } from './base'
+export { CardDetail } from './CardDetail'
+export { MusicDetail } from './MusicDetail'
+export { EventInfo } from './EventInfo'
+export { RankingList } from './RankingList'
+export { ProfileCard } from './ProfileCard'
+export { HelpCard } from './HelpCard'
+export { GachaInfo } from './GachaInfo'
+export type { GachaInfoProps } from './GachaInfo'
+export { GachaResult } from './GachaResult'
+export { SekaiCardThumbnail, canUseTrainedArt, getAttributeColor, getAttributeLabel, getRarityNumber } from './SekaiCardThumbnail'
+export type { SekaiCardThumbnailProps } from './SekaiCardThumbnail'

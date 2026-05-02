@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  moebot:
+    build: .
+    container_name: moebot-next-go
+    ports:
+      - "8080:8080"   # Web console
+      - "6700:6700"   # OneBot reverse WebSocket
+    volumes:
+      - ./data:/app/data
+      - ./config.yml:/app/config.yml
+      - ./assets:/app/assets
+    restart: unless-stopped

@@ -1,0 +1,221 @@
+package masterdata
+
+// ---------------------------------------------------------------------------
+// types.go — PJSK masterdata type definitions
+// Migrated from Snowy Viewer TypeScript types to idiomatic Go structs.
+// All JSON tags match the upstream Sekai masterdata API field names.
+// ---------------------------------------------------------------------------
+
+// MasterData is the aggregate container for a full masterdata snapshot.
+// It is passed to Store.SetAll to atomically swap all data.
+type MasterData struct {
+	Cards             []CardInfo          `json:"cards"`
+	Musics            []MusicInfo         `json:"musics"`
+	MusicDifficulties []MusicDifficulty   `json:"musicDifficulties"`
+	Events            []EventInfo         `json:"events"`
+	EventDeckBonuses  []EventDeckBonus    `json:"eventDeckBonuses"`
+	Gachas            []GachaInfo         `json:"gachas"`
+	Skills            []SkillInfo         `json:"skills"`
+	CharacterUnits    []GameCharacterUnit `json:"gameCharacterUnits"`
+	Honors            []HonorInfo         `json:"honors"`
+	MusicVocals       []MusicVocal        `json:"musicVocals"`
+}
+
+// ----------------------------- Card types ----------------------------------
+
+// CardInfo represents a PJSK card.
+type CardInfo struct {
+	ID                              int             `json:"id"`
+	Seq                             int             `json:"seq"`
+	CharacterID                     int             `json:"characterId"`
+	CardRarityType                  string          `json:"cardRarityType"` // rarity_1 .. rarity_4, rarity_birthday
+	SpecialTrainingPower1BonusFixed int             `json:"specialTrainingPower1BonusFixed"`
+	SpecialTrainingPower2BonusFixed int             `json:"specialTrainingPower2BonusFixed"`
+	SpecialTrainingPower3BonusFixed int             `json:"specialTrainingPower3BonusFixed"`
+	Attr                            string          `json:"attr"`        // cute, cool, pure, happy, mysterious
+	SupportUnit                     string          `json:"supportUnit"` // e.g. "piapro", "light_sound", ...
+	SkillID                         int             `json:"skillId"`
+	CardSkillName                   string          `json:"cardSkillName"`
+	Prefix                          string          `json:"prefix"` // card title / 称号
+	AssetbundleName                 string          `json:"assetbundleName"`
+	GachaPhrase                     string          `json:"gachaPhrase"`
+	FlavorText                      string          `json:"flavorText"`
+	CardParameters                  []CardParameter `json:"cardParameters"`
+	ReleaseAt                       int64           `json:"releaseAt"`          // Unix ms
+	ArchivePublishedAt              int64           `json:"archivePublishedAt"` // Unix ms
+	CardSupplyID                    int             `json:"cardSupplyId"`
+}
+
+// RarityStars returns the numeric star count for display, e.g. 4 for "rarity_4".
+func (c *CardInfo) RarityStars() int {
+	switch c.CardRarityType {
+	case "rarity_1":
+		return 1
+	case "rarity_2":
+		return 2
+	case "rarity_3":
+		return 3
+	case "rarity_4":
+		return 4
+	case "rarity_birthday":
+		return 4 // birthday cards are treated as 4-star
+	default:
+		return 0
+	}
+}
+
+// IsBirthday reports whether this card is a birthday card.
+func (c *CardInfo) IsBirthday() bool {
+	return c.CardRarityType == "rarity_birthday"
+}
+
+// CardParameter holds per-level power parameters for a card.
+type CardParameter struct {
+	ID                int    `json:"id"`
+	CardID            int    `json:"cardId"`
+	CardLevel         int    `json:"cardLevel"`
+	CardParameterType string `json:"cardParameterType"`
+	Power             int    `json:"power"`
+}
+
+// ----------------------------- Music types ---------------------------------
+
+// MusicInfo represents a PJSK song.
+type MusicInfo struct {
+	ID                  int      `json:"id"`
+	Seq                 int      `json:"seq"`
+	Title               string   `json:"title"`
+	Pronunciation       string   `json:"pronunciation"`
+	Lyricist            string   `json:"lyricist"`
+	Composer            string   `json:"composer"`
+	Arranger            string   `json:"arranger"`
+	AssetbundleName     string   `json:"assetbundleName"`
+	Categories          []string `json:"categories"`
+	PublishedAt         int64    `json:"publishedAt"` // Unix ms
+	ReleasedAt          int64    `json:"releasedAt"`  // Unix ms
+	FillerSec           float64  `json:"fillerSec"`
+	IsNewlyWrittenMusic bool     `json:"isNewlyWrittenMusic"`
+	IsFullLength        bool     `json:"isFullLength"`
+}
+
+// MusicDifficulty holds note-chart info for one difficulty of a song.
+type MusicDifficulty struct {
+	ID              int    `json:"id"`
+	MusicID         int    `json:"musicId"`
+	MusicDifficulty string `json:"musicDifficulty"` // easy, normal, hard, expert, master, append
+	PlayLevel       int    `json:"playLevel"`
+	TotalNoteCount  int    `json:"totalNoteCount"`
+}
+
+// MusicVocal represents a vocal version of a song.
+type MusicVocal struct {
+	ID              int    `json:"id"`
+	MusicID         int    `json:"musicId"`
+	Caption         string `json:"caption"`
+	AssetbundleName string `json:"assetbundleName"`
+}
+
+// ----------------------------- Event types ---------------------------------
+
+// EventInfo represents a PJSK event.
+type EventInfo struct {
+	ID                int    `json:"id"`
+	EventType         string `json:"eventType"` // marathon, cheerful_carnival, world_bloom
+	Name              string `json:"name"`
+	AssetbundleName   string `json:"assetbundleName"`
+	StartAt           int64  `json:"startAt"`           // Unix ms
+	AggregateAt       int64  `json:"aggregateAt"`       // Unix ms
+	ClosedAt          int64  `json:"closedAt"`          // Unix ms
+	DistributionEndAt int64  `json:"distributionEndAt"` // Unix ms
+	VirtualLiveID     int    `json:"virtualLiveId"`
+	Unit              string `json:"unit"`
+}
+
+// EventDeckBonus defines bonus rates for cards in an event.
+type EventDeckBonus struct {
+	ID                  int     `json:"id"`
+	EventID             int     `json:"eventId"`
+	GameCharacterUnitID int     `json:"gameCharacterUnitId"`
+	CardAttr            string  `json:"cardAttr"`
+	BonusRate           float64 `json:"bonusRate"`
+}
+
+// ----------------------------- Gacha types ---------------------------------
+
+// GachaInfo represents a gacha / banner.
+type GachaInfo struct {
+	ID                   int                   `json:"id"`
+	GachaType            string                `json:"gachaType"`
+	Name                 string                `json:"name"`
+	Seq                  int                   `json:"seq"`
+	AssetbundleName      string                `json:"assetbundleName"`
+	StartAt              int64                 `json:"startAt"` // Unix ms
+	EndAt                int64                 `json:"endAt"`   // Unix ms
+	IsShowPeriod         bool                  `json:"isShowPeriod"`
+	WishSelectCount      int                   `json:"wishSelectCount"`
+	GachaPickups         []GachaPickup         `json:"gachaPickups"`
+	GachaCardRarityRates []GachaCardRarityRate `json:"gachaCardRarityRates"`
+}
+
+// GachaPickup identifies a featured (pick-up) card in a gacha.
+type GachaPickup struct {
+	ID              int    `json:"id"`
+	GachaID         int    `json:"gachaId"`
+	CardID          int    `json:"cardId"`
+	GachaPickupType string `json:"gachaPickupType"`
+}
+
+// GachaCardRarityRate defines the pull-rate for a given rarity in a gacha.
+type GachaCardRarityRate struct {
+	ID             int     `json:"id"`
+	GachaID        int     `json:"gachaId"`
+	GroupID        int     `json:"groupId"`
+	CardRarityType string  `json:"cardRarityType"`
+	LotteryType    string  `json:"lotteryType"`
+	Rate           float64 `json:"rate"`
+}
+
+// ----------------------------- Skill types ---------------------------------
+
+// SkillInfo represents a card's skill.
+type SkillInfo struct {
+	ID           int           `json:"id"`
+	Description  string        `json:"description"`
+	SkillEffects []SkillEffect `json:"skillEffects"`
+}
+
+// SkillEffect is one effect component of a skill.
+type SkillEffect struct {
+	ID                        int                 `json:"id"`
+	SkillEffectType           string              `json:"skillEffectType"`
+	ActivateNotesJudgmentType string              `json:"activateNotesJudgmentType"`
+	SkillEffectDetails        []SkillEffectDetail `json:"skillEffectDetails"`
+}
+
+// SkillEffectDetail holds level-specific parameters for a skill effect.
+type SkillEffectDetail struct {
+	ID                     int     `json:"id"`
+	Level                  int     `json:"level"`
+	ActivateEffectDuration float64 `json:"activateEffectDuration"`
+	ActivateEffectValue    int     `json:"activateEffectValue"`
+}
+
+// ----------------------------- Character & Honor ----------------------------
+
+// GameCharacterUnit maps a character to a unit with its theme color.
+type GameCharacterUnit struct {
+	ID              int    `json:"id"`
+	GameCharacterID int    `json:"gameCharacterId"`
+	Unit            string `json:"unit"`
+	ColorCode       string `json:"colorCode"`
+}
+
+// HonorInfo represents an achievement / profile title.
+type HonorInfo struct {
+	ID              int    `json:"id"`
+	GroupID         int    `json:"groupId"`
+	HonorRarity     string `json:"honorRarity"` // low, middle, high, highest
+	Name            string `json:"name"`
+	AssetbundleName string `json:"assetbundleName"`
+	HonorType       string `json:"honorType"`
+}

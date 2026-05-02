@@ -1,0 +1,51 @@
+bot:
+  nickname: ["moebot", "萌萌"]
+  command_prefix: "/"
+  super_users: []
+  driver:
+    type: "ws-reverse"        # ws-reverse or ws
+    listen: "0.0.0.0:6700"    # reverse websocket listen address
+    url: "ws://127.0.0.1:6700" # forward websocket target
+    token: ""
+
+web:
+  host: "0.0.0.0"
+  port: 8080
+  auth:
+    username: "admin"
+    password: ""
+    jwt_secret: ""
+
+database:
+  path: "./data/moebot.db"
+
+masterdata:
+  url: "https://sk.exmeaning.com/master"
+  fallback_url: "https://sekaimaster.exmeaning.com/master"
+  local_path: "./data/master"
+  refresh_interval: 3600
+
+sekai_api:
+  enabled: false
+  base_url: ""
+  region: "jp"
+  timeout: 10
+  rate_limit: 30
+
+renderer:
+  host: "127.0.0.1"
+  port: 3001
+  cache:
+    enabled: true
+    path: "./data/cache"
+    max_size_mb: 1024
+    ttl_hours: 24
+
+assets:
+  cdn_source: "cn_main" # cn_main / cn_backup / overseas
+  music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+  sticker_path: "./assets/stickers"
+
+log:
+  level: "info"
+  format: "console"

@@ -1,0 +1,184 @@
+package config
+
+import (
+	"fmt"
+	"os"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Config is the root configuration for Moebot NEXT.
+type Config struct {
+	Bot        BotConfig        `yaml:"bot"`
+	Web        WebConfig        `yaml:"web"`
+	Database   DatabaseConfig   `yaml:"database"`
+	Masterdata MasterdataConfig `yaml:"masterdata"`
+	SekaiAPI   SekaiAPIConfig   `yaml:"sekai_api"`
+	Renderer   RendererConfig   `yaml:"renderer"`
+	Assets     AssetsConfig     `yaml:"assets"`
+	Log        LogConfig        `yaml:"log"`
+}
+
+// BotConfig holds ZeroBot-related settings.
+type BotConfig struct {
+	Nickname      []string     `yaml:"nickname"`
+	CommandPrefix string       `yaml:"command_prefix"`
+	SuperUsers    []int64      `yaml:"super_users"`
+	Driver        DriverConfig `yaml:"driver"`
+}
+
+// DriverConfig specifies the OneBot WebSocket driver.
+type DriverConfig struct {
+	Type   string `yaml:"type"`   // "ws" or "ws-reverse"
+	Listen string `yaml:"listen"` // for ws-reverse: "0.0.0.0:6700"
+	URL    string `yaml:"url"`    // for ws (forward): "ws://127.0.0.1:6700"
+	Token  string `yaml:"token"`  // optional access token
+}
+
+// WebConfig holds the admin panel web server settings.
+type WebConfig struct {
+	Host string     `yaml:"host"`
+	Port int        `yaml:"port"`
+	Auth AuthConfig `yaml:"auth"`
+}
+
+// AuthConfig holds authentication settings.
+type AuthConfig struct {
+	Username  string `yaml:"username"`
+	Password  string `yaml:"password"`
+	JWTSecret string `yaml:"jwt_secret"`
+}
+
+// DatabaseConfig holds SQLite database settings.
+type DatabaseConfig struct {
+	Path string `yaml:"path"`
+}
+
+// MasterdataConfig holds masterdata loading settings.
+type MasterdataConfig struct {
+	URL             string `yaml:"url"`
+	FallbackURL     string `yaml:"fallback_url"`
+	LocalPath       string `yaml:"local_path"`
+	RefreshInterval int    `yaml:"refresh_interval"` // seconds
+}
+
+// SekaiAPIConfig holds optional SEKAI API client settings.
+type SekaiAPIConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	BaseURL   string `yaml:"base_url"`
+	Region    string `yaml:"region"`     // "jp" or "cn"
+	Timeout   int    `yaml:"timeout"`    // seconds
+	RateLimit int    `yaml:"rate_limit"` // requests per minute
+}
+
+// RendererConfig holds the Bun renderer service settings.
+type RendererConfig struct {
+	Host  string      `yaml:"host"` // renderer listen host
+	Port  int         `yaml:"port"` // renderer listen port
+	Cache CacheConfig `yaml:"cache"`
+}
+
+// CacheConfig holds image cache settings.
+type CacheConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	Path      string `yaml:"path"`
+	MaxSizeMB int    `yaml:"max_size_mb"`
+	TTLHours  int    `yaml:"ttl_hours"`
+}
+
+// AssetsConfig holds asset/resource settings.
+type AssetsConfig struct {
+	CDNSource     string `yaml:"cdn_source"` // "cn" or "overseas"
+	MusicAliasURL string `yaml:"music_alias_url"`
+	StickerPath   string `yaml:"sticker_path"`
+}
+
+// LogConfig holds logging settings.
+type LogConfig struct {
+	Level  string `yaml:"level"`  // "debug", "info", "warn", "error"
+	Format string `yaml:"format"` // "console" or "json"
+}
+
+// DefaultConfig returns a Config with sensible defaults.
+func DefaultConfig() *Config {
+	return &Config{
+		Bot: BotConfig{
+			Nickname:      []string{"moebot"},
+			CommandPrefix: "/",
+			SuperUsers:    []int64{},
+			Driver: DriverConfig{
+				Type:   "ws-reverse",
+				Listen: "0.0.0.0:6700",
+			},
+		},
+		Web: WebConfig{
+			Host: "0.0.0.0",
+			Port: 8080,
+			Auth: AuthConfig{
+				Username: "admin",
+			},
+		},
+		Database: DatabaseConfig{
+			Path: "./data/moebot.db",
+		},
+		Masterdata: MasterdataConfig{
+			URL:             "https://sk.exmeaning.com/master",
+			FallbackURL:     "https://sekaimaster.exmeaning.com/master",
+			LocalPath:       "./data/master",
+			RefreshInterval: 3600,
+		},
+		SekaiAPI: SekaiAPIConfig{
+			Region:    "jp",
+			Timeout:   10,
+			RateLimit: 30,
+		},
+		Renderer: RendererConfig{
+			Host: "127.0.0.1",
+			Port: 3001,
+			Cache: CacheConfig{
+				Enabled:   true,
+				Path:      "./data/cache",
+				MaxSizeMB: 1024,
+				TTLHours:  24,
+			},
+		},
+		Assets: AssetsConfig{
+			CDNSource:     "cn",
+			MusicAliasURL: "https://moe.exmeaning.com/data/music_alias/music_aliases.json",
+			StickerPath:   "./assets/stickers",
+		},
+		Log: LogConfig{
+			Level:  "info",
+			Format: "console",
+		},
+	}
+}
+
+// Load reads the config file and merges with defaults.
+func Load(path string) (*Config, error) {
+	cfg := DefaultConfig()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Printf("Config file %s not found, using defaults\n", path)
+			return cfg, nil
+		}
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	return cfg, nil
+}
+
+// Save writes the config to a YAML file.
+func Save(cfg *Config, path string) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+	return os.WriteFile(path, data, 0644)
+}
