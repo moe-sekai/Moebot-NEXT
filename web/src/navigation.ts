@@ -54,7 +54,7 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
   },
   settings: {
     title: '设置',
-    subtitle: '按 Bot、Renderer、Web、Masterdata 与资源分组查看公开配置。',
+    subtitle: '按区服、数据源、资源源与接口功能管理配置。',
     eyebrow: 'Settings',
   },
   bot: {

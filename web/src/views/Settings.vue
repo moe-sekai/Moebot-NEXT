@@ -1,231 +1,265 @@
 <template>
   <main class="page-stack">
-    <PageHeader eyebrow="Settings" title="设置" subtitle="配置五服目标、Masterdata 来源与资源服务器；敏感字段不会在控制台暴露。">
+    <PageHeader eyebrow="Settings" title="设置" subtitle="按功能配置区服、Masterdata 数据源、Assets 资源源与接口；敏感字段不会在控制台暴露。">
       <template #actions>
         <UiButton variant="outline" size="sm" :loading="loading" @click="loadConfig">刷新配置</UiButton>
         <UiButton size="sm" :loading="saving" :disabled="!dirty || !canSave" @click="saveSettings">保存设置</UiButton>
       </template>
     </PageHeader>
 
-    <UiAlert variant="info" title="多服务器设置">
-      支持 JP/CN/TW/KR/EN 独立 Masterdata 与 Assets。无前缀命令按用户绑定服，/cn查卡 等前缀会临时切换服务器；敏感字段仍不会暴露或被本页覆盖。
-    </UiAlert>
     <UiAlert v-if="success" variant="info" title="操作完成">{{ success }}</UiAlert>
     <UiAlert v-if="error" variant="destructive" title="配置操作失败">{{ error }}</UiAlert>
 
-    <div v-if="loading" class="settings-grid">
-      <UiSkeleton v-for="item in 6" :key="item" height="230px" />
+    <div v-if="loading" class="settings-function-stack">
+      <UiSkeleton v-for="item in 5" :key="item" height="260px" />
     </div>
     <template v-else>
-      <div class="settings-editor-grid">
-        <UiCard className="settings-card settings-card--wide">
+      <div class="settings-function-stack">
+        <UiCard className="settings-card settings-function-card">
           <div class="settings-card__heading">
             <div class="settings-card__icon"><SvgIcon name="web" :size="22" /></div>
             <div>
-              <h2>目标服务器</h2>
-              <p>统一选择 Project SEKAI 服务器；切换后会同步 Masterdata 与 Assets 的地区，也可在各卡片中单独覆盖。</p>
+              <h2>区服选择</h2>
+              <p>这里只决定“启用哪些区服”和“无前缀命令默认使用哪个区服”；JP 与默认区服会自动保持启用。</p>
             </div>
           </div>
-          <div class="settings-form settings-form--inline">
+
+          <div class="settings-default-server">
             <label class="settings-field">
-              <span>服务器</span>
+              <span>默认区服</span>
               <select v-model="form.server.region" class="ui-select" @change="syncServerRegion">
                 <option v-for="option in regionOptions" :key="option.key" :value="option.key">
                   {{ option.label }} · {{ option.key.toUpperCase() }}
                 </option>
               </select>
             </label>
-            <div class="settings-hint">当前保存值：{{ config?.server.label ?? '-' }} / {{ config?.server.region?.toUpperCase() ?? '-' }}</div>
+            <div class="settings-callout">
+              <strong>{{ regionLabel(form.server.region) }} · {{ form.server.region.toUpperCase() }}</strong>
+              <span>当前保存值：{{ config?.server.label ?? '-' }} / {{ config?.server.region?.toUpperCase() ?? '-' }}</span>
+            </div>
+          </div>
+
+          <div class="settings-region-list settings-region-list--compact">
+            <div v-for="entry in serverEntries" :key="entry.option.key" class="settings-region-row settings-region-row--compact">
+              <div class="settings-row-header">
+                <div>
+                  <h3>{{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}</h3>
+                  <p>命令前缀 /{{ entry.option.key }}，例如 /{{ entry.option.key }}绑定、/{{ entry.option.key }}查曲。</p>
+                </div>
+                <div class="settings-row-badges">
+                  <UiBadge v-if="entry.option.key === form.server.region" variant="default">默认</UiBadge>
+                  <UiBadge :variant="entry.form.enabled ? 'success' : 'outline'">{{ entry.form.enabled ? '启用' : '停用' }}</UiBadge>
+                  <UiBadge :variant="entry.state?.loaded ? 'success' : 'warning'">{{ entry.state?.loaded ? '已加载' : '未加载' }}</UiBadge>
+                </div>
+              </div>
+              <div class="settings-row-body settings-row-body--inline">
+                <label class="settings-field">
+                  <span>启用状态</span>
+                  <select v-model="entry.form.enabled" class="ui-select" :disabled="isRegionLocked(entry.option.key)">
+                    <option :value="true">启用</option>
+                    <option :value="false">停用</option>
+                  </select>
+                </label>
+                <div class="settings-row-meta">
+                  <div><span>数据量</span><strong>{{ countsText(entry.state?.counts) }}</strong></div>
+                  <div><span>加载时间</span><strong>{{ formatTime(entry.state?.loaded_at) }}</strong></div>
+                  <div><span>说明</span><strong>{{ isRegionLocked(entry.option.key) ? 'JP / 默认区服固定启用' : '可按需启用或停用' }}</strong></div>
+                </div>
+              </div>
+            </div>
           </div>
         </UiCard>
 
-        <UiCard className="settings-card">
+        <UiCard className="settings-card settings-function-card">
           <div class="settings-card__heading">
             <div class="settings-card__icon"><SvgIcon name="masterdata" :size="22" /></div>
             <div>
-              <h2>Masterdata</h2>
-              <p>MoeSekai 支持 JP/CN，Haruki 支持五服，8823 支持 JP/CN/TW，自定义源需填写到 JSON 文件目录。</p>
+              <h2>Masterdata 数据源</h2>
+              <p>配置卡牌、曲目、活动、卡池等基础数据来源。MoeSekai 支持 JP/CN，Haruki 支持五服，8823 支持 JP/CN/TW。</p>
             </div>
           </div>
-          <div class="settings-form">
-            <label class="settings-field">
-              <span>地区</span>
-              <select v-model="form.masterdata.region" class="ui-select" @change="() => normalizeMasterdataSource()">
-                <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key }}</option>
-              </select>
-            </label>
-            <label class="settings-field">
-              <span>来源</span>
-              <select v-model="form.masterdata.source" class="ui-select">
-                <option v-for="option in masterdataSourceOptions" :key="option.key" :value="option.key" :disabled="!optionAvailable(option, form.masterdata.region)">
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
-            <UiAlert v-if="!masterdataSupported" variant="warning" title="组合不可用">
-              {{ selectedMasterdataLabel }} 暂不支持 {{ regionLabel(form.masterdata.region) }}，保存前请更换来源或地区。
-            </UiAlert>
-            <label v-if="form.masterdata.source === 'custom'" class="settings-field settings-field--full">
-              <span>自定义主 URL</span>
-              <input v-model.trim="form.masterdata.custom_url" class="ui-input" placeholder="https://example.com/master" />
-            </label>
-            <label v-if="form.masterdata.source === 'custom'" class="settings-field settings-field--full">
-              <span>自定义备用 URL</span>
-              <input v-model.trim="form.masterdata.custom_fallback_url" class="ui-input" placeholder="可选" />
-            </label>
-            <label class="settings-field">
-              <span>本地缓存路径</span>
-              <input v-model.trim="form.masterdata.local_path" class="ui-input" placeholder="./data/master" />
-            </label>
-            <label class="settings-field">
-              <span>刷新间隔（秒）</span>
-              <input v-model.number="form.masterdata.refresh_interval" class="ui-input" type="number" min="0" />
-            </label>
-          </div>
-          <div class="settings-preview">
-            <div><span>当前主 URL</span><code>{{ masterdataPrimaryPreview }}</code></div>
-            <div><span>当前备用 URL</span><code>{{ masterdataFallbackPreview }}</code></div>
-          </div>
-          <div class="settings-actions-row">
-            <UiButton variant="outline" size="sm" :loading="reloading === form.server.region" @click="() => reloadMasterdataNow()">立即重载 Masterdata</UiButton>
-            <span class="settings-hint">保存来源后可立即重载；失败时会继续保留本地缓存兜底。</span>
+
+          <div class="settings-region-list">
+            <div v-for="entry in serverEntries" :key="`masterdata-${entry.option.key}`" class="settings-region-row">
+              <div class="settings-row-header">
+                <div>
+                  <h3>{{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}</h3>
+                  <p>{{ entry.form.enabled ? '该区服已启用，保存后命令会使用这里的数据源。' : '该区服暂未启用，仍可先配置数据源。' }}</p>
+                </div>
+                <div class="settings-row-badges">
+                  <UiBadge :variant="masterdataProfileSupported(entry.form) ? 'success' : 'destructive'">{{ masterdataProfileSupported(entry.form) ? '可用' : '不可用' }}</UiBadge>
+                  <UiBadge variant="secondary">{{ sourceLabel(masterdataSourceOptions, entry.form.masterdata.source) }}</UiBadge>
+                </div>
+              </div>
+
+              <div class="settings-form settings-form--region">
+                <label class="settings-field">
+                  <span>数据来源</span>
+                  <select v-model="entry.form.masterdata.source" class="ui-select" @change="() => normalizeServerProfile(entry.option.key)">
+                    <option v-for="option in masterdataSourceOptions" :key="option.key" :value="option.key" :disabled="!optionAvailable(option, entry.option.key)">
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+                <label class="settings-field">
+                  <span>本地缓存路径</span>
+                  <input v-model.trim="entry.form.masterdata.local_path" class="ui-input" placeholder="./data/master/jp" />
+                </label>
+                <label class="settings-field">
+                  <span>刷新间隔（秒）</span>
+                  <input v-model.number="entry.form.masterdata.refresh_interval" class="ui-input" type="number" min="0" />
+                </label>
+                <div class="settings-field settings-field--readonly">
+                  <span>支持区服</span>
+                  <strong>{{ sourceSupportText(masterdataSourceOptions, entry.form.masterdata.source) }}</strong>
+                </div>
+                <label v-if="entry.form.masterdata.source === 'custom'" class="settings-field settings-field--full">
+                  <span>自定义主 URL</span>
+                  <input v-model.trim="entry.form.masterdata.custom_url" class="ui-input" placeholder="https://example.com/master" />
+                </label>
+                <label v-if="entry.form.masterdata.source === 'custom'" class="settings-field settings-field--full">
+                  <span>自定义备用 URL</span>
+                  <input v-model.trim="entry.form.masterdata.custom_fallback_url" class="ui-input" placeholder="可选" />
+                </label>
+                <UiAlert v-if="!masterdataProfileSupported(entry.form)" variant="warning" title="组合不可用">
+                  {{ sourceLabel(masterdataSourceOptions, entry.form.masterdata.source) }} 暂不支持 {{ entry.option.label }}，保存前请更换来源。
+                </UiAlert>
+              </div>
+
+              <div class="settings-preview">
+                <div><span>加载状态</span><code>{{ entry.state?.loaded ? '已加载' : '未加载' }} · {{ countsText(entry.state?.counts) }}</code></div>
+                <div><span>Master URL</span><code>{{ masterdataPreview(entry, 'primary') }}</code></div>
+                <div><span>备用 URL</span><code>{{ masterdataPreview(entry, 'fallback') }}</code></div>
+                <div><span>缓存路径</span><code>{{ entry.form.masterdata.local_path || '-' }}</code></div>
+              </div>
+              <div class="settings-actions-row">
+                <UiButton variant="outline" size="sm" :loading="reloading === entry.option.key" :disabled="!entry.form.enabled" @click="() => reloadMasterdataNow(entry.option.key)">重载该服 Masterdata</UiButton>
+                <span class="settings-hint">{{ masterdataHint(entry) }}</span>
+              </div>
+            </div>
           </div>
         </UiCard>
-        <UiCard className="settings-card">
+
+        <UiCard className="settings-card settings-function-card">
           <div class="settings-card__heading">
             <div class="settings-card__icon"><SvgIcon name="resources" :size="22" /></div>
             <div>
-              <h2>Assets 资源服务器</h2>
-              <p>MoeSekai 仅 JP/CN；sekai.best 支持 JP/CN/TW/KR/EN；自定义源会直接作为 renderer 资源 base URL。</p>
+              <h2>Assets 资源源</h2>
+              <p>配置卡面、活动图、谱面相关图片等资源来源。MoeSekai 仅 JP/CN；sekai.best 支持五服；自定义源会直接作为 renderer 资源 base URL。</p>
             </div>
           </div>
-          <div class="settings-form">
-            <label class="settings-field">
-              <span>地区</span>
-              <select v-model="form.assets.region" class="ui-select" @change="() => normalizeAssetSource()">
-                <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key }}</option>
-              </select>
-            </label>
-            <label class="settings-field">
-              <span>来源</span>
-              <select v-model="form.assets.source" class="ui-select" @change="() => normalizeAssetSource()">
-                <option v-for="option in assetSourceOptions" :key="option.key" :value="option.key" :disabled="!optionAvailable(option, form.assets.region)">
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
-            <label v-if="form.assets.source === 'moesekai'" class="settings-field">
-              <span>镜像</span>
-              <select v-model="form.assets.mirror" class="ui-select">
-                <option v-for="option in assetMirrorOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
-              </select>
-            </label>
-            <UiAlert v-if="!assetSupported" variant="warning" title="组合不可用">
-              {{ selectedAssetLabel }} 暂不支持 {{ regionLabel(form.assets.region) }}，保存前请更换来源或地区。
-            </UiAlert>
-            <label v-if="form.assets.source === 'custom'" class="settings-field settings-field--full">
-              <span>自定义 Base URL</span>
-              <input v-model.trim="form.assets.custom_base_url" class="ui-input" placeholder="https://example.com/sekai-jp-assets" />
-            </label>
-            <label class="settings-field settings-field--full">
-              <span>曲名别名 URL</span>
-              <input v-model.trim="form.assets.music_alias_url" class="ui-input" placeholder="https://.../music_aliases.json" />
-            </label>
-            <label class="settings-field">
-              <span>贴纸路径</span>
-              <input v-model.trim="form.assets.sticker_path" class="ui-input" placeholder="./assets/stickers" />
-            </label>
-          </div>
-          <div class="settings-preview">
-            <div><span>当前 Base URL</span><code>{{ assetBasePreview }}</code></div>
-            <div><span>Renderer Source</span><code>{{ config?.assets.renderer_source || '-' }}</code></div>
+
+          <div class="settings-region-list">
+            <div v-for="entry in serverEntries" :key="`assets-${entry.option.key}`" class="settings-region-row">
+              <div class="settings-row-header">
+                <div>
+                  <h3>{{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}</h3>
+                  <p>{{ entry.form.enabled ? '该区服已启用，渲染会使用这里的资源源。' : '该区服暂未启用，仍可先配置资源源。' }}</p>
+                </div>
+                <div class="settings-row-badges">
+                  <UiBadge :variant="assetProfileSupported(entry.form) ? 'success' : 'destructive'">{{ assetProfileSupported(entry.form) ? '可用' : '不可用' }}</UiBadge>
+                  <UiBadge variant="secondary">{{ sourceLabel(assetSourceOptions, entry.form.assets.source) }}</UiBadge>
+                </div>
+              </div>
+
+              <div class="settings-form settings-form--region">
+                <label class="settings-field">
+                  <span>资源来源</span>
+                  <select v-model="entry.form.assets.source" class="ui-select" @change="() => normalizeServerProfile(entry.option.key)">
+                    <option v-for="option in assetSourceOptions" :key="option.key" :value="option.key" :disabled="!optionAvailable(option, entry.option.key)">
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+                <label v-if="entry.form.assets.source === 'moesekai'" class="settings-field">
+                  <span>MoeSekai 镜像</span>
+                  <select v-model="entry.form.assets.mirror" class="ui-select">
+                    <option v-for="option in assetMirrorOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
+                  </select>
+                </label>
+                <div v-else class="settings-field settings-field--readonly">
+                  <span>镜像</span>
+                  <strong>{{ entry.form.assets.source === 'custom' ? '由自定义 URL 决定' : 'sekai.best 自动选择' }}</strong>
+                </div>
+                <label class="settings-field settings-field--full">
+                  <span>曲名别名 URL</span>
+                  <input v-model.trim="entry.form.assets.music_alias_url" class="ui-input" placeholder="https://.../music_aliases.json" />
+                </label>
+                <label class="settings-field">
+                  <span>贴纸路径</span>
+                  <input v-model.trim="entry.form.assets.sticker_path" class="ui-input" placeholder="./assets/stickers" />
+                </label>
+                <div class="settings-field settings-field--readonly">
+                  <span>支持区服</span>
+                  <strong>{{ sourceSupportText(assetSourceOptions, entry.form.assets.source) }}</strong>
+                </div>
+                <label v-if="entry.form.assets.source === 'custom'" class="settings-field settings-field--full">
+                  <span>自定义 Base URL</span>
+                  <input v-model.trim="entry.form.assets.custom_base_url" class="ui-input" placeholder="https://example.com/sekai-jp-assets" />
+                </label>
+                <UiAlert v-if="!assetProfileSupported(entry.form)" variant="warning" title="组合不可用">
+                  {{ sourceLabel(assetSourceOptions, entry.form.assets.source) }} 暂不支持 {{ entry.option.label }}，保存前请更换来源。
+                </UiAlert>
+              </div>
+
+              <div class="settings-preview">
+                <div><span>Base URL</span><code>{{ assetsPreview(entry, 'base') }}</code></div>
+                <div><span>Renderer Source</span><code>{{ assetsPreview(entry, 'renderer') }}</code></div>
+                <div><span>贴纸路径</span><code>{{ entry.form.assets.sticker_path || '-' }}</code></div>
+                <div><span>曲名别名</span><code>{{ entry.form.assets.music_alias_url || '-' }}</code></div>
+              </div>
+            </div>
           </div>
         </UiCard>
-      </div>
 
-      <div class="settings-editor-grid">
-        <UiCard v-for="entry in serverEntries" :key="entry.option.key" className="settings-card">
+        <UiCard className="settings-card settings-function-card">
           <div class="settings-card__heading">
             <div class="settings-card__icon"><SvgIcon name="web" :size="22" /></div>
             <div>
-              <h2>{{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}</h2>
-              <p>命令前缀 /{{ entry.option.key }}，例如 /{{ entry.option.key }}绑定、/{{ entry.option.key }}查曲。</p>
+              <h2>接口功能</h2>
+              <p>集中管理玩家资料查询与排名接口的区服开关。Base URL 与 Headers 属于敏感/高级配置，不会在控制台中暴露或覆盖。</p>
             </div>
           </div>
-          <div class="settings-form">
-            <label class="settings-field">
-              <span>启用该服</span>
-              <select v-model="entry.form.enabled" class="ui-select" :disabled="entry.option.key === 'jp' || entry.option.key === form.server.region">
-                <option :value="true">启用</option>
-                <option :value="false">停用</option>
-              </select>
-            </label>
-            <label class="settings-field">
-              <span>Masterdata 来源</span>
-              <select v-model="entry.form.masterdata.source" class="ui-select" @change="() => normalizeServerProfile(entry.option.key)">
-                <option v-for="option in masterdataSourceOptions" :key="option.key" :value="option.key" :disabled="!optionAvailable(option, entry.form.masterdata.region)">{{ option.label }}</option>
-              </select>
-            </label>
-            <label class="settings-field">
-              <span>Masterdata 缓存</span>
-              <input v-model.trim="entry.form.masterdata.local_path" class="ui-input" />
-            </label>
-            <label class="settings-field">
-              <span>刷新间隔（秒）</span>
-              <input v-model.number="entry.form.masterdata.refresh_interval" class="ui-input" type="number" min="0" />
-            </label>
-            <label v-if="entry.form.masterdata.source === 'custom'" class="settings-field settings-field--full">
-              <span>自定义 Master URL</span>
-              <input v-model.trim="entry.form.masterdata.custom_url" class="ui-input" placeholder="https://example.com/master" />
-            </label>
-            <label class="settings-field">
-              <span>Assets 来源</span>
-              <select v-model="entry.form.assets.source" class="ui-select" @change="() => normalizeServerProfile(entry.option.key)">
-                <option v-for="option in assetSourceOptions" :key="option.key" :value="option.key" :disabled="!optionAvailable(option, entry.form.assets.region)">{{ option.label }}</option>
-              </select>
-            </label>
-            <label v-if="entry.form.assets.source === 'moesekai'" class="settings-field">
-              <span>Assets 镜像</span>
-              <select v-model="entry.form.assets.mirror" class="ui-select">
-                <option v-for="option in assetMirrorOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
-              </select>
-            </label>
-            <label v-if="entry.form.assets.source === 'custom'" class="settings-field settings-field--full">
-              <span>自定义 Assets URL</span>
-              <input v-model.trim="entry.form.assets.custom_base_url" class="ui-input" placeholder="https://example.com/sekai-assets" />
-            </label>
-            <label class="settings-field">
-              <span>SEKAI API</span>
-              <select v-model="entry.form.sekai_api.enabled" class="ui-select">
-                <option :value="true">启用</option>
-                <option :value="false">关闭</option>
-              </select>
-            </label>
-            <label class="settings-field">
-              <span>SEKAI API 地区</span>
-              <select v-model="entry.form.sekai_api.region" class="ui-select">
-                <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.key }}</option>
-              </select>
-            </label>
-            <label class="settings-field">
-              <span>Ranking 地区</span>
-              <select v-model="entry.form.ranking_api.region" class="ui-select">
-                <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.key }}</option>
-              </select>
-            </label>
-          </div>
-          <UiAlert v-if="!serverProfileSupported(entry.form)" variant="warning" title="组合不可用">
-            当前 Masterdata 或 Assets 来源不支持 {{ entry.option.label }}，请更换来源。
-          </UiAlert>
-          <div class="settings-preview">
-            <div><span>加载状态</span><code>{{ entry.state?.loaded ? '已加载' : '未加载' }} · 卡 {{ entry.state?.counts.cards ?? 0 }} / 曲 {{ entry.state?.counts.musics ?? 0 }}</code></div>
-            <div><span>Master URL</span><code>{{ entry.state?.masterdata.url || '保存后由后端解析' }}</code></div>
-            <div><span>Asset Base</span><code>{{ entry.state?.assets.base_url || '保存后由后端解析' }}</code></div>
-            <div><span>Renderer Source</span><code>{{ entry.state?.assets.renderer_source || '-' }}</code></div>
-          </div>
-          <div class="settings-actions-row">
-            <UiButton variant="outline" size="sm" :loading="reloading === entry.option.key" @click="() => reloadMasterdataNow(entry.option.key)">重载该服 Masterdata</UiButton>
-            <span class="settings-hint">{{ entry.state?.masterdata.error || entry.state?.masterdata.load_error || '保存后新命令会立即使用该服务器配置。' }}</span>
+
+          <div class="settings-region-list">
+            <div v-for="entry in serverEntries" :key="`api-${entry.option.key}`" class="settings-region-row settings-region-row--compact">
+              <div class="settings-row-header">
+                <div>
+                  <h3>{{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}</h3>
+                  <p>SEKAI API 用于玩家资料；Ranking API 用于排名相关查询。</p>
+                </div>
+                <div class="settings-row-badges">
+                  <UiBadge :variant="entry.form.sekai_api.enabled ? 'success' : 'outline'">SEKAI API {{ entry.form.sekai_api.enabled ? '启用' : '关闭' }}</UiBadge>
+                  <UiBadge variant="secondary">Ranking {{ entry.form.ranking_api.region.toUpperCase() }}</UiBadge>
+                </div>
+              </div>
+
+              <div class="settings-form settings-form--region">
+                <label class="settings-field">
+                  <span>SEKAI API</span>
+                  <select v-model="entry.form.sekai_api.enabled" class="ui-select">
+                    <option :value="true">启用</option>
+                    <option :value="false">关闭</option>
+                  </select>
+                </label>
+                <label class="settings-field">
+                  <span>SEKAI API 区服</span>
+                  <select v-model="entry.form.sekai_api.region" class="ui-select">
+                    <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key.toUpperCase() }}</option>
+                  </select>
+                </label>
+                <label class="settings-field">
+                  <span>Ranking 区服</span>
+                  <select v-model="entry.form.ranking_api.region" class="ui-select">
+                    <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key.toUpperCase() }}</option>
+                  </select>
+                </label>
+                <div class="settings-field settings-field--readonly">
+                  <span>请求限制</span>
+                  <strong>{{ entry.form.sekai_api.timeout }}s · {{ entry.form.sekai_api.rate_limit }}/min</strong>
+                </div>
+              </div>
+            </div>
           </div>
         </UiCard>
       </div>
@@ -234,9 +268,9 @@
         <ConfigSection title="Bot" description="OneBot 驱动、命令前缀与昵称。" icon="bot" :items="botItems" />
         <ConfigSection title="Renderer" description="Satori 渲染服务与缓存配置。" icon="renderer" :items="rendererItems" />
         <ConfigSection title="Web" description="Fiber 管理控制台监听配置。" icon="web" :items="webItems" />
-        <ConfigSection title="Masterdata 状态" description="当前生效的数据来源、刷新与本地路径。" icon="masterdata" :items="masterdataItems" />
-        <ConfigSection title="SEKAI API" description="玩家资料接口开关、地区与请求头配置状态。" icon="web" :items="sekaiApiItems" />
-        <ConfigSection title="资源状态" description="CDN、别名与贴纸资源配置。" icon="resources" :items="assetItems" />
+        <ConfigSection title="默认区服数据状态" description="当前默认区服生效的数据来源、刷新与本地路径。" icon="masterdata" :items="masterdataItems" />
+        <ConfigSection title="默认区服接口状态" description="默认区服玩家资料接口开关、地区与请求头配置状态。" icon="web" :items="sekaiApiItems" />
+        <ConfigSection title="默认区服资源状态" description="当前默认区服生效的 CDN、别名与贴纸资源配置。" icon="resources" :items="assetItems" />
       </div>
     </template>
   </main>
@@ -245,7 +279,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { getPublicConfig, reloadMasterdata, updatePublicConfig } from '../api/client'
-import type { ConfigOption, PublicConfig, PublicServerProfile, UpdatePublicConfigPayload } from '../api/types'
+import type { ConfigOption, MasterdataCounts, PublicConfig, PublicServerProfile, UpdatePublicConfigPayload } from '../api/types'
 import SvgIcon, { type IconName } from '../components/icons/SvgIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
 import UiAlert from '../components/ui/UiAlert.vue'
@@ -296,9 +330,13 @@ interface ServerProfileForm {
 
 interface SettingsForm {
   server: { region: string }
-  masterdata: MasterdataForm
-  assets: AssetsForm
   servers: Record<string, ServerProfileForm>
+}
+
+type ServerEntry = {
+  option: ConfigOption
+  form: ServerProfileForm
+  state?: PublicServerProfile
 }
 
 const fallbackRegions: ConfigOption[] = [
@@ -344,33 +382,9 @@ const dirty = computed(() => {
   if (!config.value) return false
   return JSON.stringify(buildPayload()) !== savedSnapshot.value
 })
-const masterdataSupported = computed(() => optionAvailable(findOption(masterdataSourceOptions.value, form.value.masterdata.source), form.value.masterdata.region))
-const assetSupported = computed(() => optionAvailable(findOption(assetSourceOptions.value, form.value.assets.source), form.value.assets.region))
-const serverEntries = computed(() => regionOptions.value.map(region => ({ option: region, form: ensureServerForm(region.key), state: config.value?.servers?.[region.key] })))
+const serverEntries = computed<ServerEntry[]>(() => regionOptions.value.map(region => ({ option: region, form: ensureServerForm(region.key), state: config.value?.servers?.[region.key] })))
 const serverProfilesSupported = computed(() => serverEntries.value.every(entry => serverProfileSupported(entry.form)))
-const canSave = computed(() => masterdataSupported.value && assetSupported.value && serverProfilesSupported.value)
-const selectedMasterdataLabel = computed(() => findOption(masterdataSourceOptions.value, form.value.masterdata.source)?.label ?? form.value.masterdata.source)
-const selectedAssetLabel = computed(() => findOption(assetSourceOptions.value, form.value.assets.source)?.label ?? form.value.assets.source)
-const masterdataSelectionChanged = computed(() => {
-  const current = config.value?.masterdata
-  return !current || current.region !== form.value.masterdata.region || current.source !== form.value.masterdata.source
-})
-const assetSelectionChanged = computed(() => {
-  const current = config.value?.assets
-  return !current || current.region !== form.value.assets.region || current.source !== form.value.assets.source || current.mirror !== form.value.assets.mirror
-})
-const masterdataPrimaryPreview = computed(() => {
-  if (form.value.masterdata.source === 'custom') return form.value.masterdata.custom_url || '-'
-  return masterdataSelectionChanged.value ? '保存后由后端解析' : config.value?.masterdata.url || '-'
-})
-const masterdataFallbackPreview = computed(() => {
-  if (form.value.masterdata.source === 'custom') return form.value.masterdata.custom_fallback_url || '-'
-  return masterdataSelectionChanged.value ? '保存后由后端解析' : config.value?.masterdata.fallback_url || '-'
-})
-const assetBasePreview = computed(() => {
-  if (form.value.assets.source === 'custom') return form.value.assets.custom_base_url || '-'
-  return assetSelectionChanged.value ? '保存后由后端解析' : config.value?.assets.base_url || '-'
-})
+const canSave = computed(() => serverProfilesSupported.value)
 
 const webItems = computed<ConfigItem[]>(() => [
   { label: 'Host', value: config.value?.web.host ?? '-' },
@@ -397,7 +411,7 @@ const rendererItems = computed<ConfigItem[]>(() => [
 ])
 
 const masterdataItems = computed<ConfigItem[]>(() => [
-  { label: '地区', value: `${config.value?.masterdata.region_label ?? '-'} (${config.value?.masterdata.region ?? '-'})` },
+  { label: '区服', value: `${config.value?.masterdata.region_label ?? '-'} (${config.value?.masterdata.region ?? '-'})` },
   { label: '来源', value: config.value?.masterdata.source_label || config.value?.masterdata.source || '-' },
   { label: '主 URL', value: config.value?.masterdata.url || '-' },
   { label: '备用 URL', value: config.value?.masterdata.fallback_url || '-' },
@@ -409,13 +423,13 @@ const masterdataItems = computed<ConfigItem[]>(() => [
 const sekaiApiItems = computed<ConfigItem[]>(() => [
   { label: '启用', value: Boolean(config.value?.sekai_api.enabled), badge: true },
   { label: 'Base URL 已配置', value: Boolean(config.value?.sekai_api.base_url_configured), badge: true },
-  { label: '地区', value: config.value?.sekai_api.region ?? '-' },
+  { label: '区服', value: config.value?.sekai_api.region ?? '-' },
   { label: '请求头已配置', value: Boolean(config.value?.sekai_api.headers_configured), badge: true },
-  { label: 'Ranking 地区', value: config.value?.ranking_api?.region ?? '-' },
+  { label: 'Ranking 区服', value: config.value?.ranking_api?.region ?? '-' },
 ])
 
 const assetItems = computed<ConfigItem[]>(() => [
-  { label: '地区', value: `${config.value?.assets.region_label ?? '-'} (${config.value?.assets.region ?? '-'})` },
+  { label: '区服', value: `${config.value?.assets.region_label ?? '-'} (${config.value?.assets.region ?? '-'})` },
   { label: '来源', value: config.value?.assets.source_label || config.value?.assets.source || '-' },
   { label: '镜像', value: config.value?.assets.mirror_label || config.value?.assets.mirror || '-' },
   { label: 'Base URL', value: config.value?.assets.base_url || '-' },
@@ -495,117 +509,74 @@ async function reloadMasterdataNow(region = form.value.server.region) {
     reloading.value = ''
   }
 }
+
 function createEmptyForm(): SettingsForm {
   return {
     server: { region: 'jp' },
-    masterdata: {
-      region: 'jp',
-      source: 'moesekai',
-      custom_url: '',
-      custom_fallback_url: '',
-      local_path: './data/master',
-      refresh_interval: 3600,
-    },
-    assets: {
-      region: 'jp',
-      source: 'moesekai',
-      mirror: 'main',
-      custom_base_url: '',
-      music_alias_url: '',
-      sticker_path: './assets/stickers',
-    },
     servers: {},
   }
 }
 
 function applyConfigToForm(data: PublicConfig) {
+  const defaultRegion = data.server.region || 'jp'
   form.value = {
-    server: { region: data.server.region || 'jp' },
-    masterdata: {
-      region: data.masterdata.region || data.server.region || 'jp',
-      source: data.masterdata.source || 'custom',
-      custom_url: data.masterdata.custom_url || (data.masterdata.source === 'custom' ? data.masterdata.url : ''),
-      custom_fallback_url: data.masterdata.custom_fallback_url || (data.masterdata.source === 'custom' ? data.masterdata.fallback_url : ''),
-      local_path: data.masterdata.local_path || './data/master',
-      refresh_interval: data.masterdata.refresh_interval ?? 3600,
-    },
-    assets: {
-      region: data.assets.region || data.server.region || 'jp',
-      source: data.assets.source || 'custom',
-      mirror: data.assets.mirror || 'main',
-      custom_base_url: data.assets.custom_base_url || (data.assets.source === 'custom' ? data.assets.base_url : ''),
-      music_alias_url: data.assets.music_alias_url || '',
-      sticker_path: data.assets.sticker_path || './assets/stickers',
-    },
+    server: { region: defaultRegion },
     servers: {},
   }
   for (const option of regionOptions.value) {
-    const server = data.servers?.[option.key]
+    const server = data.servers?.[option.key] ?? (option.key === defaultRegion ? {
+      enabled: true,
+      masterdata: data.masterdata,
+      assets: data.assets,
+      sekai_api: data.sekai_api,
+      ranking_api: data.ranking_api,
+    } : undefined)
     form.value.servers[option.key] = createServerForm(option.key, server)
     normalizeServerProfile(option.key, false)
   }
-  normalizeSourceSelections(false)
   savedSnapshot.value = JSON.stringify(buildPayload())
 }
 
 function buildPayload(): UpdatePublicConfigPayload {
+  const defaultProfile = ensureServerForm(form.value.server.region)
   return {
     server: { region: form.value.server.region },
-    masterdata: {
-      region: form.value.masterdata.region,
-      source: form.value.masterdata.source,
-      custom_url: form.value.masterdata.custom_url,
-      custom_fallback_url: form.value.masterdata.custom_fallback_url,
-      local_path: form.value.masterdata.local_path,
-      refresh_interval: Number(form.value.masterdata.refresh_interval) || 0,
-    },
-    assets: {
-      region: form.value.assets.region,
-      source: form.value.assets.source,
-      mirror: form.value.assets.mirror,
-      custom_base_url: form.value.assets.custom_base_url,
-      music_alias_url: form.value.assets.music_alias_url,
-      sticker_path: form.value.assets.sticker_path,
-    },
+    masterdata: buildMasterdataPayload(defaultProfile.masterdata),
+    assets: buildAssetsPayload(defaultProfile.assets),
     servers: Object.fromEntries(regionOptions.value.map(option => [option.key, buildServerPayload(option.key)])),
   }
 }
 
+function buildMasterdataPayload(masterdata: MasterdataForm) {
+  return {
+    region: masterdata.region,
+    source: masterdata.source,
+    custom_url: masterdata.custom_url,
+    custom_fallback_url: masterdata.custom_fallback_url,
+    local_path: masterdata.local_path,
+    refresh_interval: Number(masterdata.refresh_interval) || 0,
+  }
+}
+
+function buildAssetsPayload(assets: AssetsForm) {
+  return {
+    region: assets.region,
+    source: assets.source,
+    mirror: assets.mirror,
+    custom_base_url: assets.custom_base_url,
+    music_alias_url: assets.music_alias_url,
+    sticker_path: assets.sticker_path,
+  }
+}
+
 function syncServerRegion() {
-  form.value.masterdata.region = form.value.server.region
-  form.value.assets.region = form.value.server.region
   const defaultProfile = ensureServerForm(form.value.server.region)
   defaultProfile.enabled = true
-  normalizeSourceSelections()
+  normalizeServerProfile(form.value.server.region)
+  success.value = ''
 }
 
-function normalizeSourceSelections(clearSuccess = true) {
-  normalizeMasterdataSource(clearSuccess)
-  normalizeAssetSource(clearSuccess)
-}
-
-function normalizeMasterdataSource(clearSuccess = true) {
-  const current = findOption(masterdataSourceOptions.value, form.value.masterdata.source)
-  if (!optionAvailable(current, form.value.masterdata.region)) {
-    form.value.masterdata.source = firstAvailableOption(masterdataSourceOptions.value, form.value.masterdata.region)?.key ?? 'custom'
-  }
-  if (clearSuccess) success.value = ''
-}
-
-function normalizeAssetSource(clearSuccess = true) {
-  const current = findOption(assetSourceOptions.value, form.value.assets.source)
-  if (!optionAvailable(current, form.value.assets.region)) {
-    form.value.assets.source = firstAvailableOption(assetSourceOptions.value, form.value.assets.region)?.key ?? 'custom'
-  }
-  if (form.value.assets.source !== 'moesekai') {
-    form.value.assets.mirror = ''
-  } else if (!form.value.assets.mirror) {
-    form.value.assets.mirror = 'main'
-  }
-  if (clearSuccess) success.value = ''
-}
-
-function createServerForm(region: string, server?: PublicServerProfile): ServerProfileForm {
+function createServerForm(region: string, server?: Partial<PublicServerProfile>): ServerProfileForm {
   const masterdata = server?.masterdata
   const assets = server?.assets
   return {
@@ -627,14 +598,14 @@ function createServerForm(region: string, server?: PublicServerProfile): ServerP
       sticker_path: assets?.sticker_path || './assets/stickers',
     },
     sekai_api: {
-      enabled: server?.sekai_api.enabled ?? false,
-      region: server?.sekai_api.region || region,
-      timeout: server?.sekai_api.timeout ?? 10,
-      rate_limit: server?.sekai_api.rate_limit ?? 30,
+      enabled: server?.sekai_api?.enabled ?? false,
+      region: server?.sekai_api?.region || region,
+      timeout: server?.sekai_api?.timeout ?? 10,
+      rate_limit: server?.sekai_api?.rate_limit ?? 30,
     },
     ranking_api: {
-      region: server?.ranking_api.region || region,
-      timeout: server?.ranking_api.timeout ?? 10,
+      region: server?.ranking_api?.region || region,
+      timeout: server?.ranking_api?.timeout ?? 10,
     },
   }
 }
@@ -649,23 +620,9 @@ function ensureServerForm(region: string) {
 function buildServerPayload(region: string) {
   const profile = ensureServerForm(region)
   return {
-    enabled: region === 'jp' || region === form.value.server.region ? true : profile.enabled,
-    masterdata: {
-      region: profile.masterdata.region,
-      source: profile.masterdata.source,
-      custom_url: profile.masterdata.custom_url,
-      custom_fallback_url: profile.masterdata.custom_fallback_url,
-      local_path: profile.masterdata.local_path,
-      refresh_interval: Number(profile.masterdata.refresh_interval) || 0,
-    },
-    assets: {
-      region: profile.assets.region,
-      source: profile.assets.source,
-      mirror: profile.assets.mirror,
-      custom_base_url: profile.assets.custom_base_url,
-      music_alias_url: profile.assets.music_alias_url,
-      sticker_path: profile.assets.sticker_path,
-    },
+    enabled: isRegionLocked(region) ? true : profile.enabled,
+    masterdata: buildMasterdataPayload(profile.masterdata),
+    assets: buildAssetsPayload(profile.assets),
     sekai_api: {
       enabled: profile.sekai_api.enabled,
       region: profile.sekai_api.region,
@@ -698,8 +655,15 @@ function normalizeServerProfile(region: string, clearSuccess = true) {
 }
 
 function serverProfileSupported(profile: ServerProfileForm) {
+  return masterdataProfileSupported(profile) && assetProfileSupported(profile)
+}
+
+function masterdataProfileSupported(profile: ServerProfileForm) {
   return optionAvailable(findOption(masterdataSourceOptions.value, profile.masterdata.source), profile.masterdata.region)
-    && optionAvailable(findOption(assetSourceOptions.value, profile.assets.source), profile.assets.region)
+}
+
+function assetProfileSupported(profile: ServerProfileForm) {
+  return optionAvailable(findOption(assetSourceOptions.value, profile.assets.source), profile.assets.region)
 }
 
 function optionAvailable(option: ConfigOption | undefined, region: string) {
@@ -717,6 +681,57 @@ function firstAvailableOption(options: ConfigOption[], region: string) {
 
 function regionLabel(region: string) {
   return findOption(regionOptions.value, region)?.label ?? region
+}
+
+function sourceLabel(options: ConfigOption[], key: string) {
+  return findOption(options, key)?.label ?? key
+}
+
+function sourceSupportText(options: ConfigOption[], key: string) {
+  const regions = findOption(options, key)?.regions
+  if (!regions?.length) return '全部区服'
+  return regions.map(region => regionLabel(region)).join(' / ')
+}
+
+function isRegionLocked(region: string) {
+  return region === 'jp' || region === form.value.server.region
+}
+
+function countsText(counts?: MasterdataCounts) {
+  return `卡 ${counts?.cards ?? 0} / 曲 ${counts?.musics ?? 0} / 活 ${counts?.events ?? 0} / 池 ${counts?.gachas ?? 0}`
+}
+
+function formatTime(value?: string | null) {
+  return value ? new Date(value).toLocaleString() : '-'
+}
+
+function masterdataPreview(entry: ServerEntry, kind: 'primary' | 'fallback') {
+  const masterdata = entry.form.masterdata
+  if (masterdata.source === 'custom') {
+    return kind === 'primary' ? masterdata.custom_url || '-' : masterdata.custom_fallback_url || '-'
+  }
+  const current = entry.state?.masterdata
+  if (!current || current.source !== masterdata.source || current.region !== masterdata.region) {
+    return '保存后由后端解析'
+  }
+  return kind === 'primary' ? current.url || '-' : current.fallback_url || '-'
+}
+
+function assetsPreview(entry: ServerEntry, kind: 'base' | 'renderer') {
+  const assets = entry.form.assets
+  if (assets.source === 'custom') {
+    return kind === 'base' ? assets.custom_base_url || '-' : assets.custom_base_url || '-'
+  }
+  const current = entry.state?.assets
+  if (!current || current.source !== assets.source || current.region !== assets.region || current.mirror !== assets.mirror) {
+    return '保存后由后端解析'
+  }
+  return kind === 'base' ? current.base_url || '-' : current.renderer_source || '-'
+}
+
+function masterdataHint(entry: ServerEntry) {
+  if (!entry.form.enabled) return '该区服未启用；启用并保存后即可重载。'
+  return entry.state?.masterdata.error || entry.state?.masterdata.load_error || '保存来源后可立即重载；失败时会继续保留本地缓存兜底。'
 }
 
 function getErrorMessage(err: unknown, fallback: string) {
