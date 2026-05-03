@@ -15,12 +15,13 @@
     </div>
     <template v-else>
       <div class="settings-function-stack">
+        <!-- 默认区服选择 -->
         <UiCard className="settings-card settings-function-card">
           <div class="settings-card__heading">
             <div class="settings-card__icon"><SvgIcon name="web" :size="22" /></div>
             <div>
-              <h2>区服选择</h2>
-              <p>这里只决定“启用哪些区服”和“无前缀命令默认使用哪个区服”；JP 与默认区服会自动保持启用。</p>
+              <h2>全局：默认区服</h2>
+              <p>这里只决定“无前缀命令默认使用哪个区服”；JP 与默认区服会自动保持启用状态。各区服详细配置请在下方标签页中设置。</p>
             </div>
           </div>
 
@@ -38,226 +39,229 @@
               <span>当前保存值：{{ config?.server.label ?? '-' }} / {{ config?.server.region?.toUpperCase() ?? '-' }}</span>
             </div>
           </div>
-
-          <div class="settings-region-list settings-region-list--compact">
-            <div v-for="entry in serverEntries" :key="entry.option.key" class="settings-region-row settings-region-row--compact">
-              <div class="settings-row-header">
-                <div>
-                  <h3>{{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}</h3>
-                  <p>命令前缀 /{{ entry.option.key }}，例如 /{{ entry.option.key }}绑定、/{{ entry.option.key }}查曲。</p>
-                </div>
-                <div class="settings-row-badges">
-                  <UiBadge v-if="entry.option.key === form.server.region" variant="default">默认</UiBadge>
-                  <UiBadge :variant="entry.form.enabled ? 'success' : 'outline'">{{ entry.form.enabled ? '启用' : '停用' }}</UiBadge>
-                  <UiBadge :variant="entry.state?.loaded ? 'success' : 'warning'">{{ entry.state?.loaded ? '已加载' : '未加载' }}</UiBadge>
-                </div>
-              </div>
-              <div class="settings-row-body settings-row-body--inline">
-                <label class="settings-field">
-                  <span>启用状态</span>
-                  <select v-model="entry.form.enabled" class="ui-select" :disabled="isRegionLocked(entry.option.key)">
-                    <option :value="true">启用</option>
-                    <option :value="false">停用</option>
-                  </select>
-                </label>
-                <div class="settings-row-meta">
-                  <div><span>数据量</span><strong>{{ countsText(entry.state?.counts) }}</strong></div>
-                  <div><span>加载时间</span><strong>{{ formatTime(entry.state?.loaded_at) }}</strong></div>
-                  <div><span>说明</span><strong>{{ isRegionLocked(entry.option.key) ? 'JP / 默认区服固定启用' : '可按需启用或停用' }}</strong></div>
-                </div>
-              </div>
-            </div>
-          </div>
         </UiCard>
 
+        <!-- 区服详细配置 Tabs -->
         <UiCard className="settings-card settings-function-card">
           <div class="settings-card__heading">
             <div class="settings-card__icon"><SvgIcon name="masterdata" :size="22" /></div>
             <div>
-              <h2>Masterdata 数据源</h2>
-              <p>配置卡牌、曲目、活动、卡池等基础数据来源。MoeSekai 支持 JP/CN，Haruki 支持五服，8823 支持 JP/CN/TW。</p>
+              <h2>区服详细配置</h2>
+              <p>请选择一个区服标签页进行启用状态、Masterdata、Assets 及接口功能的详细配置。</p>
             </div>
           </div>
 
-          <div class="settings-region-list">
-            <div v-for="entry in serverEntries" :key="`masterdata-${entry.option.key}`" class="settings-region-row">
-              <div class="settings-row-header">
-                <div>
-                  <h3>{{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}</h3>
-                  <p>{{ entry.form.enabled ? '该区服已启用，保存后命令会使用这里的数据源。' : '该区服暂未启用，仍可先配置数据源。' }}</p>
-                </div>
-                <div class="settings-row-badges">
-                  <UiBadge :variant="masterdataProfileSupported(entry.form) ? 'success' : 'destructive'">{{ masterdataProfileSupported(entry.form) ? '可用' : '不可用' }}</UiBadge>
-                  <UiBadge variant="secondary">{{ sourceLabel(masterdataSourceOptions, entry.form.masterdata.source) }}</UiBadge>
-                </div>
-              </div>
-
-              <div class="settings-form settings-form--region">
-                <label class="settings-field">
-                  <span>数据来源</span>
-                  <select v-model="entry.form.masterdata.source" class="ui-select" @change="() => normalizeServerProfile(entry.option.key)">
-                    <option v-for="option in masterdataSourceOptions" :key="option.key" :value="option.key" :disabled="!optionAvailable(option, entry.option.key)">
-                      {{ option.label }}
-                    </option>
-                  </select>
-                </label>
-                <label class="settings-field">
-                  <span>本地缓存路径</span>
-                  <input v-model.trim="entry.form.masterdata.local_path" class="ui-input" placeholder="./data/master/jp" />
-                </label>
-                <label class="settings-field">
-                  <span>刷新间隔（秒）</span>
-                  <input v-model.number="entry.form.masterdata.refresh_interval" class="ui-input" type="number" min="0" />
-                </label>
-                <div class="settings-field settings-field--readonly">
-                  <span>支持区服</span>
-                  <strong>{{ sourceSupportText(masterdataSourceOptions, entry.form.masterdata.source) }}</strong>
-                </div>
-                <label v-if="entry.form.masterdata.source === 'custom'" class="settings-field settings-field--full">
-                  <span>自定义主 URL</span>
-                  <input v-model.trim="entry.form.masterdata.custom_url" class="ui-input" placeholder="https://example.com/master" />
-                </label>
-                <label v-if="entry.form.masterdata.source === 'custom'" class="settings-field settings-field--full">
-                  <span>自定义备用 URL</span>
-                  <input v-model.trim="entry.form.masterdata.custom_fallback_url" class="ui-input" placeholder="可选" />
-                </label>
-                <UiAlert v-if="!masterdataProfileSupported(entry.form)" variant="warning" title="组合不可用">
-                  {{ sourceLabel(masterdataSourceOptions, entry.form.masterdata.source) }} 暂不支持 {{ entry.option.label }}，保存前请更换来源。
-                </UiAlert>
-              </div>
-
-              <div class="settings-preview">
-                <div><span>加载状态</span><code>{{ entry.state?.loaded ? '已加载' : '未加载' }} · {{ countsText(entry.state?.counts) }}</code></div>
-                <div><span>Master URL</span><code>{{ masterdataPreview(entry, 'primary') }}</code></div>
-                <div><span>备用 URL</span><code>{{ masterdataPreview(entry, 'fallback') }}</code></div>
-                <div><span>缓存路径</span><code>{{ entry.form.masterdata.local_path || '-' }}</code></div>
-              </div>
-              <div class="settings-actions-row">
-                <UiButton variant="outline" size="sm" :loading="reloading === entry.option.key" :disabled="!entry.form.enabled" @click="() => reloadMasterdataNow(entry.option.key)">重载该服 Masterdata</UiButton>
-                <span class="settings-hint">{{ masterdataHint(entry) }}</span>
-              </div>
+          <div class="ui-tabs">
+            <div class="ui-tabs-list">
+              <button
+                v-for="entry in serverEntries"
+                :key="entry.option.key"
+                class="ui-tabs-trigger"
+                :data-state="activeTab === entry.option.key ? 'active' : ''"
+                @click="activeTab = entry.option.key"
+              >
+                {{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}
+                <span v-if="entry.option.key === form.server.region" style="opacity: 0.7; font-size: 12px; margin-left: 4px;">(默认)</span>
+              </button>
             </div>
-          </div>
-        </UiCard>
 
-        <UiCard className="settings-card settings-function-card">
-          <div class="settings-card__heading">
-            <div class="settings-card__icon"><SvgIcon name="resources" :size="22" /></div>
-            <div>
-              <h2>Assets 资源源</h2>
-              <p>配置卡面、活动图、谱面相关图片等资源来源。MoeSekai 仅 JP/CN；sekai.best 支持五服；自定义源会直接作为 renderer 资源 base URL。</p>
-            </div>
-          </div>
+            <div
+              v-for="entry in serverEntries"
+              :key="entry.option.key"
+              class="ui-tabs-content"
+              :data-state="activeTab === entry.option.key ? 'active' : ''"
+            >
+              <div class="settings-function-stack" style="margin-top: 6px;">
+                
+                <!-- 1. 基础状态 -->
+                <div class="settings-region-row settings-region-row--compact">
+                  <div class="settings-row-header">
+                    <div>
+                      <h3>基础状态</h3>
+                      <p>命令前缀 /{{ entry.option.key }}，例如 /{{ entry.option.key }}绑定、/{{ entry.option.key }}查曲。</p>
+                    </div>
+                    <div class="settings-row-badges">
+                      <UiBadge v-if="entry.option.key === form.server.region" variant="default">默认</UiBadge>
+                      <UiBadge :variant="entry.form.enabled ? 'success' : 'outline'">{{ entry.form.enabled ? '启用' : '停用' }}</UiBadge>
+                      <UiBadge :variant="entry.state?.loaded ? 'success' : 'warning'">{{ entry.state?.loaded ? '已加载' : '未加载' }}</UiBadge>
+                    </div>
+                  </div>
+                  <div class="settings-row-body settings-row-body--inline">
+                    <label class="settings-field">
+                      <span>启用状态</span>
+                      <select v-model="entry.form.enabled" class="ui-select" :disabled="isRegionLocked(entry.option.key)">
+                        <option :value="true">启用</option>
+                        <option :value="false">停用</option>
+                      </select>
+                    </label>
+                    <div class="settings-row-meta">
+                      <div><span>数据量</span><strong>{{ countsText(entry.state?.counts) }}</strong></div>
+                      <div><span>加载时间</span><strong>{{ formatTime(entry.state?.loaded_at) }}</strong></div>
+                      <div><span>说明</span><strong>{{ isRegionLocked(entry.option.key) ? 'JP / 默认区服固定启用' : '可按需启用或停用' }}</strong></div>
+                    </div>
+                  </div>
+                </div>
 
-          <div class="settings-region-list">
-            <div v-for="entry in serverEntries" :key="`assets-${entry.option.key}`" class="settings-region-row">
-              <div class="settings-row-header">
-                <div>
-                  <h3>{{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}</h3>
-                  <p>{{ entry.form.enabled ? '该区服已启用，渲染会使用这里的资源源。' : '该区服暂未启用，仍可先配置资源源。' }}</p>
-                </div>
-                <div class="settings-row-badges">
-                  <UiBadge :variant="assetProfileSupported(entry.form) ? 'success' : 'destructive'">{{ assetProfileSupported(entry.form) ? '可用' : '不可用' }}</UiBadge>
-                  <UiBadge variant="secondary">{{ sourceLabel(assetSourceOptions, entry.form.assets.source) }}</UiBadge>
-                </div>
-              </div>
+                <!-- 2. Masterdata -->
+                <div class="settings-region-row">
+                  <div class="settings-row-header">
+                    <div>
+                      <h3>Masterdata 数据源</h3>
+                      <p>{{ entry.form.enabled ? '配置卡牌、曲目等基础数据来源。该区服已启用。' : '该区服暂未启用，仍可先配置数据源。' }}</p>
+                    </div>
+                    <div class="settings-row-badges">
+                      <UiBadge :variant="masterdataProfileSupported(entry.form) ? 'success' : 'destructive'">{{ masterdataProfileSupported(entry.form) ? '可用' : '不可用' }}</UiBadge>
+                      <UiBadge variant="secondary">{{ sourceLabel(masterdataSourceOptions, entry.form.masterdata.source) }}</UiBadge>
+                    </div>
+                  </div>
 
-              <div class="settings-form settings-form--region">
-                <label class="settings-field">
-                  <span>资源来源</span>
-                  <select v-model="entry.form.assets.source" class="ui-select" @change="() => normalizeServerProfile(entry.option.key)">
-                    <option v-for="option in assetSourceOptions" :key="option.key" :value="option.key" :disabled="!optionAvailable(option, entry.option.key)">
-                      {{ option.label }}
-                    </option>
-                  </select>
-                </label>
-                <label v-if="entry.form.assets.source === 'moesekai'" class="settings-field">
-                  <span>MoeSekai 镜像</span>
-                  <select v-model="entry.form.assets.mirror" class="ui-select">
-                    <option v-for="option in assetMirrorOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
-                  </select>
-                </label>
-                <div v-else class="settings-field settings-field--readonly">
-                  <span>镜像</span>
-                  <strong>{{ entry.form.assets.source === 'custom' ? '由自定义 URL 决定' : 'sekai.best 自动选择' }}</strong>
-                </div>
-                <label class="settings-field settings-field--full">
-                  <span>曲名别名 URL</span>
-                  <input v-model.trim="entry.form.assets.music_alias_url" class="ui-input" placeholder="https://.../music_aliases.json" />
-                </label>
-                <label class="settings-field">
-                  <span>贴纸路径</span>
-                  <input v-model.trim="entry.form.assets.sticker_path" class="ui-input" placeholder="./assets/stickers" />
-                </label>
-                <div class="settings-field settings-field--readonly">
-                  <span>支持区服</span>
-                  <strong>{{ sourceSupportText(assetSourceOptions, entry.form.assets.source) }}</strong>
-                </div>
-                <label v-if="entry.form.assets.source === 'custom'" class="settings-field settings-field--full">
-                  <span>自定义 Base URL</span>
-                  <input v-model.trim="entry.form.assets.custom_base_url" class="ui-input" placeholder="https://example.com/sekai-jp-assets" />
-                </label>
-                <UiAlert v-if="!assetProfileSupported(entry.form)" variant="warning" title="组合不可用">
-                  {{ sourceLabel(assetSourceOptions, entry.form.assets.source) }} 暂不支持 {{ entry.option.label }}，保存前请更换来源。
-                </UiAlert>
-              </div>
+                  <div class="settings-form settings-form--region">
+                    <label class="settings-field">
+                      <span>数据来源</span>
+                      <select v-model="entry.form.masterdata.source" class="ui-select" @change="() => normalizeServerProfile(entry.option.key)">
+                        <option v-for="option in masterdataSourceOptions" :key="option.key" :value="option.key" :disabled="!optionAvailable(option, entry.option.key)">
+                          {{ option.label }}
+                        </option>
+                      </select>
+                    </label>
+                    <label class="settings-field">
+                      <span>本地缓存路径</span>
+                      <input v-model.trim="entry.form.masterdata.local_path" class="ui-input" placeholder="./data/master/jp" />
+                    </label>
+                    <label class="settings-field">
+                      <span>刷新间隔（秒）</span>
+                      <input v-model.number="entry.form.masterdata.refresh_interval" class="ui-input" type="number" min="0" />
+                    </label>
+                    <div class="settings-field settings-field--readonly">
+                      <span>支持区服</span>
+                      <strong>{{ sourceSupportText(masterdataSourceOptions, entry.form.masterdata.source) }}</strong>
+                    </div>
+                    <label v-if="entry.form.masterdata.source === 'custom'" class="settings-field settings-field--full">
+                      <span>自定义主 URL</span>
+                      <input v-model.trim="entry.form.masterdata.custom_url" class="ui-input" placeholder="https://example.com/master" />
+                    </label>
+                    <label v-if="entry.form.masterdata.source === 'custom'" class="settings-field settings-field--full">
+                      <span>自定义备用 URL</span>
+                      <input v-model.trim="entry.form.masterdata.custom_fallback_url" class="ui-input" placeholder="可选" />
+                    </label>
+                    <UiAlert v-if="!masterdataProfileSupported(entry.form)" variant="warning" title="组合不可用">
+                      {{ sourceLabel(masterdataSourceOptions, entry.form.masterdata.source) }} 暂不支持 {{ entry.option.label }}，保存前请更换来源。
+                    </UiAlert>
+                  </div>
 
-              <div class="settings-preview">
-                <div><span>Base URL</span><code>{{ assetsPreview(entry, 'base') }}</code></div>
-                <div><span>Renderer Source</span><code>{{ assetsPreview(entry, 'renderer') }}</code></div>
-                <div><span>贴纸路径</span><code>{{ entry.form.assets.sticker_path || '-' }}</code></div>
-                <div><span>曲名别名</span><code>{{ entry.form.assets.music_alias_url || '-' }}</code></div>
-              </div>
-            </div>
-          </div>
-        </UiCard>
-
-        <UiCard className="settings-card settings-function-card">
-          <div class="settings-card__heading">
-            <div class="settings-card__icon"><SvgIcon name="web" :size="22" /></div>
-            <div>
-              <h2>接口功能</h2>
-              <p>集中管理玩家资料查询与排名接口的区服开关。Base URL 与 Headers 属于敏感/高级配置，不会在控制台中暴露或覆盖。</p>
-            </div>
-          </div>
-
-          <div class="settings-region-list">
-            <div v-for="entry in serverEntries" :key="`api-${entry.option.key}`" class="settings-region-row settings-region-row--compact">
-              <div class="settings-row-header">
-                <div>
-                  <h3>{{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}</h3>
-                  <p>SEKAI API 用于玩家资料；Ranking API 用于排名相关查询。</p>
+                  <div class="settings-preview">
+                    <div><span>加载状态</span><code>{{ entry.state?.loaded ? '已加载' : '未加载' }} · {{ countsText(entry.state?.counts) }}</code></div>
+                    <div><span>Master URL</span><code>{{ masterdataPreview(entry, 'primary') }}</code></div>
+                    <div><span>备用 URL</span><code>{{ masterdataPreview(entry, 'fallback') }}</code></div>
+                    <div><span>缓存路径</span><code>{{ entry.form.masterdata.local_path || '-' }}</code></div>
+                  </div>
+                  <div class="settings-actions-row">
+                    <UiButton variant="outline" size="sm" :loading="reloading === entry.option.key" :disabled="!entry.form.enabled" @click="() => reloadMasterdataNow(entry.option.key)">重载该服 Masterdata</UiButton>
+                    <span class="settings-hint">{{ masterdataHint(entry) }}</span>
+                  </div>
                 </div>
-                <div class="settings-row-badges">
-                  <UiBadge :variant="entry.form.sekai_api.enabled ? 'success' : 'outline'">SEKAI API {{ entry.form.sekai_api.enabled ? '启用' : '关闭' }}</UiBadge>
-                  <UiBadge variant="secondary">Ranking {{ entry.form.ranking_api.region.toUpperCase() }}</UiBadge>
-                </div>
-              </div>
 
-              <div class="settings-form settings-form--region">
-                <label class="settings-field">
-                  <span>SEKAI API</span>
-                  <select v-model="entry.form.sekai_api.enabled" class="ui-select">
-                    <option :value="true">启用</option>
-                    <option :value="false">关闭</option>
-                  </select>
-                </label>
-                <label class="settings-field">
-                  <span>SEKAI API 区服</span>
-                  <select v-model="entry.form.sekai_api.region" class="ui-select">
-                    <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key.toUpperCase() }}</option>
-                  </select>
-                </label>
-                <label class="settings-field">
-                  <span>Ranking 区服</span>
-                  <select v-model="entry.form.ranking_api.region" class="ui-select">
-                    <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key.toUpperCase() }}</option>
-                  </select>
-                </label>
-                <div class="settings-field settings-field--readonly">
-                  <span>请求限制</span>
-                  <strong>{{ entry.form.sekai_api.timeout }}s · {{ entry.form.sekai_api.rate_limit }}/min</strong>
+                <!-- 3. Assets -->
+                <div class="settings-region-row">
+                  <div class="settings-row-header">
+                    <div>
+                      <h3>Assets 资源源</h3>
+                      <p>配置卡面、活动图、谱面相关图片等资源来源。</p>
+                    </div>
+                    <div class="settings-row-badges">
+                      <UiBadge :variant="assetProfileSupported(entry.form) ? 'success' : 'destructive'">{{ assetProfileSupported(entry.form) ? '可用' : '不可用' }}</UiBadge>
+                      <UiBadge variant="secondary">{{ sourceLabel(assetSourceOptions, entry.form.assets.source) }}</UiBadge>
+                    </div>
+                  </div>
+
+                  <div class="settings-form settings-form--region">
+                    <label class="settings-field">
+                      <span>资源来源</span>
+                      <select v-model="entry.form.assets.source" class="ui-select" @change="() => normalizeServerProfile(entry.option.key)">
+                        <option v-for="option in assetSourceOptions" :key="option.key" :value="option.key" :disabled="!optionAvailable(option, entry.option.key)">
+                          {{ option.label }}
+                        </option>
+                      </select>
+                    </label>
+                    <label v-if="entry.form.assets.source === 'moesekai'" class="settings-field">
+                      <span>MoeSekai 镜像</span>
+                      <select v-model="entry.form.assets.mirror" class="ui-select">
+                        <option v-for="option in assetMirrorOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
+                      </select>
+                    </label>
+                    <div v-else class="settings-field settings-field--readonly">
+                      <span>镜像</span>
+                      <strong>{{ entry.form.assets.source === 'custom' ? '由自定义 URL 决定' : 'sekai.best 自动选择' }}</strong>
+                    </div>
+                    <label class="settings-field settings-field--full">
+                      <span>曲名别名 URL</span>
+                      <input v-model.trim="entry.form.assets.music_alias_url" class="ui-input" placeholder="https://.../music_aliases.json" />
+                    </label>
+                    <label class="settings-field">
+                      <span>贴纸路径</span>
+                      <input v-model.trim="entry.form.assets.sticker_path" class="ui-input" placeholder="./assets/stickers" />
+                    </label>
+                    <div class="settings-field settings-field--readonly">
+                      <span>支持区服</span>
+                      <strong>{{ sourceSupportText(assetSourceOptions, entry.form.assets.source) }}</strong>
+                    </div>
+                    <label v-if="entry.form.assets.source === 'custom'" class="settings-field settings-field--full">
+                      <span>自定义 Base URL</span>
+                      <input v-model.trim="entry.form.assets.custom_base_url" class="ui-input" placeholder="https://example.com/sekai-jp-assets" />
+                    </label>
+                    <UiAlert v-if="!assetProfileSupported(entry.form)" variant="warning" title="组合不可用">
+                      {{ sourceLabel(assetSourceOptions, entry.form.assets.source) }} 暂不支持 {{ entry.option.label }}，保存前请更换来源。
+                    </UiAlert>
+                  </div>
+
+                  <div class="settings-preview">
+                    <div><span>Base URL</span><code>{{ assetsPreview(entry, 'base') }}</code></div>
+                    <div><span>Renderer Source</span><code>{{ assetsPreview(entry, 'renderer') }}</code></div>
+                    <div><span>贴纸路径</span><code>{{ entry.form.assets.sticker_path || '-' }}</code></div>
+                    <div><span>曲名别名</span><code>{{ entry.form.assets.music_alias_url || '-' }}</code></div>
+                  </div>
                 </div>
+
+                <!-- 4. API -->
+                <div class="settings-region-row settings-region-row--compact">
+                  <div class="settings-row-header">
+                    <div>
+                      <h3>接口功能</h3>
+                      <p>玩家资料查询 (SEKAI API) 与排名接口 (Ranking API)。</p>
+                    </div>
+                    <div class="settings-row-badges">
+                      <UiBadge :variant="entry.form.sekai_api.enabled ? 'success' : 'outline'">SEKAI API {{ entry.form.sekai_api.enabled ? '启用' : '关闭' }}</UiBadge>
+                      <UiBadge variant="secondary">Ranking {{ entry.form.ranking_api.region.toUpperCase() }}</UiBadge>
+                    </div>
+                  </div>
+
+                  <div class="settings-form settings-form--region">
+                    <label class="settings-field">
+                      <span>SEKAI API</span>
+                      <select v-model="entry.form.sekai_api.enabled" class="ui-select">
+                        <option :value="true">启用</option>
+                        <option :value="false">关闭</option>
+                      </select>
+                    </label>
+                    <label class="settings-field">
+                      <span>SEKAI API 区服</span>
+                      <select v-model="entry.form.sekai_api.region" class="ui-select">
+                        <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key.toUpperCase() }}</option>
+                      </select>
+                    </label>
+                    <label class="settings-field">
+                      <span>Ranking 区服</span>
+                      <select v-model="entry.form.ranking_api.region" class="ui-select">
+                        <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key.toUpperCase() }}</option>
+                      </select>
+                    </label>
+                    <div class="settings-field settings-field--readonly">
+                      <span>请求限制</span>
+                      <strong>{{ entry.form.sekai_api.timeout }}s · {{ entry.form.sekai_api.rate_limit }}/min</strong>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>
@@ -366,6 +370,7 @@ const fallbackAssetMirrors: ConfigOption[] = [
 
 const config = ref<PublicConfig | null>(null)
 const form = ref<SettingsForm>(createEmptyForm())
+const activeTab = ref("jp")
 const savedSnapshot = ref('')
 const loading = ref(false)
 const saving = ref(false)
