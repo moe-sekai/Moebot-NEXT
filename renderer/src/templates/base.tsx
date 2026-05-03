@@ -30,7 +30,7 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
         color: theme.colors.text,
       }}
     >
-      {/* Bright brand header */}
+      {/* Brand header — title (left) + logo (right) on one row */}
       <div
         style={{
           display: 'flex',
@@ -41,25 +41,22 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
           borderBottom: `1px solid ${theme.colors.border}`,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.md }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <img src={logo} width={136} height={30} style={{ objectFit: 'contain' }} />
-          </div>
-        </div>
-
-        {title && (
-          <div style={{ display: 'flex', flexDirection: 'column', marginTop: theme.spacing.md }}>
-            <div
-              style={{
-                display: 'flex',
-                fontSize: theme.fontSize.xl,
-                fontWeight: 800,
-                color: theme.colors.text,
-                lineHeight: 1.25,
-              }}
-            >
-              {title}
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.lg }}>
+          {/* Left: title + subtitle */}
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+            {title && (
+              <div
+                style={{
+                  display: 'flex',
+                  fontSize: theme.fontSize.xl,
+                  fontWeight: 800,
+                  color: theme.colors.text,
+                  lineHeight: 1.25,
+                }}
+              >
+                {title}
+              </div>
+            )}
             {subtitle && (
               <div
                 style={{
@@ -74,7 +71,17 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
               </div>
             )}
           </div>
-        )}
+
+          {/* Right: logo — aspect ratio 1536 × 699 ≈ 2.197:1  →  97 × 44 px */}
+          <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <img
+              src={logo}
+              width={97}
+              height={44}
+              style={{ objectFit: 'contain', objectPosition: 'right center' }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Content */}

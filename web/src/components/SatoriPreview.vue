@@ -34,7 +34,7 @@
             <span class="preview-item__name">{{ item.name }}</span>
             <UiBadge :variant="item.status === 'ready' ? 'success' : 'warning'">{{ item.status }}</UiBadge>
           </span>
-          <span class="preview-item__desc">{{ item.command }} · {{ item.width }}×{{ item.height }}</span>
+          <span class="preview-item__desc">{{ item.command }} · {{ item.width }}px 宽</span>
         </button>
       </div>
 
@@ -149,7 +149,7 @@ async function refreshImage() {
   imageError.value = ''
   imageLoading.value = true
   try {
-    const result = await renderRendererPreview(preview.id, preview.width, preview.height)
+    const result = await renderRendererPreview(preview.id, preview.width)
     revokeImageUrl()
     imageUrl.value = result.url
     timings.value = result.timings

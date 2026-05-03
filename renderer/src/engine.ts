@@ -61,9 +61,10 @@ export async function renderWithTrace(
   const fontsMs = Date.now() - fontsStart
 
   const satoriStart = Date.now()
+  // Height is intentionally omitted — Satori auto-computes height from content.
+  // Only width is constrained; the card grows vertically to fit all content.
   const svg = await satori(element, {
     width: opts.width!,
-    height: opts.height,
     fonts: toSatoriFonts(fonts),
     debug: opts.debug,
   })
@@ -113,9 +114,9 @@ export async function renderToSvg(
   const opts = { ...DEFAULT_OPTIONS, ...options }
   const fonts = await getFonts()
 
+  // Height is intentionally omitted — auto-computed by Satori from content.
   return satori(element, {
     width: opts.width!,
-    height: opts.height,
     fonts: toSatoriFonts(fonts),
     debug: opts.debug,
   })

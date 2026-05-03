@@ -134,7 +134,7 @@ export async function renderPreviewTemplate(
 
   const trace = await renderWithTrace(createPreviewElement(id), {
     width: meta.width,
-    height: meta.height,
+    // Height is not passed — Satori auto-computes height from template content.
     ...options,
   })
 

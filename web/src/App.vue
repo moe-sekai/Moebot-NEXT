@@ -4,8 +4,7 @@
       <div class="app-shell">
         <aside class="app-sidebar" aria-label="Moebot NEXT 控制台侧边栏">
           <RouterLink to="/" class="brand" aria-label="返回概览">
-            <MoebotLogo color="var(--accent-pink)" :height="40" />
-            <small>Go Console</small>
+            <MoebotLogo color="var(--accent-pink)" :height="60" />
           </RouterLink>
           <ConsoleNav />
         </aside>

@@ -4,8 +4,8 @@ bot:
   super_users: []
   driver:
     type: "ws-reverse"
-    listen: "0.0.0.0:6700"
-    url: "ws://127.0.0.1:6700"
+    listen: "0.0.0.0:6701"
+    url: "ws://127.0.0.1:6701"
     token: ""
 
 web:

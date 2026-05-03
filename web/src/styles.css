@@ -56,7 +56,6 @@ button, input, select { font: inherit; }
 .app-main { min-width: 0; display: flex; flex-direction: column; }
 .brand { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 12px; border-radius: 22px; }
 .brand:hover { background: rgba(255, 255, 255, 0.7); }
-.brand small { display: block; color: var(--muted-foreground); font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .moebot-logo { display: inline-flex; align-items: center; color: var(--accent-pink); max-width: 100%; }
 .moebot-logo__svg { display: inline-flex; align-items: center; height: 100%; max-width: 100%; }
 .moebot-logo__svg svg { display: block; width: auto; max-width: 100%; height: 100%; color: var(--theme-color, currentColor); }
