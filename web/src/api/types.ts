@@ -104,8 +104,98 @@ export interface RecentCommandsResponse {
   message: string
 }
 
+export interface ConfigOption {
+  key: string
+  label: string
+  description?: string
+  regions?: string[]
+}
+
+export interface ResolvedEndpoint {
+  key: string
+  label: string
+  url: string
+}
+
+export interface PublicMasterdataConfig {
+  region: string
+  region_label: string
+  source: string
+  source_label: string
+  url: string
+  fallback_url: string
+  custom_url: string
+  custom_fallback_url: string
+  url_configured: boolean
+  fallback_url_configured: boolean
+  local_path: string
+  refresh_interval: number
+  endpoints: ResolvedEndpoint[]
+  supported: boolean
+  error?: string
+  load_error?: string
+}
+
+export interface PublicAssetsConfig {
+  region: string
+  region_label: string
+  source: string
+  source_label: string
+  mirror: string
+  mirror_label: string
+  cdn_source: string
+  base_url: string
+  custom_base_url: string
+  renderer_source: string
+  music_alias_url: string
+  music_alias_configured: boolean
+  sticker_path: string
+  supported: boolean
+  error?: string
+}
+
+export interface PublicSekaiAPIConfig {
+  enabled: boolean
+  base_url_configured: boolean
+  region: string
+  headers_configured: boolean
+  timeout?: number
+  rate_limit?: number
+}
+
+export interface PublicRankingAPIConfig {
+  base_url_configured: boolean
+  region: string
+  timeout: number
+}
+
+export interface PublicServerProfile {
+  region: string
+  label: string
+  enabled: boolean
+  is_default: boolean
+  loaded: boolean
+  loaded_at: string | null
+  counts: MasterdataCounts
+  masterdata: PublicMasterdataConfig
+  assets: PublicAssetsConfig
+  sekai_api: PublicSekaiAPIConfig
+  ranking_api: PublicRankingAPIConfig
+}
+
 export interface PublicConfig {
   version: string
+  server: {
+    region: string
+    label: string
+  }
+  servers?: Record<string, PublicServerProfile>
+  presets: {
+    regions: ConfigOption[]
+    masterdata_sources: ConfigOption[]
+    asset_sources: ConfigOption[]
+    asset_mirrors: ConfigOption[]
+  }
   web: {
     host: string
     port: number
@@ -118,18 +208,9 @@ export interface PublicConfig {
     url_configured: boolean
     token_set?: boolean
   }
-  masterdata: {
-    url_configured: boolean
-    fallback_url_configured: boolean
-    local_path: string
-    refresh_interval: number
-  }
-  sekai_api: {
-    enabled: boolean
-    base_url_configured: boolean
-    region: string
-    headers_configured: boolean
-  }
+  masterdata: PublicMasterdataConfig
+  sekai_api: PublicSekaiAPIConfig
+  ranking_api?: PublicRankingAPIConfig
   renderer: {
     base_url: string
     host: string
@@ -141,11 +222,70 @@ export interface PublicConfig {
       ttl_hours: number
     }
   }
-  assets: {
-    cdn_source: string
-    music_alias_configured: boolean
-    sticker_path: string
+  assets: PublicAssetsConfig
+}
+
+export interface UpdateMasterdataPayload {
+  region: string
+  source: string
+  custom_url: string
+  custom_fallback_url: string
+  local_path: string
+  refresh_interval: number
+}
+
+export interface UpdateAssetsPayload {
+  region: string
+  source: string
+  mirror: string
+  custom_base_url: string
+  music_alias_url: string
+  sticker_path: string
+}
+
+export interface UpdateSekaiAPIPayload {
+  enabled: boolean
+  region: string
+  timeout: number
+  rate_limit: number
+}
+
+export interface UpdateRankingAPIPayload {
+  region: string
+  timeout: number
+}
+
+export interface UpdateServerProfilePayload {
+  enabled: boolean
+  masterdata: UpdateMasterdataPayload
+  assets: UpdateAssetsPayload
+  sekai_api: UpdateSekaiAPIPayload
+  ranking_api: UpdateRankingAPIPayload
+}
+
+export interface UpdatePublicConfigPayload {
+  server: {
+    region: string
   }
+  servers?: Record<string, UpdateServerProfilePayload>
+  masterdata?: UpdateMasterdataPayload
+  assets?: UpdateAssetsPayload
+  reload_masterdata?: boolean
+  sync_client_regions?: boolean
+}
+
+export interface ConfigUpdateResponse {
+  ok: boolean
+  message: string
+  config: PublicConfig
+}
+
+export interface MasterdataReloadResponse {
+  ok: boolean
+  message: string
+  duration_ms: number
+  loaded_at: string | null
+  counts: MasterdataCounts
 }
 
 export type SearchType = 'cards' | 'musics' | 'events' | 'gachas'
@@ -221,6 +361,7 @@ export interface UserRow {
   platform_id: string
   game_id: string
   nickname: string
+  server_region?: string
 }
 
 export interface CommandStatRow {

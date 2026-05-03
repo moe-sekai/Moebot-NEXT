@@ -19,39 +19,48 @@ func RegisterGacha(deps *Deps) {
 }
 
 func registerGachaCommand(deps *Deps, command string) {
-	zero.OnCommand(command).SetBlock(true).Handle(func(ctx *zero.Ctx) {
-		start := time.Now()
-		keyword := strings.TrimSpace(fmt.Sprintf("%v", ctx.State["args"]))
-
-		if keyword == "" {
-			ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的扭蛋关键词~\n例: /%s 限定", command)))
-			return
-		}
-
-		results := deps.Store.SearchGachas(keyword)
-		if len(results) == 0 {
-			ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的扭蛋", keyword)))
-			return
-		}
-
-		gacha := results[0]
-		payload := renderer.BuildGachaInfoPayload(deps.Store, gacha)
-
-		if deps.Renderer != nil && deps.Renderer.Health() {
-			png, err := deps.Renderer.Render(renderer.RenderRequest{
-				Template: "gacha_info",
-				Data:     payload,
-			})
-			if err == nil {
-				ctx.SendChain(message.ImageBytes(png))
-				bot.RecordCommand(deps.DB, command, ctx, start)
+	for _, cmd := range regionalCommands(command) {
+		commandName := cmd.Name
+		forcedRegion := cmd.Region
+		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+			start := time.Now()
+			keyword := commandArgs(ctx)
+			runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)
+			if runtime == nil || runtime.Store == nil || !runtime.Enabled {
+				ctx.SendChain(message.Text(runtimeUnavailableText(runtime)))
 				return
 			}
-		}
 
-		ctx.SendChain(message.Text(formatGachaText(payload)))
-		bot.RecordCommand(deps.DB, command, ctx, start)
-	})
+			if keyword == "" {
+				ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的扭蛋关键词~\n例: /%s 限定", commandName)))
+				return
+			}
+
+			results := runtime.Store.SearchGachas(keyword)
+			if len(results) == 0 {
+				ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的扭蛋", keyword)))
+				return
+			}
+
+			gacha := results[0]
+			payload := renderer.BuildGachaInfoPayloadWithAssets(runtime.Store, gacha, runtime.Assets)
+
+			if deps.Renderer != nil && deps.Renderer.Health() {
+				png, err := deps.Renderer.Render(renderer.RenderRequest{
+					Template: "gacha_info",
+					Data:     payload,
+				})
+				if err == nil {
+					ctx.SendChain(message.ImageBytes(png))
+					bot.RecordCommandRegion(deps.DB, command, runtime.Region, ctx, start)
+					return
+				}
+			}
+
+			ctx.SendChain(message.Text(formatGachaText(payload)))
+			bot.RecordCommandRegion(deps.DB, command, runtime.Region, ctx, start)
+		})
+	}
 }
 
 func formatGachaText(gacha renderer.GachaInfoPayload) string {

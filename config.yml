@@ -1,57 +1,218 @@
+server:
+    region: jp
 bot:
-  nickname: ["moebot", "萌萌"]
-  command_prefix: "/"
-  super_users: []
-  driver:
-    type: "ws-reverse"
-    listen: "0.0.0.0:6701"
-    url: "ws://127.0.0.1:6701"
-    token: ""
-
+    nickname:
+        - moebot
+        - 萌萌
+    command_prefix: /
+    super_users: []
+    driver:
+        type: ws-reverse
+        listen: 0.0.0.0:6701
+        url: ws://127.0.0.1:6701
+        token: ""
 web:
-  host: "0.0.0.0"
-  port: 8080
-  auth:
-    username: "admin"
-    password: ""
-    jwt_secret: ""
-
+    host: 0.0.0.0
+    port: 8080
+    auth:
+        username: admin
+        password: ""
+        jwt_secret: ""
 database:
-  path: "./data/moebot.db"
-
+    path: ./data/moebot.db
 masterdata:
-  url: "https://sk.exmeaning.com/master"
-  fallback_url: "https://sekaimaster.exmeaning.com/master"
-  local_path: "./data/master"
-  refresh_interval: 3600
-
+    region: jp
+    source: moesekai
+    url: https://sk.exmeaning.com/master
+    fallback_url: https://sekaimaster.exmeaning.com/master
+    custom_url: ""
+    custom_fallback_url: ""
+    local_path: ./data/master
+    refresh_interval: 3600
 sekai_api:
-  enabled: false
-  base_url: "https://seka-api.exmeaning.com"
-  region: "cn"
-  headers: {}
-  timeout: 10
-  rate_limit: 30
-
+    enabled: false
+    base_url: https://seka-api.exmeaning.com
+    region: cn
+    headers: {}
+    timeout: 10
+    rate_limit: 30
 ranking_api:
-  base_url: "https://rks.exmeaning.com"
-  region: "cn"
-  timeout: 10
-
+    base_url: https://rks.exmeaning.com
+    region: cn
+    timeout: 10
 renderer:
-  host: "127.0.0.1"
-  port: 3001
-  cache:
-    enabled: true
-    path: "./data/cache"
-    max_size_mb: 1024
-    ttl_hours: 24
-
+    host: 127.0.0.1
+    port: 3001
+    cache:
+        enabled: true
+        path: ./data/cache
+        max_size_mb: 1024
+        ttl_hours: 24
 assets:
-  cdn_source: "cn_main"
-  music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
-  sticker_path: "./assets/stickers"
-
+    source: moesekai
+    region: jp
+    mirror: main
+    cdn_source: cn_main
+    base_url: https://storage.exmeaning.com/sekai-jp-assets
+    custom_base_url: ""
+    music_alias_url: https://moe.exmeaning.com/data/music_alias/music_aliases.json
+    sticker_path: ./assets/stickers
+game_servers:
+    cn:
+        enabled: true
+        masterdata:
+            region: cn
+            source: moesekai
+            url: https://sk-cn.exmeaning.com/master
+            fallback_url: https://sekaimaster-cn.exmeaning.com/master
+            custom_url: ""
+            custom_fallback_url: ""
+            local_path: ./data/master/cn
+            refresh_interval: 3600
+        sekai_api:
+            enabled: false
+            base_url: https://seka-api.exmeaning.com
+            region: cn
+            headers: {}
+            timeout: 10
+            rate_limit: 30
+        ranking_api:
+            base_url: https://rks.exmeaning.com
+            region: cn
+            timeout: 10
+        assets:
+            source: moesekai
+            region: cn
+            mirror: main
+            cdn_source: cn_main
+            base_url: https://storage.exmeaning.com/sekai-cn-assets
+            custom_base_url: https://storage.exmeaning.com/sekai-cn-assets
+            music_alias_url: https://moe.exmeaning.com/data/music_alias/music_aliases.json
+            sticker_path: ./assets/stickers
+    en:
+        enabled: false
+        masterdata:
+            region: en
+            source: haruki
+            url: https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-en-master/main/master
+            fallback_url: ""
+            custom_url: ""
+            custom_fallback_url: ""
+            local_path: ./data/master/en
+            refresh_interval: 3600
+        sekai_api:
+            enabled: false
+            base_url: https://seka-api.exmeaning.com
+            region: en
+            headers: {}
+            timeout: 10
+            rate_limit: 30
+        ranking_api:
+            base_url: https://rks.exmeaning.com
+            region: en
+            timeout: 10
+        assets:
+            source: sekai_best
+            region: en
+            mirror: ""
+            cdn_source: sekai-best-en
+            base_url: https://storage.sekai.best/sekai-en-assets
+            custom_base_url: https://storage.sekai.best/sekai-en-assets
+            music_alias_url: https://moe.exmeaning.com/data/music_alias/music_aliases.json
+            sticker_path: ./assets/stickers
+    jp:
+        enabled: true
+        masterdata:
+            region: jp
+            source: moesekai
+            url: https://sk.exmeaning.com/master
+            fallback_url: https://sekaimaster.exmeaning.com/master
+            custom_url: ""
+            custom_fallback_url: ""
+            local_path: ./data/master
+            refresh_interval: 3600
+        sekai_api:
+            enabled: false
+            base_url: https://seka-api.exmeaning.com
+            region: cn
+            headers: {}
+            timeout: 10
+            rate_limit: 30
+        ranking_api:
+            base_url: https://rks.exmeaning.com
+            region: cn
+            timeout: 10
+        assets:
+            source: moesekai
+            region: jp
+            mirror: main
+            cdn_source: cn_main
+            base_url: https://storage.exmeaning.com/sekai-jp-assets
+            custom_base_url: https://storage.exmeaning.com/sekai-jp-assets
+            music_alias_url: https://moe.exmeaning.com/data/music_alias/music_aliases.json
+            sticker_path: ./assets/stickers
+    kr:
+        enabled: false
+        masterdata:
+            region: kr
+            source: haruki
+            url: https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-kr-master/main/master
+            fallback_url: ""
+            custom_url: ""
+            custom_fallback_url: ""
+            local_path: ./data/master/kr
+            refresh_interval: 3600
+        sekai_api:
+            enabled: false
+            base_url: https://seka-api.exmeaning.com
+            region: kr
+            headers: {}
+            timeout: 10
+            rate_limit: 30
+        ranking_api:
+            base_url: https://rks.exmeaning.com
+            region: kr
+            timeout: 10
+        assets:
+            source: sekai_best
+            region: kr
+            mirror: ""
+            cdn_source: sekai-best-kr
+            base_url: https://storage.sekai.best/sekai-kr-assets
+            custom_base_url: https://storage.sekai.best/sekai-kr-assets
+            music_alias_url: https://moe.exmeaning.com/data/music_alias/music_aliases.json
+            sticker_path: ./assets/stickers
+    tw:
+        enabled: true
+        masterdata:
+            region: tw
+            source: haruki
+            url: https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-tc-master/main/master
+            fallback_url: ""
+            custom_url: ""
+            custom_fallback_url: ""
+            local_path: ./data/master/tw
+            refresh_interval: 3600
+        sekai_api:
+            enabled: false
+            base_url: https://seka-api.exmeaning.com
+            region: tw
+            headers: {}
+            timeout: 10
+            rate_limit: 30
+        ranking_api:
+            base_url: https://rks.exmeaning.com
+            region: tw
+            timeout: 10
+        assets:
+            source: sekai_best
+            region: tw
+            mirror: ""
+            cdn_source: sekai-best-tw
+            base_url: https://storage.sekai.best/sekai-tc-assets
+            custom_base_url: https://storage.sekai.best/sekai-tc-assets
+            music_alias_url: https://moe.exmeaning.com/data/music_alias/music_aliases.json
+            sticker_path: ./assets/stickers
 log:
-  level: "debug"
-  format: "console"
+    level: debug
+    format: console

@@ -8,14 +8,13 @@ import (
 	"syscall"
 	"time"
 
+	"moebot-next/internal/assets"
 	"moebot-next/internal/bot"
 	"moebot-next/internal/commands"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
-	"moebot-next/internal/masterdata"
-	"moebot-next/internal/ranking"
 	"moebot-next/internal/renderer"
-	"moebot-next/internal/sekai"
+	"moebot-next/internal/servers"
 	"moebot-next/internal/web"
 
 	"github.com/rs/zerolog"
@@ -40,6 +39,9 @@ func main() {
 	if err := ensureRuntimeDirs(cfg); err != nil {
 		log.Fatal().Err(err).Msg("Failed to create runtime directories")
 	}
+	if _, err := assets.Configure(cfg.Assets, cfg.Server.Region); err != nil {
+		log.Warn().Err(err).Msg("Asset CDN config is invalid; using built-in default")
+	}
 
 	db, err := database.New(cfg.Database)
 	if err != nil {
@@ -47,15 +49,10 @@ func main() {
 	}
 	defer db.Close()
 
-	store := masterdata.NewStore()
-	loader := masterdata.NewLoader(cfg.Masterdata, store)
-	if err := loader.LoadAll(); err != nil {
-		log.Warn().Err(err).Msg("Initial masterdata load failed; bot will still start with empty data")
-	}
-	if cfg.Masterdata.RefreshInterval > 0 {
-		loader.StartPeriodicRefresh(time.Duration(cfg.Masterdata.RefreshInterval) * time.Second)
-		defer loader.StopPeriodicRefresh()
-	}
+	serverManager := servers.NewManager(cfg)
+	serverManager.LoadEnabled()
+	serverManager.StartPeriodicRefresh()
+	defer serverManager.StopPeriodicRefresh()
 
 	rendererClient := renderer.New(cfg.Renderer)
 	if err := rendererClient.StartProcess("renderer", cfg.Renderer.Port); err != nil {
@@ -64,23 +61,15 @@ func main() {
 		defer rendererClient.StopProcess()
 	}
 
-	sekaiClient := sekai.NewClient(cfg.SekaiAPI)
-	rankingClient := ranking.NewClient(ranking.Config{
-		BaseURL: cfg.RankingAPI.BaseURL,
-		Region:  cfg.RankingAPI.Region,
-		Timeout: cfg.RankingAPI.Timeout,
-	})
-
 	bot.RegisterMiddleware(db)
 	commands.RegisterAll(&commands.Deps{
-		Store:    store,
 		DB:       db,
 		Renderer: rendererClient,
-		Sekai:    sekaiClient,
-		Ranking:  rankingClient,
+		Servers:  serverManager,
 	})
 
-	webServer := web.New(cfg, db, store, rendererClient)
+	webServer := web.New(cfg, db, serverManager.Default().Store, rendererClient, cfgPath, serverManager.Default().Loader)
+	webServer.Servers = serverManager
 	webServer.SetupStaticFiles(webUI)
 	go func() {
 		if err := webServer.Start(); err != nil {
@@ -114,6 +103,10 @@ func ensureRuntimeDirs(cfg *config.Config) error {
 		cfg.Masterdata.LocalPath,
 		cfg.Renderer.Cache.Path,
 		cfg.Assets.StickerPath,
+	}
+	for _, region := range config.RegionKeys() {
+		profile := config.ResolveGameServerProfile(cfg, region)
+		dirs = append(dirs, profile.Masterdata.LocalPath, profile.Assets.StickerPath)
 	}
 	for _, dir := range dirs {
 		if dir == "" || dir == "." {

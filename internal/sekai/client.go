@@ -35,7 +35,7 @@ func NewClient(cfg config.SekaiAPIConfig) *Client {
 	return &Client{
 		enabled:    cfg.Enabled,
 		baseURL:    strings.TrimRight(cfg.BaseURL, "/"),
-		region:     strings.Trim(strings.ToLower(cfg.Region), "/"),
+		region:     config.NormalizeRegion(strings.Trim(strings.ToLower(cfg.Region), "/")),
 		headers:    headers,
 		timeout:    timeout,
 		httpClient: &http.Client{Timeout: timeout},

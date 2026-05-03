@@ -9,15 +9,31 @@ import (
 
 // Config is the root configuration for Moebot NEXT.
 type Config struct {
-	Bot        BotConfig        `yaml:"bot"`
-	Web        WebConfig        `yaml:"web"`
-	Database   DatabaseConfig   `yaml:"database"`
+	Server      ServerConfig                `yaml:"server"`
+	Bot         BotConfig                   `yaml:"bot"`
+	Web         WebConfig                   `yaml:"web"`
+	Database    DatabaseConfig              `yaml:"database"`
+	Masterdata  MasterdataConfig            `yaml:"masterdata"`
+	SekaiAPI    SekaiAPIConfig              `yaml:"sekai_api"`
+	RankingAPI  RankingAPIConfig            `yaml:"ranking_api"`
+	Renderer    RendererConfig              `yaml:"renderer"`
+	Assets      AssetsConfig                `yaml:"assets"`
+	GameServers map[string]GameServerConfig `yaml:"game_servers"`
+	Log         LogConfig                   `yaml:"log"`
+}
+
+// ServerConfig selects the default PJSK game server region.
+type ServerConfig struct {
+	Region string `yaml:"region"` // cn / jp / tw / kr / en
+}
+
+// GameServerConfig holds per-region data/API/resource settings.
+type GameServerConfig struct {
+	Enabled    *bool            `yaml:"enabled"`
 	Masterdata MasterdataConfig `yaml:"masterdata"`
 	SekaiAPI   SekaiAPIConfig   `yaml:"sekai_api"`
 	RankingAPI RankingAPIConfig `yaml:"ranking_api"`
-	Renderer   RendererConfig   `yaml:"renderer"`
 	Assets     AssetsConfig     `yaml:"assets"`
-	Log        LogConfig        `yaml:"log"`
 }
 
 // BotConfig holds ZeroBot-related settings.
@@ -57,10 +73,14 @@ type DatabaseConfig struct {
 
 // MasterdataConfig holds masterdata loading settings.
 type MasterdataConfig struct {
-	URL             string `yaml:"url"`
-	FallbackURL     string `yaml:"fallback_url"`
-	LocalPath       string `yaml:"local_path"`
-	RefreshInterval int    `yaml:"refresh_interval"` // seconds
+	Region            string `yaml:"region"`
+	Source            string `yaml:"source"` // moesekai / haruki / 8823 / custom
+	URL               string `yaml:"url"`
+	FallbackURL       string `yaml:"fallback_url"`
+	CustomURL         string `yaml:"custom_url"`
+	CustomFallbackURL string `yaml:"custom_fallback_url"`
+	LocalPath         string `yaml:"local_path"`
+	RefreshInterval   int    `yaml:"refresh_interval"` // seconds
 }
 
 // SekaiAPIConfig holds optional SEKAI API client settings.
@@ -96,7 +116,12 @@ type CacheConfig struct {
 
 // AssetsConfig holds asset/resource settings.
 type AssetsConfig struct {
-	CDNSource     string `yaml:"cdn_source"` // "cn" or "overseas"
+	Source        string `yaml:"source"`     // moesekai / sekai_best / custom
+	Region        string `yaml:"region"`     // cn / jp / tw / kr / en
+	Mirror        string `yaml:"mirror"`     // main / backup / overseas / overseas_backup
+	CDNSource     string `yaml:"cdn_source"` // legacy mirror key or custom URL
+	BaseURL       string `yaml:"base_url"`
+	CustomBaseURL string `yaml:"custom_base_url"`
 	MusicAliasURL string `yaml:"music_alias_url"`
 	StickerPath   string `yaml:"sticker_path"`
 }
@@ -110,6 +135,9 @@ type LogConfig struct {
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() *Config {
 	return &Config{
+		Server: ServerConfig{
+			Region: RegionJP,
+		},
 		Bot: BotConfig{
 			Nickname:      []string{"moebot"},
 			CommandPrefix: "/",
@@ -158,7 +186,8 @@ func DefaultConfig() *Config {
 			},
 		},
 		Assets: AssetsConfig{
-			CDNSource:     "cn",
+			Mirror:        AssetMirrorMain,
+			CDNSource:     "cn_main",
 			MusicAliasURL: "https://moe.exmeaning.com/data/music_alias/music_aliases.json",
 			StickerPath:   "./assets/stickers",
 		},
@@ -185,6 +214,7 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
+	NormalizeConfig(cfg)
 
 	return cfg, nil
 }

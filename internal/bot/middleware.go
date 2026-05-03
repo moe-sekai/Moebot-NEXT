@@ -27,6 +27,11 @@ func RegisterMiddleware(db *database.DB) {
 
 // RecordCommand records a command invocation to the database.
 func RecordCommand(db *database.DB, command string, ctx *zero.Ctx, startTime time.Time) {
+	RecordCommandRegion(db, command, "", ctx, startTime)
+}
+
+// RecordCommandRegion records a command invocation with the game server region used.
+func RecordCommandRegion(db *database.DB, command string, region string, ctx *zero.Ctx, startTime time.Time) {
 	elapsed := time.Since(startTime).Milliseconds()
 
 	stat := &models.CommandStat{
@@ -34,6 +39,7 @@ func RecordCommand(db *database.DB, command string, ctx *zero.Ctx, startTime tim
 		Platform:   "onebot",
 		UserID:     fmt.Sprintf("%d", ctx.Event.UserID),
 		GroupID:    fmt.Sprintf("%d", ctx.Event.GroupID),
+		Region:     region,
 		Args:       fmt.Sprintf("%v", ctx.State["args"]),
 		ResponseMs: elapsed,
 	}

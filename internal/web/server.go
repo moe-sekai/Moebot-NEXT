@@ -10,6 +10,7 @@ import (
 	"moebot-next/internal/database"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/renderer"
+	"moebot-next/internal/servers"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -20,16 +21,19 @@ import (
 
 // Server holds the Fiber app and dependencies.
 type Server struct {
-	App       *fiber.App
-	Config    *config.Config
-	DB        *database.DB
-	Store     *masterdata.Store
-	Renderer  *renderer.Client
-	startedAt time.Time
+	App        *fiber.App
+	Config     *config.Config
+	ConfigPath string
+	DB         *database.DB
+	Store      *masterdata.Store
+	Loader     *masterdata.Loader
+	Servers    *servers.Manager
+	Renderer   *renderer.Client
+	startedAt  time.Time
 }
 
 // New creates a new web server.
-func New(cfg *config.Config, db *database.DB, store *masterdata.Store, rendererClient *renderer.Client) *Server {
+func New(cfg *config.Config, db *database.DB, store *masterdata.Store, rendererClient *renderer.Client, configPath string, loader *masterdata.Loader) *Server {
 	app := fiber.New(fiber.Config{
 		AppName:               "Moebot NEXT",
 		DisableStartupMessage: true,
@@ -54,12 +58,14 @@ func New(cfg *config.Config, db *database.DB, store *masterdata.Store, rendererC
 	}))
 
 	server := &Server{
-		App:       app,
-		Config:    cfg,
-		DB:        db,
-		Store:     store,
-		Renderer:  rendererClient,
-		startedAt: time.Now(),
+		App:        app,
+		Config:     cfg,
+		ConfigPath: configPath,
+		DB:         db,
+		Store:      store,
+		Loader:     loader,
+		Renderer:   rendererClient,
+		startedAt:  time.Now(),
 	}
 
 	// Register API routes
@@ -81,6 +87,8 @@ func (s *Server) registerRoutes() {
 	api.Get("/renderer/previews/:id/image", s.handleRendererPreviewImage)
 	api.Get("/commands/recent", s.handleRecentCommands)
 	api.Get("/config/public", s.handlePublicConfig)
+	api.Put("/config/public", s.handleUpdatePublicConfig)
+	api.Post("/masterdata/reload", s.handleReloadMasterdata)
 
 	// Dashboard
 	api.Get("/dashboard", s.handleDashboard)

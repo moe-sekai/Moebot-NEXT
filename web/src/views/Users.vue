@@ -21,6 +21,7 @@
             <tr>
               <th>平台</th>
               <th>用户 ID</th>
+              <th>服务器</th>
               <th>游戏 ID</th>
               <th>昵称</th>
             </tr>
@@ -29,6 +30,7 @@
             <tr v-for="row in rows" :key="row.id">
               <td>{{ row.platform }}</td>
               <td class="font-medium">{{ row.platform_id }}</td>
+              <td>{{ (row.server_region || 'jp').toUpperCase() }}</td>
               <td>{{ row.game_id || '-' }}</td>
               <td>{{ row.nickname || '-' }}</td>
             </tr>

@@ -11,6 +11,11 @@ export type AssetSourceType =
   | 'backup-cn'
   | 'overseas-cn'
   | 'overseas-backup-cn'
+  | 'sekai-best-jp'
+  | 'sekai-best-cn'
+  | 'sekai-best-tw'
+  | 'sekai-best-kr'
+  | 'sekai-best-en'
 
 export const MOE_STATIC_BASE_URL = 'https://moe.exmeaning.com'
 export const MOE_ASSETS_BASE_URL = `${MOE_STATIC_BASE_URL}/assets`
@@ -30,6 +35,11 @@ export const ASSET_BASE_URL_MAP: Record<AssetSourceType, string> = {
   'backup-cn': `${ASSET_DOMAIN_BACKUP}/sekai-cn-assets`,
   'overseas-cn': `${ASSET_DOMAIN_OVERSEAS}/sekai-cn-assets`,
   'overseas-backup-cn': `${ASSET_DOMAIN_OVERSEAS_BACKUP}/sekai-cn-assets`,
+  'sekai-best-jp': 'https://storage.sekai.best/sekai-jp-assets',
+  'sekai-best-cn': 'https://storage.sekai.best/sekai-cn-assets',
+  'sekai-best-tw': 'https://storage.sekai.best/sekai-tc-assets',
+  'sekai-best-kr': 'https://storage.sekai.best/sekai-kr-assets',
+  'sekai-best-en': 'https://storage.sekai.best/sekai-en-assets',
 }
 
 export function getAssetCdnBase(source: AssetSourceType | string = 'main-jp'): string {
@@ -37,6 +47,9 @@ export function getAssetCdnBase(source: AssetSourceType | string = 'main-jp'): s
 }
 
 export function getAssetBaseUrl(source: AssetSourceType | string = 'main-jp'): string {
+  if (source.startsWith('http://') || source.startsWith('https://')) {
+    return source.replace(/\/$/, '')
+  }
   return ASSET_BASE_URL_MAP[source as AssetSourceType] ?? ASSET_BASE_URL_MAP['main-jp']
 }
 

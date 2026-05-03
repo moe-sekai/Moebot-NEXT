@@ -9,6 +9,7 @@ type CommandStat struct {
 	Platform   string    `gorm:"not null" json:"platform"`
 	UserID     string    `json:"user_id"`
 	GroupID    string    `json:"group_id"`
+	Region     string    `gorm:"index" json:"region"`
 	Args       string    `json:"args"`
 	ResponseMs int64     `json:"response_ms"` // response time in milliseconds
 	CreatedAt  time.Time `gorm:"index" json:"created_at"`

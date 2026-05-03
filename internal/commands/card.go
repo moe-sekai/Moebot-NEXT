@@ -14,45 +14,54 @@ import (
 
 // RegisterCard registers the /查卡 command.
 func RegisterCard(deps *Deps) {
-	zero.OnCommand("查卡").SetBlock(true).Handle(func(ctx *zero.Ctx) {
-		start := time.Now()
-		keyword := strings.TrimSpace(fmt.Sprintf("%v", ctx.State["args"]))
-
-		if keyword == "" {
-			ctx.SendChain(message.Text("请输入要搜索的卡牌关键词~\n例: /查卡 初音未来"))
-			return
-		}
-
-		// Search cards from masterdata
-		results := deps.Store.SearchCards(keyword)
-		if len(results) == 0 {
-			ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的卡牌", keyword)))
-			return
-		}
-
-		// Take the best match and adapt it to renderer props.
-		card := results[0]
-		payload := renderer.BuildCardDetailPayload(deps.Store, card)
-
-		// Try to render an image via the renderer service.
-		if deps.Renderer != nil && deps.Renderer.Health() {
-			png, err := deps.Renderer.Render(renderer.RenderRequest{
-				Template: "card_detail",
-				Data:     payload,
-			})
-			if err == nil {
-				ctx.SendChain(message.ImageBytes(png))
-				bot.RecordCommand(deps.DB, "查卡", ctx, start)
+	for _, cmd := range regionalCommands("查卡") {
+		commandName := cmd.Name
+		forcedRegion := cmd.Region
+		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+			start := time.Now()
+			keyword := commandArgs(ctx)
+			runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)
+			if runtime == nil || runtime.Store == nil || !runtime.Enabled {
+				ctx.SendChain(message.Text(runtimeUnavailableText(runtime)))
 				return
 			}
-			// Fallback to text if rendering fails
-		}
 
-		// Text fallback.
-		text := formatCardText(payload)
-		ctx.SendChain(message.Text(text))
-		bot.RecordCommand(deps.DB, "查卡", ctx, start)
-	})
+			if keyword == "" {
+				ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的卡牌关键词~\n例: /%s 初音未来", commandName)))
+				return
+			}
+
+			// Search cards from regional masterdata
+			results := runtime.Store.SearchCards(keyword)
+			if len(results) == 0 {
+				ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的卡牌", keyword)))
+				return
+			}
+
+			// Take the best match and adapt it to renderer props.
+			card := results[0]
+			payload := renderer.BuildCardDetailPayloadWithAssets(runtime.Store, card, runtime.Assets)
+
+			// Try to render an image via the renderer service.
+			if deps.Renderer != nil && deps.Renderer.Health() {
+				png, err := deps.Renderer.Render(renderer.RenderRequest{
+					Template: "card_detail",
+					Data:     payload,
+				})
+				if err == nil {
+					ctx.SendChain(message.ImageBytes(png))
+					bot.RecordCommandRegion(deps.DB, "查卡", runtime.Region, ctx, start)
+					return
+				}
+				// Fallback to text if rendering fails
+			}
+
+			// Text fallback.
+			text := formatCardText(payload)
+			ctx.SendChain(message.Text(text))
+			bot.RecordCommandRegion(deps.DB, "查卡", runtime.Region, ctx, start)
+		})
+	}
 }
 
 // formatCardText formats a card's info as plain text.

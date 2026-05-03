@@ -52,6 +52,14 @@ func New(cfg config.DatabaseConfig) (*DB, error) {
 	); err != nil {
 		return nil, fmt.Errorf("failed to auto-migrate: %w", err)
 	}
+	if db.Migrator().HasIndex(&models.User{}, "idx_platform_user") {
+		if err := db.Migrator().DropIndex(&models.User{}, "idx_platform_user"); err != nil {
+			log.Warn().Err(err).Msg("Failed to drop legacy single-server user index")
+		}
+	}
+	if err := db.Model(&models.User{}).Where("server_region = '' OR server_region IS NULL").Update("server_region", config.RegionJP).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to backfill user server region")
+	}
 
 	log.Info().Str("path", cfg.Path).Msg("Database initialized")
 	return &DB{db}, nil

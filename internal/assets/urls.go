@@ -13,24 +13,53 @@ import (
 type CDNSource string
 
 const (
-	CDNCNMain   CDNSource = "cn_main"
-	CDNCNBackup CDNSource = "cn_backup"
-	CDNOverseas CDNSource = "overseas"
+	CDNCNMain          CDNSource = "cn_main"
+	CDNCNBackup        CDNSource = "cn_backup"
+	CDNOverseas        CDNSource = "overseas"
+	CDNOverseasBackup  CDNSource = "overseas_backup"
+	legacyCDNCN        CDNSource = "cn"
+	legacyCDNMainJP    CDNSource = "main-jp"
+	legacyCDNBackupJP  CDNSource = "backup-jp"
+	legacyCDNMainCN    CDNSource = "main-cn"
+	legacyCDNBackupCN  CDNSource = "backup-cn"
+	legacyCDNOverseasJ CDNSource = "overseas-jp"
 )
 
 // cdnBaseURLs maps each CDN source to its base URL (no trailing slash).
 var cdnBaseURLs = map[CDNSource]string{
-	CDNCNMain:   "https://storage.exmeaning.com/sekai-jp-assets",
-	CDNCNBackup: "https://storage2.exmeaning.com/sekai-jp-assets",
-	CDNOverseas: "https://storage.pjsk.moe/sekai-jp-assets",
+	CDNCNMain:          "https://storage.exmeaning.com/sekai-jp-assets",
+	legacyCDNCN:        "https://storage.exmeaning.com/sekai-jp-assets",
+	CDNCNBackup:        "https://storage2.exmeaning.com/sekai-jp-assets",
+	CDNOverseas:        "https://storage.pjsk.moe/sekai-jp-assets",
+	CDNOverseasBackup:  "https://storage2.pjsk.moe/sekai-jp-assets",
+	legacyCDNMainJP:    "https://storage.exmeaning.com/sekai-jp-assets",
+	legacyCDNBackupJP:  "https://storage2.exmeaning.com/sekai-jp-assets",
+	legacyCDNOverseasJ: "https://storage.pjsk.moe/sekai-jp-assets",
+	legacyCDNMainCN:    "https://storage.exmeaning.com/sekai-cn-assets",
+	legacyCDNBackupCN:  "https://storage2.exmeaning.com/sekai-cn-assets",
+}
+
+var legacyRendererSources = map[CDNSource]string{
+	CDNCNMain:          "main-jp",
+	legacyCDNCN:        "main-jp",
+	CDNCNBackup:        "backup-jp",
+	CDNOverseas:        "overseas-jp",
+	CDNOverseasBackup:  "overseas-backup-jp",
+	legacyCDNMainJP:    "main-jp",
+	legacyCDNBackupJP:  "backup-jp",
+	legacyCDNOverseasJ: "overseas-jp",
+	legacyCDNMainCN:    "main-cn",
+	legacyCDNBackupCN:  "backup-cn",
 }
 
 // StaticBase is the base URL for static / locally-hosted assets.
 const StaticBase = "https://moe.exmeaning.com/assets"
 
 var (
-	cdnMu     sync.RWMutex
-	cdnSource CDNSource = CDNCNMain
+	cdnMu               sync.RWMutex
+	cdnSource           CDNSource = CDNCNMain
+	cdnBaseURL          string    = cdnBaseURLs[CDNCNMain]
+	rendererAssetSource string    = legacyRendererSources[CDNCNMain]
 )
 
 // GetCDNSource returns the currently active CDN source.
@@ -40,12 +69,26 @@ func GetCDNSource() CDNSource {
 	return cdnSource
 }
 
+// GetCDNBaseURL returns the currently active asset base URL.
+func GetCDNBaseURL() string {
+	return cdnBase()
+}
+
+// GetRendererAssetSource returns the renderer-side source key or custom base URL.
+func GetRendererAssetSource() string {
+	cdnMu.RLock()
+	defer cdnMu.RUnlock()
+	return rendererAssetSource
+}
+
 // SetCDNSource switches the active CDN source.
 func SetCDNSource(src CDNSource) {
 	cdnMu.Lock()
 	defer cdnMu.Unlock()
-	if _, ok := cdnBaseURLs[src]; ok {
+	if baseURL, ok := cdnBaseURLs[src]; ok {
 		cdnSource = src
+		cdnBaseURL = baseURL
+		rendererAssetSource = legacyRendererSources[src]
 	}
 }
 
@@ -53,6 +96,9 @@ func SetCDNSource(src CDNSource) {
 func cdnBase() string {
 	cdnMu.RLock()
 	defer cdnMu.RUnlock()
+	if cdnBaseURL != "" {
+		return cdnBaseURL
+	}
 	return cdnBaseURLs[cdnSource]
 }
 

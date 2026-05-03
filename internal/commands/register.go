@@ -2,21 +2,17 @@ package commands
 
 import (
 	"moebot-next/internal/database"
-	"moebot-next/internal/masterdata"
-	"moebot-next/internal/ranking"
 	"moebot-next/internal/renderer"
-	"moebot-next/internal/sekai"
+	"moebot-next/internal/servers"
 
 	"github.com/rs/zerolog/log"
 )
 
 // Deps holds shared dependencies for all commands.
 type Deps struct {
-	Store    *masterdata.Store
 	DB       *database.DB
 	Renderer *renderer.Client
-	Sekai    *sekai.Client
-	Ranking  *ranking.Client
+	Servers  *servers.Manager
 }
 
 // RegisterAll registers all bot commands.

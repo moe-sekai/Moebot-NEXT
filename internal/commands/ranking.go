@@ -15,53 +15,61 @@ import (
 )
 
 func RegisterRanking(deps *Deps) {
-	zero.OnCommand("榜线").SetBlock(true).Handle(func(ctx *zero.Ctx) {
-		start := time.Now()
-		if deps.Ranking == nil {
-			ctx.SendChain(message.Text("榜线服务未配置"))
-			return
-		}
-		board, err := deps.Ranking.GetLatest()
-		if err != nil {
-			ctx.SendChain(message.Text("榜线获取失败，请稍后重试"))
-			return
-		}
-		rank := parseRankArg(ctx.State["args"])
-		filtered := filterRankings(board.Rankings, rank, defaultBorderRanks())
-		view := *board
-		view.Rankings = filtered
-		payload := renderer.BuildRankingListPayload("活动榜线", view)
-		if sendRankingImage(ctx, deps.Renderer, payload) {
-			bot.RecordCommand(deps.DB, "榜线", ctx, start)
-			return
-		}
-		ctx.SendChain(message.Text(formatRankingText(payload)))
-		bot.RecordCommand(deps.DB, "榜线", ctx, start)
-	})
+	for _, cmd := range regionalCommands("榜线") {
+		forcedRegion := cmd.Region
+		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+			start := time.Now()
+			runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)
+			if runtime == nil || runtime.Ranking == nil || !runtime.Enabled {
+				ctx.SendChain(message.Text("榜线服务未配置"))
+				return
+			}
+			board, err := runtime.Ranking.GetLatest()
+			if err != nil {
+				ctx.SendChain(message.Text("榜线获取失败，请稍后重试"))
+				return
+			}
+			rank := parseRankArg(ctx.State["args"])
+			filtered := filterRankings(board.Rankings, rank, defaultBorderRanks())
+			view := *board
+			view.Rankings = filtered
+			payload := renderer.BuildRankingListPayloadWithAssets("活动榜线", view, runtime.Assets)
+			if sendRankingImage(ctx, deps.Renderer, payload) {
+				bot.RecordCommandRegion(deps.DB, "榜线", runtime.Region, ctx, start)
+				return
+			}
+			ctx.SendChain(message.Text(formatRankingText(payload)))
+			bot.RecordCommandRegion(deps.DB, "榜线", runtime.Region, ctx, start)
+		})
+	}
 
-	zero.OnCommand("查房").SetBlock(true).Handle(func(ctx *zero.Ctx) {
-		start := time.Now()
-		if deps.Ranking == nil {
-			ctx.SendChain(message.Text("查房服务未配置"))
-			return
-		}
-		board, err := deps.Ranking.GetChurn()
-		if err != nil {
-			ctx.SendChain(message.Text("查房获取失败，请稍后重试"))
-			return
-		}
-		rank := parseRankArg(ctx.State["args"])
-		filtered := filterRankings(board.Rankings, rank, defaultBorderRanks())
-		view := *board
-		view.Rankings = filtered
-		payload := renderer.BuildChurnRankingListPayload(view)
-		if sendRankingImageWithTemplate(ctx, deps.Renderer, "churn_ranking_list", payload) {
-			bot.RecordCommand(deps.DB, "查房", ctx, start)
-			return
-		}
-		ctx.SendChain(message.Text(formatRankingText(payload)))
-		bot.RecordCommand(deps.DB, "查房", ctx, start)
-	})
+	for _, cmd := range regionalCommands("查房") {
+		forcedRegion := cmd.Region
+		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+			start := time.Now()
+			runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)
+			if runtime == nil || runtime.Ranking == nil || !runtime.Enabled {
+				ctx.SendChain(message.Text("查房服务未配置"))
+				return
+			}
+			board, err := runtime.Ranking.GetChurn()
+			if err != nil {
+				ctx.SendChain(message.Text("查房获取失败，请稍后重试"))
+				return
+			}
+			rank := parseRankArg(ctx.State["args"])
+			filtered := filterRankings(board.Rankings, rank, defaultBorderRanks())
+			view := *board
+			view.Rankings = filtered
+			payload := renderer.BuildChurnRankingListPayloadWithAssets(view, runtime.Assets)
+			if sendRankingImageWithTemplate(ctx, deps.Renderer, "churn_ranking_list", payload) {
+				bot.RecordCommandRegion(deps.DB, "查房", runtime.Region, ctx, start)
+				return
+			}
+			ctx.SendChain(message.Text(formatRankingText(payload)))
+			bot.RecordCommandRegion(deps.DB, "查房", runtime.Region, ctx, start)
+		})
+	}
 }
 
 func parseRankArg(raw any) int {

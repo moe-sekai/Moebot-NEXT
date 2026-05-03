@@ -4,15 +4,30 @@ import (
 	"fmt"
 	"time"
 
+	"moebot-next/internal/config"
 	"moebot-next/internal/models"
 )
 
 // --- User Queries ---
 
-// GetUserByPlatform finds a user by their platform and platform-specific ID.
+// GetUserByPlatform finds the first user binding for their platform ID.
 func (d *DB) GetUserByPlatform(platform, platformID string) (*models.User, error) {
 	var user models.User
-	err := d.Where("platform = ? AND platform_id = ?", platform, platformID).First(&user).Error
+	err := d.Where("platform = ? AND platform_id = ?", platform, platformID).Order("server_region = 'jp' DESC, updated_at DESC").First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// GetUserByPlatformRegion finds a user binding for one game server.
+func (d *DB) GetUserByPlatformRegion(platform, platformID, region string) (*models.User, error) {
+	var user models.User
+	region = config.NormalizeRegion(region)
+	if region == "" {
+		region = config.RegionJP
+	}
+	err := d.Where("platform = ? AND platform_id = ? AND server_region = ?", platform, platformID, region).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
@@ -21,6 +36,9 @@ func (d *DB) GetUserByPlatform(platform, platformID string) (*models.User, error
 
 // UpsertUser creates or updates a user binding.
 func (d *DB) UpsertUser(user *models.User) error {
+	if user.ServerRegion == "" {
+		user.ServerRegion = config.RegionJP
+	}
 	return d.Save(user).Error
 }
 

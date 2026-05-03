@@ -6,6 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"moebot-next/internal/assets"
+	"moebot-next/internal/config"
+	"moebot-next/internal/masterdata"
 	"moebot-next/internal/renderer"
 
 	"github.com/gofiber/fiber/v2"
@@ -47,11 +50,12 @@ func (s *Server) handleStatus(c *fiber.Ctx) error {
 		databaseMessage = err.Error()
 	}
 
+	store := s.defaultStore()
 	masterdataLoaded := false
 	masterdataLoadedAt := time.Time{}
-	if s.Store != nil {
-		masterdataLoaded = s.Store.IsLoaded()
-		masterdataLoadedAt = s.Store.LoadedAt()
+	if store != nil {
+		masterdataLoaded = store.IsLoaded()
+		masterdataLoadedAt = store.LoadedAt()
 	}
 
 	return c.JSON(fiber.Map{
@@ -104,10 +108,11 @@ func (s *Server) handleStatus(c *fiber.Ctx) error {
 
 // handleMasterdataSummary returns loaded masterdata counts.
 func (s *Server) handleMasterdataSummary(c *fiber.Ctx) error {
-	loaded := s.Store != nil && s.Store.IsLoaded()
+	store := s.defaultStore()
+	loaded := store != nil && store.IsLoaded()
 	loadedAt := time.Time{}
-	if s.Store != nil {
-		loadedAt = s.Store.LoadedAt()
+	if store != nil {
+		loadedAt = store.LoadedAt()
 	}
 
 	return c.JSON(fiber.Map{
@@ -209,8 +214,401 @@ func (s *Server) handleRecentCommands(c *fiber.Ctx) error {
 
 // handlePublicConfig returns only non-sensitive configuration values.
 func (s *Server) handlePublicConfig(c *fiber.Ctx) error {
+	return c.JSON(s.publicConfigMap())
+}
+
+type updatePublicConfigRequest struct {
+	Server            *serverSettingsRequest               `json:"server"`
+	Servers           map[string]gameServerSettingsRequest `json:"servers"`
+	Masterdata        *masterdataSettingsRequest           `json:"masterdata"`
+	Assets            *assetsSettingsRequest               `json:"assets"`
+	ReloadMasterdata  bool                                 `json:"reload_masterdata"`
+	SyncClientRegions bool                                 `json:"sync_client_regions"`
+}
+
+type serverSettingsRequest struct {
+	Region string `json:"region"`
+}
+
+type gameServerSettingsRequest struct {
+	Enabled    *bool                      `json:"enabled"`
+	Masterdata *masterdataSettingsRequest `json:"masterdata"`
+	Assets     *assetsSettingsRequest     `json:"assets"`
+	SekaiAPI   *sekaiAPISettingsRequest   `json:"sekai_api"`
+	RankingAPI *rankingAPISettingsRequest `json:"ranking_api"`
+}
+
+type masterdataSettingsRequest struct {
+	Region            string `json:"region"`
+	Source            string `json:"source"`
+	CustomURL         string `json:"custom_url"`
+	CustomFallbackURL string `json:"custom_fallback_url"`
+	LocalPath         string `json:"local_path"`
+	RefreshInterval   int    `json:"refresh_interval"`
+}
+
+type assetsSettingsRequest struct {
+	Region        string `json:"region"`
+	Source        string `json:"source"`
+	Mirror        string `json:"mirror"`
+	CustomBaseURL string `json:"custom_base_url"`
+	MusicAliasURL string `json:"music_alias_url"`
+	StickerPath   string `json:"sticker_path"`
+}
+
+type sekaiAPISettingsRequest struct {
+	Enabled   *bool  `json:"enabled"`
+	Region    string `json:"region"`
+	Timeout   int    `json:"timeout"`
+	RateLimit int    `json:"rate_limit"`
+}
+
+type rankingAPISettingsRequest struct {
+	Region  string `json:"region"`
+	Timeout int    `json:"timeout"`
+}
+
+// handleUpdatePublicConfig saves the editable non-sensitive settings.
+func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
+	var req updatePublicConfigRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid settings payload")
+	}
+	if s.ConfigPath == "" {
+		return fiber.NewError(fiber.StatusInternalServerError, "Config path is not configured")
+	}
+
+	next := *s.Config
+	if req.Server != nil {
+		region := config.NormalizeRegion(req.Server.Region)
+		if region == "" || !config.IsValidRegion(region) {
+			return fiber.NewError(fiber.StatusBadRequest, "Unsupported server region")
+		}
+		next.Server.Region = region
+		if req.SyncClientRegions {
+			next.SekaiAPI.Region = region
+			next.RankingAPI.Region = region
+		}
+	}
+	if next.Server.Region == "" {
+		next.Server.Region = config.RegionJP
+	}
+
+	if len(req.Servers) > 0 {
+		if next.GameServers == nil {
+			next.GameServers = config.DefaultGameServerProfiles()
+		}
+		for rawRegion, serverReq := range req.Servers {
+			region := config.NormalizeRegion(rawRegion)
+			if region == "" || !config.IsValidRegion(region) {
+				return fiber.NewError(fiber.StatusBadRequest, "Unsupported server region")
+			}
+			profile := config.ResolveGameServerProfile(&next, region)
+			if serverReq.Enabled != nil {
+				enabled := *serverReq.Enabled
+				if region == config.RegionJP || region == next.Server.Region {
+					enabled = true
+				}
+				profile.Enabled = config.EnabledPtr(enabled)
+			}
+			if serverReq.Masterdata != nil {
+				applyMasterdataSettings(&profile.Masterdata, serverReq.Masterdata)
+			}
+			masterResolved, err := config.ResolveMasterdata(profile.Masterdata, region)
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			}
+			profile.Masterdata.Region = masterResolved.Region
+			profile.Masterdata.Source = masterResolved.Source
+			profile.Masterdata.URL = masterResolved.URL
+			profile.Masterdata.FallbackURL = masterResolved.FallbackURL
+			profile.Masterdata.CustomURL = masterResolved.CustomURL
+			profile.Masterdata.CustomFallbackURL = masterResolved.CustomFallbackURL
+			profile.Masterdata.LocalPath = masterResolved.LocalPath
+			profile.Masterdata.RefreshInterval = masterResolved.RefreshInterval
+			if serverReq.Assets != nil {
+				applyAssetsSettings(&profile.Assets, serverReq.Assets)
+			}
+			assetResolved, err := config.ResolveAssets(profile.Assets, region)
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			}
+			profile.Assets.Region = assetResolved.Region
+			profile.Assets.Source = assetResolved.Source
+			profile.Assets.Mirror = assetResolved.Mirror
+			profile.Assets.CDNSource = assetResolved.CDNSource
+			profile.Assets.BaseURL = assetResolved.BaseURL
+			profile.Assets.CustomBaseURL = assetResolved.CustomBaseURL
+			if serverReq.SekaiAPI != nil {
+				applySekaiAPISettings(&profile.SekaiAPI, serverReq.SekaiAPI)
+			}
+			if serverReq.RankingAPI != nil {
+				applyRankingAPISettings(&profile.RankingAPI, serverReq.RankingAPI)
+			}
+			next.GameServers[region] = profile
+		}
+	}
+
+	if req.Masterdata != nil {
+		if req.Masterdata.Region != "" {
+			next.Masterdata.Region = config.NormalizeRegion(req.Masterdata.Region)
+		}
+		if req.Masterdata.Source != "" {
+			next.Masterdata.Source = config.NormalizeMasterdataSource(req.Masterdata.Source)
+		}
+		next.Masterdata.CustomURL = strings.TrimSpace(req.Masterdata.CustomURL)
+		next.Masterdata.CustomFallbackURL = strings.TrimSpace(req.Masterdata.CustomFallbackURL)
+		if req.Masterdata.LocalPath != "" {
+			next.Masterdata.LocalPath = strings.TrimSpace(req.Masterdata.LocalPath)
+		}
+		if req.Masterdata.RefreshInterval >= 0 {
+			next.Masterdata.RefreshInterval = req.Masterdata.RefreshInterval
+		}
+	}
+
+	masterResolved, err := config.ResolveMasterdata(next.Masterdata, next.Server.Region)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	next.Masterdata.Region = masterResolved.Region
+	next.Masterdata.Source = masterResolved.Source
+	next.Masterdata.URL = masterResolved.URL
+	next.Masterdata.FallbackURL = masterResolved.FallbackURL
+	next.Masterdata.CustomURL = masterResolved.CustomURL
+	next.Masterdata.CustomFallbackURL = masterResolved.CustomFallbackURL
+	next.Masterdata.LocalPath = masterResolved.LocalPath
+	next.Masterdata.RefreshInterval = masterResolved.RefreshInterval
+
+	if req.Assets != nil {
+		if req.Assets.Region != "" {
+			next.Assets.Region = config.NormalizeRegion(req.Assets.Region)
+		}
+		if req.Assets.Source != "" {
+			next.Assets.Source = config.NormalizeAssetSource(req.Assets.Source)
+		}
+		if req.Assets.Mirror != "" {
+			next.Assets.Mirror = config.NormalizeAssetMirror(req.Assets.Mirror)
+		}
+		next.Assets.CustomBaseURL = strings.TrimSpace(req.Assets.CustomBaseURL)
+		next.Assets.MusicAliasURL = strings.TrimSpace(req.Assets.MusicAliasURL)
+		if req.Assets.StickerPath != "" {
+			next.Assets.StickerPath = strings.TrimSpace(req.Assets.StickerPath)
+		}
+	}
+
+	assetResolved, err := config.ResolveAssets(next.Assets, next.Server.Region)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	next.Assets.Region = assetResolved.Region
+	next.Assets.Source = assetResolved.Source
+	next.Assets.Mirror = assetResolved.Mirror
+	next.Assets.CDNSource = assetResolved.CDNSource
+	next.Assets.BaseURL = assetResolved.BaseURL
+	next.Assets.CustomBaseURL = assetResolved.CustomBaseURL
+
+	if err := config.Save(&next, s.ConfigPath); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	*s.Config = next
+	if s.Servers != nil {
+		s.Servers.ApplyConfig(s.Config)
+		if runtime := s.Servers.Default(); runtime != nil {
+			s.Store = runtime.Store
+			s.Loader = runtime.Loader
+		}
+	} else {
+		if s.Loader != nil {
+			s.Loader.UpdateConfig(s.Config.Masterdata, s.Config.Server.Region)
+		}
+		if _, err := assets.Configure(s.Config.Assets, s.Config.Server.Region); err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+	}
+
+	if req.ReloadMasterdata {
+		if s.Servers != nil {
+			if _, err := s.Servers.Reload(next.Server.Region); err != nil {
+				return fiber.NewError(fiber.StatusBadGateway, err.Error())
+			}
+		} else if s.Loader != nil {
+			if err := s.Loader.LoadAll(); err != nil {
+				return fiber.NewError(fiber.StatusBadGateway, err.Error())
+			}
+		}
+	}
+
 	return c.JSON(fiber.Map{
+		"ok":      true,
+		"message": "设置已保存",
+		"config":  s.publicConfigMap(),
+	})
+}
+
+func applyMasterdataSettings(target *config.MasterdataConfig, req *masterdataSettingsRequest) {
+	if req == nil || target == nil {
+		return
+	}
+	if req.Region != "" {
+		target.Region = config.NormalizeRegion(req.Region)
+	}
+	if req.Source != "" {
+		target.Source = config.NormalizeMasterdataSource(req.Source)
+	}
+	target.CustomURL = strings.TrimSpace(req.CustomURL)
+	target.CustomFallbackURL = strings.TrimSpace(req.CustomFallbackURL)
+	if req.LocalPath != "" {
+		target.LocalPath = strings.TrimSpace(req.LocalPath)
+	}
+	if req.RefreshInterval >= 0 {
+		target.RefreshInterval = req.RefreshInterval
+	}
+}
+
+func applyAssetsSettings(target *config.AssetsConfig, req *assetsSettingsRequest) {
+	if req == nil || target == nil {
+		return
+	}
+	if req.Region != "" {
+		target.Region = config.NormalizeRegion(req.Region)
+	}
+	if req.Source != "" {
+		target.Source = config.NormalizeAssetSource(req.Source)
+	}
+	if req.Mirror != "" {
+		target.Mirror = config.NormalizeAssetMirror(req.Mirror)
+	}
+	target.CustomBaseURL = strings.TrimSpace(req.CustomBaseURL)
+	target.MusicAliasURL = strings.TrimSpace(req.MusicAliasURL)
+	if req.StickerPath != "" {
+		target.StickerPath = strings.TrimSpace(req.StickerPath)
+	}
+}
+
+func applySekaiAPISettings(target *config.SekaiAPIConfig, req *sekaiAPISettingsRequest) {
+	if req == nil || target == nil {
+		return
+	}
+	if req.Enabled != nil {
+		target.Enabled = *req.Enabled
+	}
+	if req.Region != "" {
+		target.Region = config.NormalizeRegion(req.Region)
+	}
+	if req.Timeout > 0 {
+		target.Timeout = req.Timeout
+	}
+	if req.RateLimit > 0 {
+		target.RateLimit = req.RateLimit
+	}
+}
+
+func applyRankingAPISettings(target *config.RankingAPIConfig, req *rankingAPISettingsRequest) {
+	if req == nil || target == nil {
+		return
+	}
+	if req.Region != "" {
+		target.Region = config.NormalizeRegion(req.Region)
+	}
+	if req.Timeout > 0 {
+		target.Timeout = req.Timeout
+	}
+}
+
+// handleReloadMasterdata forces a full reload from the currently configured source.
+func (s *Server) handleReloadMasterdata(c *fiber.Ctx) error {
+	region := config.NormalizeRegion(c.Query("region"))
+	started := time.Now()
+	if s.Servers != nil {
+		runtime, err := s.Servers.Reload(region)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadGateway, err.Error())
+		}
+		return c.JSON(fiber.Map{
+			"ok":          true,
+			"message":     fmt.Sprintf("%s Masterdata 已重新加载", runtime.Label),
+			"region":      runtime.Region,
+			"duration_ms": time.Since(started).Milliseconds(),
+			"loaded_at":   nullableTime(runtime.Store.LoadedAt()),
+			"counts":      s.masterdataSummaryMapForStore(runtime.Store),
+		})
+	}
+	if s.Loader == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "Masterdata loader is not configured")
+	}
+	if err := s.Loader.LoadAll(); err != nil {
+		return fiber.NewError(fiber.StatusBadGateway, err.Error())
+	}
+	return c.JSON(fiber.Map{
+		"ok":          true,
+		"message":     "Masterdata 已重新加载",
+		"duration_ms": time.Since(started).Milliseconds(),
+		"loaded_at":   nullableTime(s.defaultStore().LoadedAt()),
+		"counts":      s.masterdataSummaryMap(),
+	})
+}
+
+func (s *Server) publicConfigMap() fiber.Map {
+	serverRegion := config.NormalizeRegion(s.Config.Server.Region)
+	if serverRegion == "" {
+		serverRegion = config.RegionJP
+	}
+	masterResolved, masterErr := config.ResolveMasterdata(s.Config.Masterdata, serverRegion)
+	assetResolved, assetErr := config.ResolveAssets(s.Config.Assets, serverRegion)
+
+	masterMap := fiber.Map{
+		"region":                  fallbackString(masterResolved.Region, config.NormalizeRegion(s.Config.Masterdata.Region), serverRegion),
+		"region_label":            config.RegionLabel(fallbackString(masterResolved.Region, config.NormalizeRegion(s.Config.Masterdata.Region), serverRegion)),
+		"source":                  fallbackString(masterResolved.Source, config.NormalizeMasterdataSource(s.Config.Masterdata.Source)),
+		"source_label":            masterResolved.SourceLabel,
+		"url":                     fallbackString(masterResolved.URL, s.Config.Masterdata.URL),
+		"fallback_url":            fallbackString(masterResolved.FallbackURL, s.Config.Masterdata.FallbackURL),
+		"custom_url":              fallbackString(masterResolved.CustomURL, s.Config.Masterdata.CustomURL),
+		"custom_fallback_url":     fallbackString(masterResolved.CustomFallbackURL, s.Config.Masterdata.CustomFallbackURL),
+		"url_configured":          fallbackString(masterResolved.URL, s.Config.Masterdata.URL) != "",
+		"fallback_url_configured": fallbackString(masterResolved.FallbackURL, s.Config.Masterdata.FallbackURL) != "",
+		"local_path":              fallbackString(masterResolved.LocalPath, s.Config.Masterdata.LocalPath),
+		"refresh_interval":        firstNonZero(masterResolved.RefreshInterval, s.Config.Masterdata.RefreshInterval),
+		"endpoints":               masterResolved.Endpoints,
+		"supported":               masterErr == nil,
+	}
+	if masterErr != nil {
+		masterMap["error"] = masterErr.Error()
+	}
+
+	assetMap := fiber.Map{
+		"region":                 fallbackString(assetResolved.Region, config.NormalizeRegion(s.Config.Assets.Region), serverRegion),
+		"region_label":           config.RegionLabel(fallbackString(assetResolved.Region, config.NormalizeRegion(s.Config.Assets.Region), serverRegion)),
+		"source":                 fallbackString(assetResolved.Source, config.NormalizeAssetSource(s.Config.Assets.Source)),
+		"source_label":           assetResolved.SourceLabel,
+		"mirror":                 fallbackString(assetResolved.Mirror, config.NormalizeAssetMirror(s.Config.Assets.Mirror)),
+		"mirror_label":           assetResolved.MirrorLabel,
+		"cdn_source":             fallbackString(assetResolved.CDNSource, s.Config.Assets.CDNSource),
+		"base_url":               fallbackString(assetResolved.BaseURL, s.Config.Assets.BaseURL),
+		"custom_base_url":        fallbackString(assetResolved.CustomBaseURL, s.Config.Assets.CustomBaseURL),
+		"renderer_source":        assetResolved.RendererKey,
+		"music_alias_url":        s.Config.Assets.MusicAliasURL,
+		"music_alias_configured": s.Config.Assets.MusicAliasURL != "",
+		"sticker_path":           s.Config.Assets.StickerPath,
+		"supported":              assetErr == nil,
+	}
+	if assetErr != nil {
+		assetMap["error"] = assetErr.Error()
+	}
+
+	return fiber.Map{
 		"version": appVersion,
+		"server": fiber.Map{
+			"region": serverRegion,
+			"label":  config.RegionLabel(serverRegion),
+		},
+		"servers": s.publicServerProfilesMap(serverRegion),
+		"presets": fiber.Map{
+			"regions":            config.RegionOptions(),
+			"masterdata_sources": config.MasterdataSourceOptions(),
+			"asset_sources":      config.AssetSourceOptions(),
+			"asset_mirrors":      config.AssetMirrorOptions(),
+		},
 		"web": fiber.Map{
 			"host": s.Config.Web.Host,
 			"port": s.Config.Web.Port,
@@ -223,17 +621,17 @@ func (s *Server) handlePublicConfig(c *fiber.Ctx) error {
 			"url_configured": s.Config.Bot.Driver.URL != "",
 			"token_set":      s.Config.Bot.Driver.Token != "",
 		},
-		"masterdata": fiber.Map{
-			"url_configured":          s.Config.Masterdata.URL != "",
-			"fallback_url_configured": s.Config.Masterdata.FallbackURL != "",
-			"local_path":              s.Config.Masterdata.LocalPath,
-			"refresh_interval":        s.Config.Masterdata.RefreshInterval,
-		},
+		"masterdata": masterMap,
 		"sekai_api": fiber.Map{
 			"enabled":             s.Config.SekaiAPI.Enabled,
 			"base_url_configured": s.Config.SekaiAPI.BaseURL != "",
 			"region":              s.Config.SekaiAPI.Region,
 			"headers_configured":  len(s.Config.SekaiAPI.Headers) > 0,
+		},
+		"ranking_api": fiber.Map{
+			"base_url_configured": s.Config.RankingAPI.BaseURL != "",
+			"region":              s.Config.RankingAPI.Region,
+			"timeout":             s.Config.RankingAPI.Timeout,
 		},
 		"renderer": fiber.Map{
 			"base_url": rendererBaseURL(s.Renderer),
@@ -246,12 +644,124 @@ func (s *Server) handlePublicConfig(c *fiber.Ctx) error {
 				"ttl_hours":   s.Config.Renderer.Cache.TTLHours,
 			},
 		},
-		"assets": fiber.Map{
-			"cdn_source":             s.Config.Assets.CDNSource,
-			"music_alias_configured": s.Config.Assets.MusicAliasURL != "",
-			"sticker_path":           s.Config.Assets.StickerPath,
-		},
-	})
+		"assets": assetMap,
+	}
+}
+
+func (s *Server) publicServerProfilesMap(defaultRegion string) fiber.Map {
+	profiles := fiber.Map{}
+	if s.Config == nil {
+		return profiles
+	}
+	for _, region := range config.RegionKeys() {
+		profile := config.ResolveGameServerProfile(s.Config, region)
+		enabled := config.IsEnabled(profile.Enabled)
+		if region == defaultRegion || region == config.RegionJP {
+			enabled = true
+		}
+		masterResolved, masterErr := config.ResolveMasterdata(profile.Masterdata, region)
+		assetResolved, assetErr := config.ResolveAssets(profile.Assets, region)
+		var store interface {
+			IsLoaded() bool
+			LoadedAt() time.Time
+			CardCount() int
+			MusicCount() int
+			EventCount() int
+			GachaCount() int
+		}
+		var loadError string
+		if s.Servers != nil {
+			if runtime := s.Servers.Get(region); runtime != nil {
+				store = runtime.Store
+				if runtime.Region != region && !enabled {
+					store = nil
+				}
+				if runtime.Region == region && runtime.LoadError != nil {
+					loadError = runtime.LoadError.Error()
+				}
+			}
+		}
+		loadedAt := time.Time{}
+		loaded := false
+		if store != nil {
+			loaded = store.IsLoaded()
+			loadedAt = store.LoadedAt()
+		}
+		masterMap := fiber.Map{
+			"region":                  fallbackString(masterResolved.Region, profile.Masterdata.Region, region),
+			"region_label":            config.RegionLabel(fallbackString(masterResolved.Region, profile.Masterdata.Region, region)),
+			"source":                  fallbackString(masterResolved.Source, profile.Masterdata.Source),
+			"source_label":            masterResolved.SourceLabel,
+			"url":                     fallbackString(masterResolved.URL, profile.Masterdata.URL),
+			"fallback_url":            fallbackString(masterResolved.FallbackURL, profile.Masterdata.FallbackURL),
+			"custom_url":              fallbackString(masterResolved.CustomURL, profile.Masterdata.CustomURL),
+			"custom_fallback_url":     fallbackString(masterResolved.CustomFallbackURL, profile.Masterdata.CustomFallbackURL),
+			"url_configured":          fallbackString(masterResolved.URL, profile.Masterdata.URL) != "",
+			"fallback_url_configured": fallbackString(masterResolved.FallbackURL, profile.Masterdata.FallbackURL) != "",
+			"local_path":              fallbackString(masterResolved.LocalPath, profile.Masterdata.LocalPath),
+			"refresh_interval":        firstNonZero(masterResolved.RefreshInterval, profile.Masterdata.RefreshInterval),
+			"endpoints":               masterResolved.Endpoints,
+			"supported":               masterErr == nil,
+		}
+		if masterErr != nil {
+			masterMap["error"] = masterErr.Error()
+		}
+		if loadError != "" {
+			masterMap["load_error"] = loadError
+		}
+		assetMap := fiber.Map{
+			"region":                 fallbackString(assetResolved.Region, profile.Assets.Region, region),
+			"region_label":           config.RegionLabel(fallbackString(assetResolved.Region, profile.Assets.Region, region)),
+			"source":                 fallbackString(assetResolved.Source, profile.Assets.Source),
+			"source_label":           assetResolved.SourceLabel,
+			"mirror":                 assetResolved.Mirror,
+			"mirror_label":           assetResolved.MirrorLabel,
+			"cdn_source":             fallbackString(assetResolved.CDNSource, profile.Assets.CDNSource),
+			"base_url":               fallbackString(assetResolved.BaseURL, profile.Assets.BaseURL),
+			"custom_base_url":        fallbackString(assetResolved.CustomBaseURL, profile.Assets.CustomBaseURL),
+			"renderer_source":        assetResolved.RendererKey,
+			"music_alias_url":        profile.Assets.MusicAliasURL,
+			"music_alias_configured": profile.Assets.MusicAliasURL != "",
+			"sticker_path":           profile.Assets.StickerPath,
+			"supported":              assetErr == nil,
+		}
+		if assetErr != nil {
+			assetMap["error"] = assetErr.Error()
+		}
+		profiles[region] = fiber.Map{
+			"region":      region,
+			"label":       config.RegionLabel(region),
+			"enabled":     enabled,
+			"is_default":  region == defaultRegion,
+			"loaded":      loaded,
+			"loaded_at":   nullableTime(loadedAt),
+			"counts":      s.masterdataSummaryMapForStore(store),
+			"masterdata":  masterMap,
+			"assets":      assetMap,
+			"sekai_api":   publicSekaiAPIMap(profile.SekaiAPI),
+			"ranking_api": publicRankingAPIMap(profile.RankingAPI),
+		}
+	}
+	return profiles
+}
+
+func publicSekaiAPIMap(cfg config.SekaiAPIConfig) fiber.Map {
+	return fiber.Map{
+		"enabled":             cfg.Enabled,
+		"base_url_configured": strings.TrimSpace(cfg.BaseURL) != "",
+		"region":              config.NormalizeRegion(cfg.Region),
+		"headers_configured":  len(cfg.Headers) > 0,
+		"timeout":             cfg.Timeout,
+		"rate_limit":          cfg.RateLimit,
+	}
+}
+
+func publicRankingAPIMap(cfg config.RankingAPIConfig) fiber.Map {
+	return fiber.Map{
+		"base_url_configured": strings.TrimSpace(cfg.BaseURL) != "",
+		"region":              config.NormalizeRegion(cfg.Region),
+		"timeout":             cfg.Timeout,
+	}
 }
 
 // handleListGroups returns paginated group list.
@@ -358,7 +868,7 @@ func (s *Server) handleSearchCards(c *fiber.Ctx) error {
 		return err
 	}
 	q := strings.TrimSpace(c.Query("q"))
-	results := s.Store.SearchCards(q)
+	results := s.defaultStore().SearchCards(q)
 	rows := make([]fiber.Map, 0, len(results))
 	for _, card := range results {
 		rows = append(rows, fiber.Map{
@@ -381,7 +891,7 @@ func (s *Server) handleSearchMusics(c *fiber.Ctx) error {
 		return err
 	}
 	q := strings.TrimSpace(c.Query("q"))
-	results := s.Store.SearchMusics(q)
+	results := s.defaultStore().SearchMusics(q)
 	rows := make([]fiber.Map, 0, len(results))
 	for _, music := range results {
 		rows = append(rows, fiber.Map{
@@ -405,7 +915,7 @@ func (s *Server) handleSearchEvents(c *fiber.Ctx) error {
 		return err
 	}
 	q := strings.TrimSpace(c.Query("q"))
-	results := s.Store.SearchEvents(q)
+	results := s.defaultStore().SearchEvents(q)
 	rows := make([]fiber.Map, 0, len(results))
 	for _, event := range results {
 		rows = append(rows, fiber.Map{
@@ -429,7 +939,7 @@ func (s *Server) handleSearchGachas(c *fiber.Ctx) error {
 		return err
 	}
 	q := strings.TrimSpace(c.Query("q"))
-	results := s.Store.SearchGachas(q)
+	results := s.defaultStore().SearchGachas(q)
 	rows := make([]fiber.Map, 0, len(results))
 	for _, gacha := range results {
 		rows = append(rows, fiber.Map{
@@ -447,7 +957,16 @@ func (s *Server) handleSearchGachas(c *fiber.Ctx) error {
 }
 
 func (s *Server) masterdataSummaryMap() fiber.Map {
-	if s.Store == nil {
+	return s.masterdataSummaryMapForStore(s.defaultStore())
+}
+
+func (s *Server) masterdataSummaryMapForStore(store interface {
+	CardCount() int
+	MusicCount() int
+	EventCount() int
+	GachaCount() int
+}) fiber.Map {
+	if store == nil {
 		return fiber.Map{
 			"cards":  0,
 			"musics": 0,
@@ -456,10 +975,10 @@ func (s *Server) masterdataSummaryMap() fiber.Map {
 		}
 	}
 	return fiber.Map{
-		"cards":  s.Store.CardCount(),
-		"musics": s.Store.MusicCount(),
-		"events": s.Store.EventCount(),
-		"gachas": s.Store.GachaCount(),
+		"cards":  store.CardCount(),
+		"musics": store.MusicCount(),
+		"events": store.EventCount(),
+		"gachas": store.GachaCount(),
 	}
 }
 
@@ -472,6 +991,26 @@ func (s *Server) checkRenderer() (bool, int, error, time.Duration) {
 	return ok, statusCode, err, time.Since(started)
 }
 
+func (s *Server) defaultStore() interface {
+	IsLoaded() bool
+	LoadedAt() time.Time
+	CardCount() int
+	MusicCount() int
+	EventCount() int
+	GachaCount() int
+	SearchCards(string) []masterdata.CardInfo
+	SearchMusics(string) []masterdata.MusicInfo
+	SearchEvents(string) []masterdata.EventInfo
+	SearchGachas(string) []masterdata.GachaInfo
+} {
+	if s.Servers != nil {
+		if runtime := s.Servers.Default(); runtime != nil && runtime.Store != nil {
+			return runtime.Store
+		}
+	}
+	return s.Store
+}
+
 func (s *Server) ensureSearchReady(c *fiber.Ctx) error {
 	q := strings.TrimSpace(c.Query("q"))
 	if q == "" {
@@ -482,7 +1021,8 @@ func (s *Server) ensureSearchReady(c *fiber.Ctx) error {
 			"message": "请输入关键词后再搜索。",
 		})
 	}
-	if s.Store == nil || !s.Store.IsLoaded() {
+	store := s.defaultStore()
+	if store == nil || !store.IsLoaded() {
 		return c.JSON(fiber.Map{
 			"data":    []fiber.Map{},
 			"total":   0,
@@ -559,4 +1099,22 @@ func nonEmptyStrings(values ...string) []string {
 		}
 	}
 	return out
+}
+
+func fallbackString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func firstNonZero(values ...int) int {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }

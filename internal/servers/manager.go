@@ -1,0 +1,221 @@
+package servers
+
+import (
+	"fmt"
+	"sort"
+	"sync"
+	"time"
+
+	"moebot-next/internal/assets"
+	"moebot-next/internal/config"
+	"moebot-next/internal/masterdata"
+	"moebot-next/internal/models"
+	"moebot-next/internal/ranking"
+	"moebot-next/internal/sekai"
+
+	"github.com/rs/zerolog/log"
+)
+
+// Runtime contains all per-server resources used by commands and the web panel.
+type Runtime struct {
+	Region    string
+	Label     string
+	Enabled   bool
+	Profile   config.GameServerConfig
+	Store     *masterdata.Store
+	Loader    *masterdata.Loader
+	Assets    *assets.Resolver
+	Sekai     *sekai.Client
+	Ranking   *ranking.Client
+	LoadError error
+}
+
+// Manager owns all configured game server runtimes.
+type Manager struct {
+	mu            sync.RWMutex
+	defaultRegion string
+	runtimes      map[string]*Runtime
+}
+
+// NewManager creates per-server runtimes and loads masterdata for enabled regions.
+func NewManager(cfg *config.Config) *Manager {
+	config.NormalizeConfig(cfg)
+	m := &Manager{}
+	m.ApplyConfig(cfg)
+	return m
+}
+
+// ApplyConfig rebuilds runtime settings from config while preserving loaded stores
+// for still-enabled regions where possible.
+func (m *Manager) ApplyConfig(cfg *config.Config) {
+	config.NormalizeConfig(cfg)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	old := m.runtimes
+	m.defaultRegion = config.NormalizeRegion(cfg.Server.Region)
+	if m.defaultRegion == "" {
+		m.defaultRegion = config.RegionJP
+	}
+	m.runtimes = make(map[string]*Runtime, len(config.RegionKeys()))
+
+	for _, region := range config.RegionKeys() {
+		profile := config.ResolveGameServerProfile(cfg, region)
+		enabled := config.IsEnabled(profile.Enabled)
+		if region == m.defaultRegion || region == config.RegionJP {
+			enabled = true
+		}
+		runtime := &Runtime{
+			Region:  region,
+			Label:   config.RegionLabel(region),
+			Enabled: enabled,
+			Profile: profile,
+		}
+		if previous := old[region]; previous != nil && previous.Store != nil {
+			runtime.Store = previous.Store
+		}
+		if runtime.Store == nil {
+			runtime.Store = masterdata.NewStore()
+		}
+		if runtime.Enabled {
+			runtime.Loader = masterdata.NewLoader(profile.Masterdata, runtime.Store, region)
+			runtime.Assets, runtime.LoadError = assets.NewResolver(profile.Assets, region)
+			runtime.Sekai = sekai.NewClient(profile.SekaiAPI)
+			runtime.Ranking = ranking.NewClient(ranking.Config{
+				BaseURL: profile.RankingAPI.BaseURL,
+				Region:  profile.RankingAPI.Region,
+				Timeout: profile.RankingAPI.Timeout,
+			})
+		}
+		m.runtimes[region] = runtime
+	}
+}
+
+// LoadEnabled loads masterdata for all enabled runtimes.
+func (m *Manager) LoadEnabled() {
+	for _, runtime := range m.EnabledRuntimes() {
+		if runtime.Loader == nil {
+			continue
+		}
+		if err := runtime.Loader.LoadAll(); err != nil {
+			runtime.LoadError = err
+			log.Warn().Err(err).Str("region", runtime.Region).Msg("Initial regional masterdata load failed")
+		} else {
+			runtime.LoadError = nil
+		}
+	}
+}
+
+// StartPeriodicRefresh starts per-region refresh loops.
+func (m *Manager) StartPeriodicRefresh() {
+	for _, runtime := range m.EnabledRuntimes() {
+		interval := runtime.Profile.Masterdata.RefreshInterval
+		if runtime.Loader != nil && interval > 0 {
+			runtime.Loader.StartPeriodicRefresh(time.Duration(interval) * time.Second)
+		}
+	}
+}
+
+// StopPeriodicRefresh stops all refresh loops.
+func (m *Manager) StopPeriodicRefresh() {
+	for _, runtime := range m.AllRuntimes() {
+		if runtime.Loader != nil {
+			runtime.Loader.StopPeriodicRefresh()
+		}
+	}
+}
+
+// Default returns the default server runtime.
+func (m *Manager) Default() *Runtime {
+	return m.Get("")
+}
+
+// Get returns the runtime for a region or the default runtime when region is empty/invalid/disabled.
+func (m *Manager) Get(region string) *Runtime {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	region = config.NormalizeRegion(region)
+	if region == "" || !config.IsValidRegion(region) {
+		region = m.defaultRegion
+	}
+	runtime := m.runtimes[region]
+	if runtime == nil || !runtime.Enabled {
+		runtime = m.runtimes[m.defaultRegion]
+	}
+	if runtime == nil {
+		runtime = m.runtimes[config.RegionJP]
+	}
+	return runtime
+}
+
+// ForUser returns the runtime bound to a user, falling back to default JP.
+func (m *Manager) ForUser(user *models.User) *Runtime {
+	if user == nil || user.ServerRegion == "" {
+		return m.Default()
+	}
+	return m.Get(user.ServerRegion)
+}
+
+// Reload reloads masterdata for one region. Empty region reloads the default region.
+func (m *Manager) Reload(region string) (*Runtime, error) {
+	runtime := m.Get(region)
+	if runtime == nil || runtime.Loader == nil {
+		return runtime, fmt.Errorf("server %s masterdata loader is not configured", region)
+	}
+	if err := runtime.Loader.LoadAll(); err != nil {
+		runtime.LoadError = err
+		return runtime, err
+	}
+	runtime.LoadError = nil
+	return runtime, nil
+}
+
+// AllRuntimes returns all region runtimes in canonical order.
+func (m *Manager) AllRuntimes() []*Runtime {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	runtimes := make([]*Runtime, 0, len(m.runtimes))
+	for _, region := range config.RegionKeys() {
+		if runtime := m.runtimes[region]; runtime != nil {
+			runtimes = append(runtimes, runtime)
+		}
+	}
+	return runtimes
+}
+
+// EnabledRuntimes returns enabled runtimes in canonical order.
+func (m *Manager) EnabledRuntimes() []*Runtime {
+	all := m.AllRuntimes()
+	out := make([]*Runtime, 0, len(all))
+	for _, runtime := range all {
+		if runtime.Enabled {
+			out = append(out, runtime)
+		}
+	}
+	return out
+}
+
+// DefaultRegion returns the canonical default server key.
+func (m *Manager) DefaultRegion() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.defaultRegion == "" {
+		return config.RegionJP
+	}
+	return m.defaultRegion
+}
+
+// Regions returns configured region keys in sorted order for stable UI maps.
+func (m *Manager) Regions() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	regions := make([]string, 0, len(m.runtimes))
+	for region := range m.runtimes {
+		regions = append(regions, region)
+	}
+	sort.Strings(regions)
+	return regions
+}

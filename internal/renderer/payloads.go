@@ -10,7 +10,9 @@ import (
 	"moebot-next/internal/sekai"
 )
 
-const defaultAssetSource = "main-jp"
+func defaultAssetResolver() *assets.Resolver {
+	return assets.DefaultResolver()
+}
 
 // CardDetailPayload is the normalized data contract consumed by CardDetail.tsx.
 type CardDetailPayload struct {
@@ -175,7 +177,11 @@ type RankingEntryPayload struct {
 }
 
 func BuildRankingListPayload(title string, board ranking.Board) RankingListPayload {
-	payload := RankingListPayload{Title: title, EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: defaultAssetSource}
+	return BuildRankingListPayloadWithAssets(title, board, defaultAssetResolver())
+}
+
+func BuildRankingListPayloadWithAssets(title string, board ranking.Board, resolver *assets.Resolver) RankingListPayload {
+	payload := RankingListPayload{Title: title, EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: assetSourceForResolver(resolver)}
 	for _, entry := range board.Rankings {
 		payload.Rankings = append(payload.Rankings, buildRankingEntryPayload(entry))
 	}
@@ -183,7 +189,11 @@ func BuildRankingListPayload(title string, board ranking.Board) RankingListPaylo
 }
 
 func BuildChurnRankingListPayload(board ranking.Board) RankingListPayload {
-	payload := RankingListPayload{Title: "查房", Subtitle: "活跃度 / 时速 / 最近分数变化", EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: defaultAssetSource}
+	return BuildChurnRankingListPayloadWithAssets(board, defaultAssetResolver())
+}
+
+func BuildChurnRankingListPayloadWithAssets(board ranking.Board, resolver *assets.Resolver) RankingListPayload {
+	payload := RankingListPayload{Title: "查房", Subtitle: "活跃度 / 时速 / 最近分数变化", EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: assetSourceForResolver(resolver)}
 	for _, entry := range board.Rankings {
 		item := buildRankingEntryPayload(entry)
 		if entry.LastChange != nil {
@@ -365,6 +375,11 @@ func BuildProfileCardPayload(profile sekai.Profile) ProfileCardPayload {
 
 // BuildProfileCardPayloadWithStore enriches profile card IDs with masterdata card display fields.
 func BuildProfileCardPayloadWithStore(store *masterdata.Store, profile sekai.Profile) ProfileCardPayload {
+	return BuildProfileCardPayloadWithAssets(store, profile, defaultAssetResolver())
+}
+
+// BuildProfileCardPayloadWithAssets enriches profile card IDs using a region-specific asset resolver.
+func BuildProfileCardPayloadWithAssets(store *masterdata.Store, profile sekai.Profile, resolver *assets.Resolver) ProfileCardPayload {
 	payload := ProfileCardPayload{
 		Name:       profile.Name,
 		Rank:       profile.Rank,
@@ -376,7 +391,7 @@ func BuildProfileCardPayloadWithStore(store *masterdata.Store, profile sekai.Pro
 			MvpCount:       profile.Stats.MvpCount,
 			SuperStarCount: profile.Stats.SuperStarCount,
 		},
-		AssetSource: defaultAssetSource,
+		AssetSource: assetSourceForResolver(resolver),
 	}
 	for _, count := range profile.MusicClearCounts {
 		payload.MusicClearCounts = append(payload.MusicClearCounts, MusicClearCountPayload{
@@ -417,16 +432,16 @@ func BuildProfileCardPayloadWithStore(store *masterdata.Store, profile sekai.Pro
 		payload.ProfileHonors = append(payload.ProfileHonors, honorPayload)
 	}
 	if profile.LeaderCard != nil {
-		leader := buildProfileDeckCardPayload(store, *profile.LeaderCard)
+		leader := buildProfileDeckCardPayload(store, *profile.LeaderCard, resolver)
 		payload.LeaderCard = &leader
 	}
 	for _, card := range profile.DeckCards {
-		payload.DeckCards = append(payload.DeckCards, buildProfileDeckCardPayload(store, card))
+		payload.DeckCards = append(payload.DeckCards, buildProfileDeckCardPayload(store, card, resolver))
 	}
 	return payload
 }
 
-func buildProfileDeckCardPayload(store *masterdata.Store, card sekai.ProfileDeckCard) ProfileDeckCardPayload {
+func buildProfileDeckCardPayload(store *masterdata.Store, card sekai.ProfileDeckCard, resolver *assets.Resolver) ProfileDeckCardPayload {
 	payload := ProfileDeckCardPayload{
 		CardID:       card.CardID,
 		ID:           card.CardID,
@@ -442,15 +457,22 @@ func buildProfileDeckCardPayload(store *masterdata.Store, card sekai.ProfileDeck
 			payload.CardRarityType = masterCard.CardRarityType
 			payload.Attr = masterCard.Attr
 			payload.AssetbundleName = masterCard.AssetbundleName
-			payload.ThumbnailURL = assets.GetCardThumbnailURL(masterCard.AssetbundleName, false)
-			payload.TrainedThumbnailURL = assets.GetCardThumbnailURL(masterCard.AssetbundleName, true)
+			assetResolver := resolverOrDefault(resolver)
+			payload.ThumbnailURL = assetResolver.GetCardThumbnailURL(masterCard.AssetbundleName, false)
+			payload.TrainedThumbnailURL = assetResolver.GetCardThumbnailURL(masterCard.AssetbundleName, true)
 		}
 	}
 	return payload
 }
 
 // BuildCardDetailPayload adapts a masterdata card into CardDetail renderer props.
-func BuildCardDetailPayload(_ *masterdata.Store, card masterdata.CardInfo) CardDetailPayload {
+func BuildCardDetailPayload(store *masterdata.Store, card masterdata.CardInfo) CardDetailPayload {
+	return BuildCardDetailPayloadWithAssets(store, card, defaultAssetResolver())
+}
+
+// BuildCardDetailPayloadWithAssets adapts a card using a region-specific asset resolver.
+func BuildCardDetailPayloadWithAssets(_ *masterdata.Store, card masterdata.CardInfo, resolver *assets.Resolver) CardDetailPayload {
+	assetResolver := resolverOrDefault(resolver)
 	payload := CardDetailPayload{
 		ID:              card.ID,
 		Prefix:          card.Prefix,
@@ -465,14 +487,14 @@ func BuildCardDetailPayload(_ *masterdata.Store, card masterdata.CardInfo) CardD
 		GachaPhrase:     cleanDash(card.GachaPhrase),
 		SupplyType:      cardSupplyType(card.CardSupplyID),
 		CardSupplyID:    card.CardSupplyID,
-		AssetSource:     defaultAssetSource,
+		AssetSource:     assetSourceForResolver(assetResolver),
 	}
 
 	if card.AssetbundleName != "" {
-		payload.NormalFullURL = assets.GetCardFullURL(card.AssetbundleName, false)
-		payload.TrainedFullURL = assets.GetCardFullURL(card.AssetbundleName, true)
-		payload.ThumbnailURL = assets.GetCardThumbnailURL(card.AssetbundleName, false)
-		payload.TrainedThumbnail = assets.GetCardThumbnailURL(card.AssetbundleName, true)
+		payload.NormalFullURL = assetResolver.GetCardFullURL(card.AssetbundleName, false)
+		payload.TrainedFullURL = assetResolver.GetCardFullURL(card.AssetbundleName, true)
+		payload.ThumbnailURL = assetResolver.GetCardThumbnailURL(card.AssetbundleName, false)
+		payload.TrainedThumbnail = assetResolver.GetCardThumbnailURL(card.AssetbundleName, true)
 	}
 
 	return payload
@@ -480,6 +502,11 @@ func BuildCardDetailPayload(_ *masterdata.Store, card masterdata.CardInfo) CardD
 
 // BuildMusicDetailPayload adapts a masterdata music row into MusicDetail renderer props.
 func BuildMusicDetailPayload(store *masterdata.Store, music masterdata.MusicInfo) MusicDetailPayload {
+	return BuildMusicDetailPayloadWithAssets(store, music, defaultAssetResolver())
+}
+
+// BuildMusicDetailPayloadWithAssets adapts a music row using a region-specific asset resolver.
+func BuildMusicDetailPayloadWithAssets(store *masterdata.Store, music masterdata.MusicInfo, resolver *assets.Resolver) MusicDetailPayload {
 	payload := MusicDetailPayload{
 		ID:                  music.ID,
 		Title:               music.Title,
@@ -495,7 +522,7 @@ func BuildMusicDetailPayload(store *masterdata.Store, music masterdata.MusicInfo
 		FillerSec:           music.FillerSec,
 		IsNewlyWrittenMusic: music.IsNewlyWrittenMusic,
 		IsFullLength:        music.IsFullLength,
-		AssetSource:         defaultAssetSource,
+		AssetSource:         assetSourceForResolver(resolver),
 	}
 
 	if store != nil {
@@ -518,6 +545,11 @@ func BuildMusicDetailPayload(store *masterdata.Store, music masterdata.MusicInfo
 
 // BuildEventInfoPayload adapts a masterdata event into EventInfo renderer props.
 func BuildEventInfoPayload(store *masterdata.Store, event masterdata.EventInfo) EventInfoPayload {
+	return BuildEventInfoPayloadWithAssets(store, event, defaultAssetResolver())
+}
+
+// BuildEventInfoPayloadWithAssets adapts an event using a region-specific asset resolver.
+func BuildEventInfoPayloadWithAssets(store *masterdata.Store, event masterdata.EventInfo, resolver *assets.Resolver) EventInfoPayload {
 	payload := EventInfoPayload{
 		ID:                event.ID,
 		Name:              event.Name,
@@ -528,7 +560,7 @@ func BuildEventInfoPayload(store *masterdata.Store, event masterdata.EventInfo) 
 		AggregateAt:       event.AggregateAt,
 		ClosedAt:          event.ClosedAt,
 		DistributionEndAt: event.DistributionEndAt,
-		AssetSource:       defaultAssetSource,
+		AssetSource:       assetSourceForResolver(resolver),
 	}
 
 	if store == nil {
@@ -569,6 +601,11 @@ func BuildEventInfoPayload(store *masterdata.Store, event masterdata.EventInfo) 
 
 // BuildGachaInfoPayload adapts a masterdata gacha into GachaInfo renderer props.
 func BuildGachaInfoPayload(store *masterdata.Store, gacha masterdata.GachaInfo) GachaInfoPayload {
+	return BuildGachaInfoPayloadWithAssets(store, gacha, defaultAssetResolver())
+}
+
+// BuildGachaInfoPayloadWithAssets adapts a gacha using a region-specific asset resolver.
+func BuildGachaInfoPayloadWithAssets(store *masterdata.Store, gacha masterdata.GachaInfo, resolver *assets.Resolver) GachaInfoPayload {
 	payload := GachaInfoPayload{
 		ID:              gacha.ID,
 		Name:            gacha.Name,
@@ -578,7 +615,7 @@ func BuildGachaInfoPayload(store *masterdata.Store, gacha masterdata.GachaInfo) 
 		EndAt:           gacha.EndAt,
 		IsShowPeriod:    gacha.IsShowPeriod,
 		WishSelectCount: gacha.WishSelectCount,
-		AssetSource:     defaultAssetSource,
+		AssetSource:     assetSourceForResolver(resolver),
 	}
 
 	for _, rate := range gacha.GachaCardRarityRates {
@@ -602,7 +639,7 @@ func BuildGachaInfoPayload(store *masterdata.Store, gacha masterdata.GachaInfo) 
 
 		if store != nil {
 			if card := store.GetCard(pickup.CardID); card != nil {
-				cardPayload := buildGachaPickupCardPayload(*card, pickup.GachaPickupType)
+				cardPayload := buildGachaPickupCardPayload(*card, pickup.GachaPickupType, resolver)
 				pickupPayload.Card = &cardPayload
 				payload.PickupCards = append(payload.PickupCards, cardPayload)
 			}
@@ -614,7 +651,7 @@ func BuildGachaInfoPayload(store *masterdata.Store, gacha masterdata.GachaInfo) 
 	return payload
 }
 
-func buildGachaPickupCardPayload(card masterdata.CardInfo, pickupType string) GachaPickupCardPayload {
+func buildGachaPickupCardPayload(card masterdata.CardInfo, pickupType string, resolver *assets.Resolver) GachaPickupCardPayload {
 	payload := GachaPickupCardPayload{
 		ID:              card.ID,
 		Prefix:          card.Prefix,
@@ -628,10 +665,22 @@ func buildGachaPickupCardPayload(card masterdata.CardInfo, pickupType string) Ga
 		GachaPickupType: pickupType,
 	}
 	if card.AssetbundleName != "" {
-		payload.ThumbnailURL = assets.GetCardThumbnailURL(card.AssetbundleName, false)
-		payload.TrainedThumbnailURL = assets.GetCardThumbnailURL(card.AssetbundleName, true)
+		assetResolver := resolverOrDefault(resolver)
+		payload.ThumbnailURL = assetResolver.GetCardThumbnailURL(card.AssetbundleName, false)
+		payload.TrainedThumbnailURL = assetResolver.GetCardThumbnailURL(card.AssetbundleName, true)
 	}
 	return payload
+}
+
+func resolverOrDefault(resolver *assets.Resolver) *assets.Resolver {
+	if resolver != nil {
+		return resolver
+	}
+	return defaultAssetResolver()
+}
+
+func assetSourceForResolver(resolver *assets.Resolver) string {
+	return resolverOrDefault(resolver).RendererAssetSource()
 }
 
 func maxCardPower(card masterdata.CardInfo) int {

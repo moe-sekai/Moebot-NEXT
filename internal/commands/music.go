@@ -20,70 +20,88 @@ func RegisterMusic(deps *Deps) {
 }
 
 func registerMusicDetailCommand(deps *Deps, command string) {
-	zero.OnCommand(command).SetBlock(true).Handle(func(ctx *zero.Ctx) {
-		start := time.Now()
-		keyword := strings.TrimSpace(fmt.Sprintf("%v", ctx.State["args"]))
-
-		if keyword == "" {
-			ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的曲目关键词~\n例: /%s 千本樱", command)))
-			return
-		}
-
-		results := deps.Store.SearchMusics(keyword)
-		if len(results) == 0 {
-			ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的曲目", keyword)))
-			return
-		}
-
-		music := results[0]
-		payload := renderer.BuildMusicDetailPayload(deps.Store, music)
-
-		if deps.Renderer != nil && deps.Renderer.Health() {
-			png, err := deps.Renderer.Render(renderer.RenderRequest{
-				Template: "music_detail",
-				Data:     payload,
-			})
-			if err == nil {
-				ctx.SendChain(message.ImageBytes(png))
-				bot.RecordCommand(deps.DB, command, ctx, start)
+	for _, cmd := range regionalCommands(command) {
+		commandName := cmd.Name
+		forcedRegion := cmd.Region
+		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+			start := time.Now()
+			keyword := commandArgs(ctx)
+			runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)
+			if runtime == nil || runtime.Store == nil || !runtime.Enabled {
+				ctx.SendChain(message.Text(runtimeUnavailableText(runtime)))
 				return
 			}
-		}
 
-		ctx.SendChain(message.Text(formatMusicText(payload)))
-		bot.RecordCommand(deps.DB, command, ctx, start)
-	})
+			if keyword == "" {
+				ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的曲目关键词~\n例: /%s 千本樱", commandName)))
+				return
+			}
+
+			results := runtime.Store.SearchMusics(keyword)
+			if len(results) == 0 {
+				ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的曲目", keyword)))
+				return
+			}
+
+			music := results[0]
+			payload := renderer.BuildMusicDetailPayloadWithAssets(runtime.Store, music, runtime.Assets)
+
+			if deps.Renderer != nil && deps.Renderer.Health() {
+				png, err := deps.Renderer.Render(renderer.RenderRequest{
+					Template: "music_detail",
+					Data:     payload,
+				})
+				if err == nil {
+					ctx.SendChain(message.ImageBytes(png))
+					bot.RecordCommandRegion(deps.DB, command, runtime.Region, ctx, start)
+					return
+				}
+			}
+
+			ctx.SendChain(message.Text(formatMusicText(payload)))
+			bot.RecordCommandRegion(deps.DB, command, runtime.Region, ctx, start)
+		})
+	}
 }
 
 func registerChartCommand(deps *Deps) {
-	zero.OnCommand("查谱").SetBlock(true).Handle(func(ctx *zero.Ctx) {
-		start := time.Now()
-		keyword := strings.TrimSpace(fmt.Sprintf("%v", ctx.State["args"]))
-
-		if keyword == "" {
-			ctx.SendChain(message.Text("请输入要搜索的谱面关键词~\n例: /查谱 千本樱"))
-			return
-		}
-
-		results := deps.Store.SearchMusics(keyword)
-		if len(results) == 0 {
-			ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的谱面", keyword)))
-			return
-		}
-
-		payload := renderer.BuildMusicDetailPayload(deps.Store, results[0])
-		if deps.Renderer != nil && deps.Renderer.Health() {
-			png, err := deps.Renderer.Render(buildChartRenderRequest(payload))
-			if err == nil {
-				ctx.SendChain(message.ImageBytes(png))
-				bot.RecordCommand(deps.DB, "查谱", ctx, start)
+	for _, cmd := range regionalCommands("查谱") {
+		commandName := cmd.Name
+		forcedRegion := cmd.Region
+		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+			start := time.Now()
+			keyword := commandArgs(ctx)
+			runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)
+			if runtime == nil || runtime.Store == nil || !runtime.Enabled {
+				ctx.SendChain(message.Text(runtimeUnavailableText(runtime)))
 				return
 			}
-		}
 
-		ctx.SendChain(message.Text(formatChartText(payload)))
-		bot.RecordCommand(deps.DB, "查谱", ctx, start)
-	})
+			if keyword == "" {
+				ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的谱面关键词~\n例: /%s 千本樱", commandName)))
+				return
+			}
+
+			results := runtime.Store.SearchMusics(keyword)
+			if len(results) == 0 {
+				ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的谱面", keyword)))
+				return
+			}
+
+			payload := renderer.BuildMusicDetailPayloadWithAssets(runtime.Store, results[0], runtime.Assets)
+			if deps.Renderer != nil && deps.Renderer.Health() {
+				png, err := deps.Renderer.Render(buildChartRenderRequest(payload))
+				if err == nil {
+					ctx.SendChain(message.ImageBytes(png))
+					bot.RecordCommandRegion(deps.DB, "查谱", runtime.Region, ctx, start)
+					return
+				}
+			}
+
+			ctx.SendChain(message.Text(formatChartText(payload)))
+			bot.RecordCommandRegion(deps.DB, "查谱", runtime.Region, ctx, start)
+		})
+	}
 }
 
 func buildChartRenderRequest(payload renderer.MusicDetailPayload) renderer.RenderRequest {

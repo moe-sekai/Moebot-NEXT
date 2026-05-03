@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"moebot-next/internal/config"
 )
 
 type Client struct {
@@ -24,9 +26,9 @@ func NewClient(cfg Config) *Client {
 	if baseURL == "" {
 		baseURL = "https://rks.exmeaning.com"
 	}
-	region := strings.Trim(strings.ToLower(cfg.Region), "/")
+	region := config.NormalizeRegion(strings.Trim(strings.ToLower(cfg.Region), "/"))
 	if region == "" {
-		region = "cn"
+		region = config.RegionCN
 	}
 	return &Client{baseURL: baseURL, region: region, http: &http.Client{Timeout: timeout}}
 }
@@ -40,7 +42,7 @@ func (c *Client) GetChurn() (*Board, error) {
 }
 
 func (c *Client) getBoard(path string) (*Board, error) {
-	endpoint, err := url.JoinPath(c.baseURL, "api", "public", c.region, path)
+	endpoint, err := url.JoinPath(c.baseURL, "api", "public", rankingRegionPath(c.region), path)
 	if err != nil {
 		return nil, fmt.Errorf("build ranking url: %w", err)
 	}
@@ -57,4 +59,11 @@ func (c *Client) getBoard(path string) (*Board, error) {
 		return nil, fmt.Errorf("decode ranking response: %w", err)
 	}
 	return &board, nil
+}
+
+func rankingRegionPath(region string) string {
+	if config.NormalizeRegion(region) == config.RegionTW {
+		return "tw"
+	}
+	return config.NormalizeRegion(region)
 }

@@ -4,10 +4,13 @@ import type {
   DashboardData,
   GroupRow,
   HealthResponse,
+  ConfigUpdateResponse,
+  MasterdataReloadResponse,
   MasterdataSummary,
   PaginatedResponse,
   PublicConfig,
   RecentCommandsResponse,
+  UpdatePublicConfigPayload,
   RendererHealth,
   RendererPreviewImageResult,
   RendererPreviewsResponse,
@@ -58,6 +61,18 @@ export async function getRecentCommands(limit = 10) {
 
 export async function getPublicConfig() {
   const { data } = await api.get<PublicConfig>('/config/public')
+  return data
+}
+
+export async function updatePublicConfig(payload: UpdatePublicConfigPayload) {
+  const { data } = await api.put<ConfigUpdateResponse>('/config/public', payload)
+  return data
+}
+
+export async function reloadMasterdata(region?: string) {
+  const { data } = await api.post<MasterdataReloadResponse>('/masterdata/reload', null, {
+    params: region ? { region } : undefined,
+  })
   return data
 }
 

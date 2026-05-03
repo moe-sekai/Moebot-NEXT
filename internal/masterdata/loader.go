@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -45,21 +47,43 @@ var masterFiles = []struct {
 
 // Loader handles fetching and refreshing masterdata from remote servers.
 type Loader struct {
-	cfg    config.MasterdataConfig
-	store  *Store
-	client *http.Client
-	done   chan struct{} // closed to signal periodic-refresh goroutine to stop
+	mu            sync.RWMutex
+	loadMu        sync.Mutex
+	cfg           config.MasterdataConfig
+	defaultRegion string
+	store         *Store
+	client        *http.Client
+	done          chan struct{} // closed to signal periodic-refresh goroutine to stop
 }
 
 // NewLoader creates a Loader bound to the given Store.
-func NewLoader(cfg config.MasterdataConfig, store *Store) *Loader {
+func NewLoader(cfg config.MasterdataConfig, store *Store, defaultRegion ...string) *Loader {
+	region := ""
+	if len(defaultRegion) > 0 {
+		region = defaultRegion[0]
+	}
 	return &Loader{
-		cfg:   cfg,
-		store: store,
+		cfg:           cfg,
+		defaultRegion: region,
+		store:         store,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+// UpdateConfig atomically swaps the loader configuration used by future loads.
+func (l *Loader) UpdateConfig(cfg config.MasterdataConfig, defaultRegion string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.cfg = cfg
+	l.defaultRegion = defaultRegion
+}
+
+func (l *Loader) configSnapshot() (config.MasterdataConfig, string) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.cfg, l.defaultRegion
 }
 
 // ---------- Full Load ------------------------------------------------------
@@ -68,11 +92,20 @@ func NewLoader(cfg config.MasterdataConfig, store *Store) *Loader {
 // Errors on individual files are logged but do not abort the whole load;
 // an error is only returned if zero files could be loaded at all.
 func (l *Loader) LoadAll() error {
+	l.loadMu.Lock()
+	defer l.loadMu.Unlock()
+
+	cfg, defaultRegion := l.configSnapshot()
+	resolved, err := config.ResolveMasterdata(cfg, defaultRegion)
+	if err != nil {
+		return fmt.Errorf("masterdata: resolve source: %w", err)
+	}
+
 	data := &MasterData{}
 	loaded := 0
 
 	for _, mf := range masterFiles {
-		raw, source, err := l.fetchFile(mf.name)
+		raw, source, err := l.fetchFile(mf.name, resolved)
 		if err != nil {
 			log.Warn().Err(err).Str("file", mf.name).Msg("Failed to load masterdata file")
 			continue
@@ -90,12 +123,14 @@ func (l *Loader) LoadAll() error {
 	}
 
 	if loaded == 0 {
-		return fmt.Errorf("masterdata: failed to load any files (tried primary, fallback, and local)")
+		return fmt.Errorf("masterdata: failed to load any files (tried remote endpoints and local cache)")
 	}
 
 	l.store.SetAll(data)
 
 	log.Info().
+		Str("provider", resolved.Source).
+		Str("region", resolved.Region).
 		Int("files_loaded", loaded).
 		Int("total_files", len(masterFiles)).
 		Int("cards", len(data.Cards)).
@@ -122,35 +157,22 @@ func resetUnmarshalTarget(target any) {
 
 // ---------- File Fetching --------------------------------------------------
 
-// fetchFile tries primary URL → fallback URL → local file, returning the raw
+// fetchFile tries configured remote endpoints → local cache, returning the raw
 // JSON bytes and the source label on success.
-func (l *Loader) fetchFile(name string) ([]byte, string, error) {
+func (l *Loader) fetchFile(name string, resolved config.ResolvedMasterdata) ([]byte, string, error) {
 	filename := name + ".json"
 
-	// 1. Primary URL
-	if l.cfg.URL != "" {
-		url := l.cfg.URL + "/" + filename
-		raw, err := l.fetchRemote(url)
+	for _, endpoint := range resolved.Endpoints {
+		remoteURL := strings.TrimRight(endpoint.URL, "/") + "/" + filename
+		raw, err := l.fetchRemote(remoteURL)
 		if err == nil {
-			l.cacheLocally(filename, raw) // best-effort save
-			return raw, "primary", nil
+			l.cacheLocally(filename, raw, resolved.LocalPath) // best-effort save
+			return raw, endpoint.Key, nil
 		}
-		log.Debug().Err(err).Str("url", url).Msg("Primary fetch failed, trying fallback")
+		log.Debug().Err(err).Str("url", remoteURL).Msg("Remote fetch failed, trying next masterdata source")
 	}
 
-	// 2. Fallback URL
-	if l.cfg.FallbackURL != "" {
-		url := l.cfg.FallbackURL + "/" + filename
-		raw, err := l.fetchRemote(url)
-		if err == nil {
-			l.cacheLocally(filename, raw)
-			return raw, "fallback", nil
-		}
-		log.Debug().Err(err).Str("url", url).Msg("Fallback fetch failed, trying local")
-	}
-
-	// 3. Local cache
-	raw, err := l.loadLocal(filename)
+	raw, err := l.loadLocal(filename, resolved.LocalPath)
 	if err == nil {
 		return raw, "local", nil
 	}
@@ -178,11 +200,11 @@ func (l *Loader) fetchRemote(url string) ([]byte, error) {
 }
 
 // loadLocal reads a masterdata file from the local cache directory.
-func (l *Loader) loadLocal(filename string) ([]byte, error) {
-	if l.cfg.LocalPath == "" {
+func (l *Loader) loadLocal(filename string, localPath string) ([]byte, error) {
+	if localPath == "" {
 		return nil, fmt.Errorf("local path not configured")
 	}
-	path := filepath.Join(l.cfg.LocalPath, filename)
+	path := filepath.Join(localPath, filename)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading local file %s: %w", path, err)
@@ -191,12 +213,12 @@ func (l *Loader) loadLocal(filename string) ([]byte, error) {
 }
 
 // cacheLocally writes fetched data to the local cache directory for offline use.
-func (l *Loader) cacheLocally(filename string, data []byte) {
-	if l.cfg.LocalPath == "" {
+func (l *Loader) cacheLocally(filename string, data []byte, localPath string) {
+	if localPath == "" {
 		return
 	}
 
-	dir := l.cfg.LocalPath
+	dir := localPath
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		log.Debug().Err(err).Str("dir", dir).Msg("Could not create local cache directory")
 		return
