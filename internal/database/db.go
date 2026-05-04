@@ -46,6 +46,7 @@ func New(cfg config.DatabaseConfig) (*DB, error) {
 	// Auto-migrate all models
 	if err := db.AutoMigrate(
 		&models.User{},
+		&models.SuiteSetting{},
 		&models.Group{},
 		&models.CommandStat{},
 		&models.ImageCache{},

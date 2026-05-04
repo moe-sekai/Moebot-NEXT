@@ -56,6 +56,30 @@ func (d *DB) ListUsers(offset, limit int) ([]models.User, int64, error) {
 	return users, total, err
 }
 
+// --- Suite Setting Queries ---
+
+func (d *DB) GetSuiteSetting(platform, platformID, region string) (*models.SuiteSetting, error) {
+	var setting models.SuiteSetting
+	region = config.NormalizeRegion(region)
+	if region == "" {
+		region = config.RegionJP
+	}
+	err := d.Where("platform = ? AND platform_id = ? AND server_region = ?", platform, platformID, region).First(&setting).Error
+	if err != nil {
+		return nil, err
+	}
+	return &setting, nil
+}
+
+func (d *DB) UpsertSuiteSetting(setting *models.SuiteSetting) error {
+	if setting.ServerRegion == "" {
+		setting.ServerRegion = config.RegionJP
+	}
+	setting.ServerRegion = config.NormalizeRegion(setting.ServerRegion)
+	setting.Mode = config.NormalizeSuiteMode(setting.Mode)
+	return d.Save(setting).Error
+}
+
 // --- Group Queries ---
 
 // GetGroup finds a group by platform and group ID.

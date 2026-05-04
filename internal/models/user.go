@@ -13,3 +13,15 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
+
+// SuiteSetting stores per-region Suite data privacy and source preference.
+type SuiteSetting struct {
+	ID           uint      `gorm:"primarykey" json:"id"`
+	Platform     string    `gorm:"not null;uniqueIndex:idx_suite_setting_user_region" json:"platform"`
+	PlatformID   string    `gorm:"not null;uniqueIndex:idx_suite_setting_user_region" json:"platform_id"`
+	ServerRegion string    `gorm:"not null;default:'jp';uniqueIndex:idx_suite_setting_user_region" json:"server_region"`
+	Mode         string    `gorm:"not null;default:'latest'" json:"mode"`
+	Hidden       bool      `json:"hidden"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}

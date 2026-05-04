@@ -12,6 +12,7 @@ import (
 	"moebot-next/internal/models"
 	"moebot-next/internal/ranking"
 	"moebot-next/internal/sekai"
+	"moebot-next/internal/suite"
 
 	"github.com/rs/zerolog/log"
 )
@@ -27,6 +28,7 @@ type Runtime struct {
 	Assets       *assets.Resolver
 	MusicAliases map[int]assets.MusicAlias
 	Sekai        *sekai.Client
+	Suite        *suite.Client
 	Ranking      *ranking.Client
 	LoadError    error
 }
@@ -86,6 +88,7 @@ func (m *Manager) ApplyConfig(cfg *config.Config) {
 				runtime.MusicAliases = previous.MusicAliases
 			}
 			runtime.Sekai = sekai.NewClient(profile.SekaiAPI)
+			runtime.Suite = suite.NewClient(profile.SuiteAPI)
 			runtime.Ranking = ranking.NewClient(ranking.Config{
 				BaseURL: profile.RankingAPI.BaseURL,
 				Region:  profile.RankingAPI.Region,

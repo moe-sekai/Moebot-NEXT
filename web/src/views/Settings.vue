@@ -213,6 +213,7 @@
                     </div>
                     <div class="settings-row-badges">
                       <UiBadge :variant="entry.form.sekai_api.enabled ? 'success' : 'outline'">SEKAI API {{ entry.form.sekai_api.enabled ? '启用' : '关闭' }}</UiBadge>
+                      <UiBadge :variant="entry.form.suite_api.enabled ? 'success' : 'outline'">Suite {{ entry.form.suite_api.enabled ? '启用' : '关闭' }}</UiBadge>
                       <UiBadge variant="secondary">Ranking {{ entry.form.ranking_api.region.toUpperCase() }}</UiBadge>
                     </div>
                   </div>
@@ -232,6 +233,30 @@
                       </select>
                     </label>
                     <label class="settings-field">
+                      <span>Suite API</span>
+                      <select v-model="entry.form.suite_api.enabled" class="ui-select">
+                        <option :value="true">启用</option>
+                        <option :value="false">关闭</option>
+                      </select>
+                    </label>
+                    <label class="settings-field settings-field--full">
+                      <span>Suite URL</span>
+                      <input v-model.trim="entry.form.suite_api.url" class="ui-input" placeholder="https://example.com/api/jp/user/{uid}/suite" />
+                    </label>
+                    <label class="settings-field">
+                      <span>Suite Token</span>
+                      <input v-model.trim="entry.form.suite_api.token" class="ui-input" type="password" placeholder="留空则保持现有 token" autocomplete="new-password" />
+                    </label>
+                    <label class="settings-field">
+                      <span>Suite 默认来源</span>
+                      <select v-model="entry.form.suite_api.default_mode" class="ui-select">
+                        <option value="latest">latest</option>
+                        <option value="local">local</option>
+                        <option value="haruki">haruki</option>
+                        <option value="moesekai">moesekai</option>
+                      </select>
+                    </label>
+                    <label class="settings-field">
                       <span>Ranking 区服</span>
                       <select v-model="entry.form.ranking_api.region" class="ui-select">
                         <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key.toUpperCase() }}</option>
@@ -239,7 +264,7 @@
                     </label>
                     <div class="settings-field settings-field--readonly">
                       <span>请求限制</span>
-                      <strong>{{ entry.form.sekai_api.timeout }}s · {{ entry.form.sekai_api.rate_limit }}/min</strong>
+                      <strong>SEKAI {{ entry.form.sekai_api.timeout }}s · {{ entry.form.sekai_api.rate_limit }}/min · Suite {{ entry.form.suite_api.timeout }}s</strong>
                     </div>
                   </div>
                 </div>
@@ -374,6 +399,13 @@ interface ServerProfileForm {
 		region: string;
 		timeout: number;
 		rate_limit: number;
+	};
+	suite_api: {
+		enabled: boolean;
+		url: string;
+		token: string;
+		timeout: number;
+		default_mode: string;
 	};
 	ranking_api: {
 		region: string;
@@ -598,6 +630,17 @@ const sekaiApiItems = computed<ConfigItem[]>(() => [
 		value: Boolean(config.value?.sekai_api.headers_configured),
 		badge: true,
 	},
+	{
+		label: "Suite API",
+		value: Boolean(config.value?.suite_api?.enabled),
+		badge: true,
+	},
+	{
+		label: "Suite URL 已配置",
+		value: Boolean(config.value?.suite_api?.url_configured),
+		badge: true,
+	},
+	{ label: "Suite 默认来源", value: config.value?.suite_api?.default_mode ?? "-" },
 	{ label: "Ranking 区服", value: config.value?.ranking_api?.region ?? "-" },
 ]);
 
@@ -801,6 +844,7 @@ function applyConfigToForm(data: PublicConfig) {
 						masterdata: data.masterdata,
 						assets: data.assets,
 						sekai_api: data.sekai_api,
+						suite_api: data.suite_api,
 						ranking_api: data.ranking_api,
 					}
 				: undefined);
@@ -905,6 +949,13 @@ function createServerForm(
 			timeout: server?.sekai_api?.timeout ?? 10,
 			rate_limit: server?.sekai_api?.rate_limit ?? 30,
 		},
+		suite_api: {
+			enabled: server?.suite_api?.enabled ?? false,
+			url: "",
+			token: "",
+			timeout: server?.suite_api?.timeout ?? 10,
+			default_mode: server?.suite_api?.default_mode || "latest",
+		},
 		ranking_api: {
 			region: server?.ranking_api?.region || region,
 			timeout: server?.ranking_api?.timeout ?? 10,
@@ -930,6 +981,13 @@ function buildServerPayload(region: string) {
 			region: profile.sekai_api.region,
 			timeout: Number(profile.sekai_api.timeout) || 10,
 			rate_limit: Number(profile.sekai_api.rate_limit) || 30,
+		},
+		suite_api: {
+			enabled: profile.suite_api.enabled,
+			url: profile.suite_api.url,
+			token: profile.suite_api.token,
+			timeout: Number(profile.suite_api.timeout) || 10,
+			default_mode: profile.suite_api.default_mode || "latest",
 		},
 		ranking_api: {
 			region: profile.ranking_api.region,

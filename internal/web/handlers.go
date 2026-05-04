@@ -248,6 +248,7 @@ type gameServerSettingsRequest struct {
 	Masterdata *masterdataSettingsRequest `json:"masterdata"`
 	Assets     *assetsSettingsRequest     `json:"assets"`
 	SekaiAPI   *sekaiAPISettingsRequest   `json:"sekai_api"`
+	SuiteAPI   *suiteAPISettingsRequest   `json:"suite_api"`
 	RankingAPI *rankingAPISettingsRequest `json:"ranking_api"`
 }
 
@@ -274,6 +275,14 @@ type sekaiAPISettingsRequest struct {
 	Region    string `json:"region"`
 	Timeout   int    `json:"timeout"`
 	RateLimit int    `json:"rate_limit"`
+}
+
+type suiteAPISettingsRequest struct {
+	Enabled     *bool  `json:"enabled"`
+	URL         string `json:"url"`
+	Token       string `json:"token"`
+	Timeout     int    `json:"timeout"`
+	DefaultMode string `json:"default_mode"`
 }
 
 type rankingAPISettingsRequest struct {
@@ -354,6 +363,12 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 			profile.Assets.CustomBaseURL = assetResolved.CustomBaseURL
 			if serverReq.SekaiAPI != nil {
 				applySekaiAPISettings(&profile.SekaiAPI, serverReq.SekaiAPI)
+			}
+			if serverReq.SuiteAPI != nil {
+				applySuiteAPISettings(&profile.SuiteAPI, serverReq.SuiteAPI)
+				if region == next.Server.Region {
+					applySuiteAPISettings(&next.SuiteAPI, serverReq.SuiteAPI)
+				}
 			}
 			if serverReq.RankingAPI != nil {
 				applyRankingAPISettings(&profile.RankingAPI, serverReq.RankingAPI)
@@ -528,6 +543,30 @@ func applySekaiAPISettings(target *config.SekaiAPIConfig, req *sekaiAPISettingsR
 	}
 }
 
+func applySuiteAPISettings(target *config.SuiteAPIConfig, req *suiteAPISettingsRequest) {
+	if req == nil || target == nil {
+		return
+	}
+	if req.Enabled != nil {
+		target.Enabled = *req.Enabled
+	}
+	if strings.TrimSpace(req.URL) != "" {
+		target.URL = strings.TrimSpace(req.URL)
+	}
+	if req.Token != "" {
+		target.Token = req.Token
+	}
+	if req.Timeout > 0 {
+		target.Timeout = req.Timeout
+	}
+	if req.DefaultMode != "" {
+		mode := config.NormalizeSuiteMode(req.DefaultMode)
+		if config.IsValidSuiteMode(mode) {
+			target.DefaultMode = mode
+		}
+	}
+}
+
 func applyRankingAPISettings(target *config.RankingAPIConfig, req *rankingAPISettingsRequest) {
 	if req == nil || target == nil {
 		return
@@ -654,6 +693,7 @@ func (s *Server) publicConfigMap() fiber.Map {
 			"region":              s.Config.SekaiAPI.Region,
 			"headers_configured":  len(s.Config.SekaiAPI.Headers) > 0,
 		},
+		"suite_api": publicSuiteAPIMap(s.Config.SuiteAPI),
 		"ranking_api": fiber.Map{
 			"base_url_configured": s.Config.RankingAPI.BaseURL != "",
 			"region":              s.Config.RankingAPI.Region,
@@ -767,6 +807,7 @@ func (s *Server) publicServerProfilesMap(defaultRegion string) fiber.Map {
 			"masterdata":  masterMap,
 			"assets":      assetMap,
 			"sekai_api":   publicSekaiAPIMap(profile.SekaiAPI),
+			"suite_api":   publicSuiteAPIMap(profile.SuiteAPI),
 			"ranking_api": publicRankingAPIMap(profile.RankingAPI),
 		}
 	}
@@ -781,6 +822,16 @@ func publicSekaiAPIMap(cfg config.SekaiAPIConfig) fiber.Map {
 		"headers_configured":  len(cfg.Headers) > 0,
 		"timeout":             cfg.Timeout,
 		"rate_limit":          cfg.RateLimit,
+	}
+}
+
+func publicSuiteAPIMap(cfg config.SuiteAPIConfig) fiber.Map {
+	return fiber.Map{
+		"enabled":        cfg.Enabled,
+		"url_configured": strings.TrimSpace(cfg.URL) != "",
+		"token_set":      strings.TrimSpace(cfg.Token) != "",
+		"timeout":        cfg.Timeout,
+		"default_mode":   config.NormalizeSuiteMode(cfg.DefaultMode),
 	}
 }
 

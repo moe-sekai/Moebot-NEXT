@@ -166,6 +166,14 @@ export interface PublicSekaiAPIConfig {
 	rate_limit?: number;
 }
 
+export interface PublicSuiteAPIConfig {
+	enabled: boolean;
+	url_configured: boolean;
+	token_set: boolean;
+	timeout: number;
+	default_mode: string;
+}
+
 export interface PublicRankingAPIConfig {
 	base_url_configured: boolean;
 	region: string;
@@ -183,6 +191,7 @@ export interface PublicServerProfile {
 	masterdata: PublicMasterdataConfig;
 	assets: PublicAssetsConfig;
 	sekai_api: PublicSekaiAPIConfig;
+	suite_api: PublicSuiteAPIConfig;
 	ranking_api: PublicRankingAPIConfig;
 }
 
@@ -214,6 +223,7 @@ export interface PublicConfig {
 	};
 	masterdata: PublicMasterdataConfig;
 	sekai_api: PublicSekaiAPIConfig;
+	suite_api?: PublicSuiteAPIConfig;
 	ranking_api?: PublicRankingAPIConfig;
 	renderer: {
 		base_url: string;
@@ -255,6 +265,14 @@ export interface UpdateSekaiAPIPayload {
 	rate_limit: number;
 }
 
+export interface UpdateSuiteAPIPayload {
+	enabled: boolean;
+	url: string;
+	token: string;
+	timeout: number;
+	default_mode: string;
+}
+
 export interface UpdateRankingAPIPayload {
 	region: string;
 	timeout: number;
@@ -265,6 +283,7 @@ export interface UpdateServerProfilePayload {
 	masterdata: UpdateMasterdataPayload;
 	assets: UpdateAssetsPayload;
 	sekai_api: UpdateSekaiAPIPayload;
+	suite_api: UpdateSuiteAPIPayload;
 	ranking_api: UpdateRankingAPIPayload;
 }
 

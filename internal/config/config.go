@@ -17,6 +17,7 @@ type Config struct {
 	Database    DatabaseConfig              `yaml:"database"`
 	Masterdata  MasterdataConfig            `yaml:"masterdata"`
 	SekaiAPI    SekaiAPIConfig              `yaml:"sekai_api"`
+	SuiteAPI    SuiteAPIConfig              `yaml:"suite_api"`
 	RankingAPI  RankingAPIConfig            `yaml:"ranking_api"`
 	Renderer    RendererConfig              `yaml:"renderer"`
 	Assets      AssetsConfig                `yaml:"assets"`
@@ -34,6 +35,7 @@ type GameServerConfig struct {
 	Enabled    *bool            `yaml:"enabled"`
 	Masterdata MasterdataConfig `yaml:"masterdata"`
 	SekaiAPI   SekaiAPIConfig   `yaml:"sekai_api"`
+	SuiteAPI   SuiteAPIConfig   `yaml:"suite_api"`
 	RankingAPI RankingAPIConfig `yaml:"ranking_api"`
 	Assets     AssetsConfig     `yaml:"assets"`
 }
@@ -94,6 +96,14 @@ type SekaiAPIConfig struct {
 	Headers   map[string]string `yaml:"headers"`    // optional API request headers
 	Timeout   int               `yaml:"timeout"`    // seconds
 	RateLimit int               `yaml:"rate_limit"` // requests per minute
+}
+
+type SuiteAPIConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	URL         string `yaml:"url"`
+	Token       string `yaml:"token"`
+	Timeout     int    `yaml:"timeout"`
+	DefaultMode string `yaml:"default_mode"`
 }
 
 type RankingAPIConfig struct {
@@ -175,6 +185,10 @@ func DefaultConfig() *Config {
 			Headers:   map[string]string{},
 			Timeout:   10,
 			RateLimit: 30,
+		},
+		SuiteAPI: SuiteAPIConfig{
+			Timeout:     10,
+			DefaultMode: SuiteModeLatest,
 		},
 		RankingAPI: RankingAPIConfig{
 			BaseURL: "https://rks.exmeaning.com",

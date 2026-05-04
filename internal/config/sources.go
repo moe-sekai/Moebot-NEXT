@@ -14,6 +14,11 @@ const (
 	RegionKR = "kr"
 	RegionEN = "en"
 
+	SuiteModeLatest   = "latest"
+	SuiteModeLocal    = "local"
+	SuiteModeHaruki   = "haruki"
+	SuiteModeMoeSekai = "moesekai"
+
 	MasterdataSourceMoeSekai = "moesekai"
 	MasterdataSourceHaruki   = "haruki"
 	MasterdataSource8823     = "8823"
@@ -221,6 +226,30 @@ func NormalizeAssetSource(source string) string {
 		return AssetSourceCustom
 	default:
 		return strings.ToLower(strings.TrimSpace(source))
+	}
+}
+
+func NormalizeSuiteMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "latest", "最新":
+		return SuiteModeLatest
+	case "local", "本地":
+		return SuiteModeLocal
+	case "haruki":
+		return SuiteModeHaruki
+	case "moesekai", "moe-sekai", "moe_sekai", "moe":
+		return SuiteModeMoeSekai
+	default:
+		return strings.ToLower(strings.TrimSpace(mode))
+	}
+}
+
+func IsValidSuiteMode(mode string) bool {
+	switch NormalizeSuiteMode(mode) {
+	case SuiteModeLatest, SuiteModeLocal, SuiteModeHaruki, SuiteModeMoeSekai:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -639,6 +668,7 @@ func NormalizeConfig(cfg *Config) {
 		jp.Masterdata = mergeMasterdataProfile(jp.Masterdata, cfg.Masterdata, RegionJP)
 		jp.Assets = mergeAssetsProfile(jp.Assets, cfg.Assets, RegionJP)
 		jp.SekaiAPI = mergeSekaiAPIProfile(jp.SekaiAPI, cfg.SekaiAPI, RegionJP)
+		jp.SuiteAPI = mergeSuiteAPIProfile(jp.SuiteAPI, cfg.SuiteAPI)
 		jp.RankingAPI = mergeRankingAPIProfile(jp.RankingAPI, cfg.RankingAPI, RegionJP)
 		cfg.GameServers[RegionJP] = jp
 	}
@@ -680,6 +710,7 @@ func ResolveGameServerProfile(cfg *Config, region string) GameServerConfig {
 			profile.Masterdata = mergeMasterdataProfile(profile.Masterdata, cfg.Masterdata, region)
 			profile.Assets = mergeAssetsProfile(profile.Assets, cfg.Assets, region)
 			profile.SekaiAPI = mergeSekaiAPIProfile(profile.SekaiAPI, cfg.SekaiAPI, region)
+			profile.SuiteAPI = mergeSuiteAPIProfile(profile.SuiteAPI, cfg.SuiteAPI)
 			profile.RankingAPI = mergeRankingAPIProfile(profile.RankingAPI, cfg.RankingAPI, region)
 		}
 	}
@@ -701,6 +732,11 @@ func defaultGameServerProfile(region string, enabled bool) GameServerConfig {
 			Headers:   map[string]string{},
 			Timeout:   10,
 			RateLimit: 30,
+		},
+		SuiteAPI: SuiteAPIConfig{
+			Enabled:     false,
+			Timeout:     10,
+			DefaultMode: SuiteModeLatest,
 		},
 		RankingAPI: RankingAPIConfig{
 			BaseURL: "https://rks.exmeaning.com",
@@ -738,7 +774,7 @@ func hasGameServerOverrides(cfg *Config) bool {
 		return false
 	}
 	for _, profile := range cfg.GameServers {
-		if profile.Enabled != nil || profile.Masterdata.Source != "" || profile.Masterdata.Region != "" || profile.Masterdata.URL != "" || profile.Masterdata.LocalPath != "" || profile.Assets.Source != "" || profile.Assets.Region != "" || profile.Assets.BaseURL != "" || profile.Assets.MusicAliasURL != "" || profile.SekaiAPI.Region != "" || profile.SekaiAPI.BaseURL != "" || profile.RankingAPI.Region != "" || profile.RankingAPI.BaseURL != "" {
+		if profile.Enabled != nil || profile.Masterdata.Source != "" || profile.Masterdata.Region != "" || profile.Masterdata.URL != "" || profile.Masterdata.LocalPath != "" || profile.Assets.Source != "" || profile.Assets.Region != "" || profile.Assets.BaseURL != "" || profile.Assets.MusicAliasURL != "" || profile.SekaiAPI.Region != "" || profile.SekaiAPI.BaseURL != "" || profile.SuiteAPI.URL != "" || profile.SuiteAPI.Enabled || profile.RankingAPI.Region != "" || profile.RankingAPI.BaseURL != "" {
 			return true
 		}
 	}
@@ -752,6 +788,7 @@ func mergeGameServerProfile(base GameServerConfig, override GameServerConfig, re
 	base.Masterdata = mergeMasterdataProfile(base.Masterdata, override.Masterdata, region)
 	base.Assets = mergeAssetsProfile(base.Assets, override.Assets, region)
 	base.SekaiAPI = mergeSekaiAPIProfile(base.SekaiAPI, override.SekaiAPI, region)
+	base.SuiteAPI = mergeSuiteAPIProfile(base.SuiteAPI, override.SuiteAPI)
 	base.RankingAPI = mergeRankingAPIProfile(base.RankingAPI, override.RankingAPI, region)
 	return base
 }
@@ -839,6 +876,31 @@ func mergeSekaiAPIProfile(base SekaiAPIConfig, override SekaiAPIConfig, region s
 	}
 	if override.RateLimit != 0 {
 		base.RateLimit = override.RateLimit
+	}
+	return base
+}
+
+func mergeSuiteAPIProfile(base SuiteAPIConfig, override SuiteAPIConfig) SuiteAPIConfig {
+	if override.Enabled {
+		base.Enabled = true
+	}
+	if override.URL != "" {
+		base.URL = strings.TrimSpace(override.URL)
+	}
+	if override.Token != "" {
+		base.Token = override.Token
+	}
+	if override.Timeout != 0 {
+		base.Timeout = override.Timeout
+	}
+	if override.DefaultMode != "" {
+		base.DefaultMode = NormalizeSuiteMode(override.DefaultMode)
+	}
+	if base.Timeout <= 0 {
+		base.Timeout = 10
+	}
+	if base.DefaultMode == "" {
+		base.DefaultMode = SuiteModeLatest
 	}
 	return base
 }

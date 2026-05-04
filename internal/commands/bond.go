@@ -1,0 +1,143 @@
+package commands
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"moebot-next/internal/bot"
+	"moebot-next/internal/config"
+	"moebot-next/internal/suite"
+
+	zero "github.com/wdvxdr1123/ZeroBot"
+	"github.com/wdvxdr1123/ZeroBot/message"
+	"gorm.io/gorm"
+)
+
+const bondDefaultLimit = 10
+
+type bondProfile struct {
+	suite.BaseProfile
+	UserGamedata suite.UserGamedata `json:"userGamedata"`
+	UserBonds    []userBond         `json:"userBonds"`
+}
+
+type userBond struct {
+	BondsGroupID     int `json:"bondsGroupId"`
+	CharacterID1     int `json:"characterId1"`
+	CharacterID2     int `json:"characterId2"`
+	GameCharacterID1 int `json:"gameCharacterId1"`
+	GameCharacterID2 int `json:"gameCharacterId2"`
+	Rank             int `json:"rank"`
+	Exp              int `json:"exp"`
+}
+
+func bondFields() []string {
+	return suite.Fields(suite.FieldUserBonds)
+}
+
+func RegisterBond(deps *Deps) {
+	for _, cmd := range parserCommands(deps, "羁绊") {
+		commandName := cmd.Name
+		forcedRegion := cmd.Region
+		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+			start := time.Now()
+			runtime, user := runtimeForCommand(deps, ctx, forcedRegion)
+			if runtime == nil || !runtime.Enabled {
+				ctx.SendChain(message.Text(runtimeUnavailableText(runtime)))
+				return
+			}
+			if forcedRegion != "" {
+				var err error
+				user, err = deps.DB.GetUserByPlatformRegion("onebot", userIDFromCtx(ctx), runtime.Region)
+				if err != nil && err != gorm.ErrRecordNotFound {
+					ctx.SendChain(message.Text("数据库错误，请稍后重试"))
+					return
+				}
+			}
+			if user == nil || user.GameID == "" {
+				ctx.SendChain(message.Text(fmt.Sprintf("你还没有绑定%s游戏账号~\n使用 /%s绑定 [游戏ID] 来绑定", runtime.Label, runtime.Region)))
+				return
+			}
+			if runtime.Suite == nil || !runtime.Suite.Enabled() {
+				ctx.SendChain(message.Text(fmt.Sprintf("暂不支持查询%s的抓包数据", runtime.Label)))
+				return
+			}
+
+			setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region, runtime.Profile.SuiteAPI.DefaultMode)
+			if setting.Hidden {
+				ctx.SendChain(message.Text(fmt.Sprintf("你已隐藏%s抓包信息，发送 /%s展示抓包 可重新展示", runtime.Label, runtime.Region)))
+				return
+			}
+
+			var profile bondProfile
+			if err := runtime.Suite.GetUserData(user.GameID, setting.Mode, bondFields(), &profile); err != nil {
+				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%sSuite抓包数据失败，发送 /抓包 获取帮助\n%s", runtime.Label, err.Error())))
+				return
+			}
+			ctx.SendChain(message.Text(formatBondText(runtime.Region, profile, bondDefaultLimit)))
+			bot.RecordCommandRegion(deps.DB, "羁绊", runtime.Region, ctx, start)
+		})
+	}
+}
+
+func formatBondText(region string, profile bondProfile, limit int) string {
+	name := profile.UserGamedata.Name
+	if name == "" {
+		name = "未知玩家"
+	}
+	source := suiteSourceText(profile.BaseProfile)
+	updateText := suiteUpdateText(profile.UploadTime)
+
+	bonds := make([]userBond, 0, len(profile.UserBonds))
+	for _, bond := range profile.UserBonds {
+		cid1, cid2 := bondCharacterIDs(bond)
+		if cid1 <= 0 || cid2 <= 0 {
+			continue
+		}
+		bonds = append(bonds, bond)
+	}
+	sort.SliceStable(bonds, func(i, j int) bool {
+		if bonds[i].Rank == bonds[j].Rank {
+			return bonds[i].Exp > bonds[j].Exp
+		}
+		return bonds[i].Rank > bonds[j].Rank
+	})
+	if limit <= 0 || limit > len(bonds) {
+		limit = len(bonds)
+	}
+
+	lines := []string{
+		fmt.Sprintf("%s 羁绊", strings.ToUpper(config.NormalizeRegion(region))),
+		fmt.Sprintf("玩家: %s", name),
+		fmt.Sprintf("更新时间: %s", updateText),
+		fmt.Sprintf("数据来源: %s", source),
+	}
+	if len(bonds) == 0 {
+		lines = append(lines, "暂无羁绊数据")
+		return strings.Join(lines, "\n")
+	}
+	lines = append(lines, "---")
+	for i := 0; i < limit; i++ {
+		bond := bonds[i]
+		cid1, cid2 := bondCharacterIDs(bond)
+		lines = append(lines, fmt.Sprintf("%d. %s × %s Lv.%d EXP %d", i+1, characterDisplayName(cid1), characterDisplayName(cid2), bond.Rank, bond.Exp))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func bondCharacterIDs(bond userBond) (int, int) {
+	cid1, cid2 := bond.CharacterID1, bond.CharacterID2
+	if cid1 == 0 {
+		cid1 = bond.GameCharacterID1
+	}
+	if cid2 == 0 {
+		cid2 = bond.GameCharacterID2
+	}
+	if (cid1 == 0 || cid2 == 0) && bond.BondsGroupID > 0 {
+		cid1 = bond.BondsGroupID / 100 % 100
+		cid2 = bond.BondsGroupID % 100
+	}
+	return cid1, cid2
+}

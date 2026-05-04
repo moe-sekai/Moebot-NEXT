@@ -47,6 +47,15 @@ sekai_api:
   timeout: 10
   rate_limit: 30
 
+suite_api:
+  enabled: false
+  # Suite 抓包数据接口，{uid} 会替换为绑定的游戏 ID。
+  url: "https://example.com/api/jp/user/{uid}/suite"
+  token: ""
+  timeout: 10
+  # 可选：latest / local / haruki / moesekai
+  default_mode: "latest"
+
 ranking_api:
   # 公开实时榜 API；普通榜/查房/WL 支持 cn / jp / tw / kr / en。
   # 预测 API 固定使用 https://rk.exmeaning.com/public，当前仅支持 cn / jp。
@@ -101,6 +110,12 @@ game_servers:
       headers: {}
       timeout: 10
       rate_limit: 30
+    suite_api:
+      enabled: false
+      url: "https://example.com/api/jp/user/{uid}/suite"
+      token: ""
+      timeout: 10
+      default_mode: "latest"
     ranking_api:
       base_url: "https://rks.exmeaning.com"
       region: "jp"
@@ -125,6 +140,12 @@ game_servers:
       headers: {}
       timeout: 10
       rate_limit: 30
+    suite_api:
+      enabled: false
+      url: "https://example.com/api/cn/user/{uid}/suite"
+      token: ""
+      timeout: 10
+      default_mode: "latest"
     ranking_api:
       base_url: "https://rks.exmeaning.com"
       region: "cn"
