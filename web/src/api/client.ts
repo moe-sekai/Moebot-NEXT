@@ -19,7 +19,6 @@ import type {
 	RendererHealth,
 	RendererCardThumbnailCacheStatus,
 	RendererPreviewImageResult,
-	RendererPreviewsResponse,
 	RuntimeStatus,
 	SearchResponse,
 	SearchType,
@@ -213,65 +212,6 @@ export async function searchMasterdata(type: SearchType, q: string) {
 		params: { q },
 	});
 	return data;
-}
-
-export async function getRendererPreviews() {
-	const { data } =
-		await api.get<RendererPreviewsResponse>("/renderer/previews");
-	return data;
-}
-
-export function getRendererPreviewImageUrl(
-	id: string,
-	width?: number,
-	height?: number,
-) {
-	const params = new URLSearchParams({ ts: String(Date.now()) });
-	if (width) params.set("width", String(width));
-	if (height) params.set("height", String(height));
-	return `/api/renderer/previews/${encodeURIComponent(id)}/image?${params.toString()}`;
-}
-
-export async function renderRendererPreview(
-	id: string,
-	width?: number,
-	height?: number,
-): Promise<RendererPreviewImageResult> {
-	const startedAt = performance.now();
-	const response = await api.get<Blob>(
-		`/renderer/previews/${encodeURIComponent(id)}/image`,
-		{
-			params: {
-				...(width ? { width } : {}),
-				...(height ? { height } : {}),
-				ts: Date.now(),
-			},
-			responseType: "blob",
-		},
-	);
-	const networkMs = Math.round(performance.now() - startedAt);
-	const blob = response.data;
-	return {
-		blob,
-		url: URL.createObjectURL(blob),
-			timings: {
-			fonts_ms: parseHeaderNumber(response.headers["x-render-fonts-ms"]),
-			images_ms: parseHeaderNumber(response.headers["x-render-images-ms"]),
-			satori_ms: parseHeaderNumber(response.headers["x-render-satori-ms"]),
-			resvg_ms: parseHeaderNumber(response.headers["x-render-resvg-ms"]),
-			total_ms: parseHeaderNumber(response.headers["x-render-total-ms"]),
-			proxy_ms: parseHeaderNumber(response.headers["x-render-proxy-ms"]),
-			network_ms: networkMs,
-			size_bytes:
-				parseHeaderNumber(response.headers["x-render-size-bytes"]) ?? blob.size,
-			image_total: parseHeaderNumber(response.headers["x-render-image-total"]),
-			image_remote: parseHeaderNumber(response.headers["x-render-image-remote"]),
-			image_cache_hits: parseHeaderNumber(response.headers["x-render-image-cache-hits"]),
-			image_cache_misses: parseHeaderNumber(response.headers["x-render-image-cache-misses"]),
-			image_cache_errors: parseHeaderNumber(response.headers["x-render-image-cache-errors"]),
-		},
-
-	};
 }
 
 export async function getGroups(page = 1, limit = 20) {

@@ -9,6 +9,8 @@ export { EventInfo } from "./EventInfo";
 export { EventList } from "./EventList";
 export { RankingList } from "./RankingList";
 export { ChurnRankingList } from "./ChurnRankingList";
+export { ForecastRankingList } from "./ForecastRankingList";
+export { WaterTable } from "./WaterTable";
 export { ProfileCard } from "./ProfileCard";
 export { HelpCard } from "./HelpCard";
 export { GachaInfo } from "./GachaInfo";

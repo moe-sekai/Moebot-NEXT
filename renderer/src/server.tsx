@@ -6,6 +6,7 @@ import {
 	CardList,
 	ChartDetail,
 	ChurnRankingList,
+	ForecastRankingList,
 	EventInfo,
 	EventList,
 	GachaInfo,
@@ -17,6 +18,7 @@ import {
 	ProfileCard,
 	RankingList,
 	VirtualLiveList,
+	WaterTable,
 } from "./templates";
 
 interface RenderRequest {
@@ -202,6 +204,39 @@ function normalizeRankingList(data: any) {
 		eventName: data.eventName ?? data.EventName,
 		updatedAt: data.updatedAt ?? data.UpdatedAt,
 		assetSource: data.assetSource ?? data.AssetSource,
+		region: data.region ?? data.Region,
+		regionLabel: data.regionLabel ?? data.RegionLabel,
+		boardType: data.boardType ?? data.BoardType,
+		targetId: data.targetId ?? data.TargetID,
+	};
+}
+
+function normalizeWaterTable(data: any) {
+	return {
+		title: data.title ?? data.Title ?? "查水表",
+		subtitle: data.subtitle ?? data.Subtitle,
+		entry: data.entry ?? data.Entry ?? {},
+		hourlyChurn: data.hourlyChurn ?? data.HourlyChurn ?? [],
+		parkingPeriods: data.parkingPeriods ?? data.Parking ?? [],
+		eventId: data.eventId ?? data.EventID,
+		updatedAt: data.updatedAt ?? data.UpdatedAt,
+		regionLabel: data.regionLabel ?? data.RegionLabel,
+		boardType: data.boardType ?? data.BoardType,
+		targetId: data.targetId ?? data.TargetID,
+	};
+}
+
+function normalizeForecastRanking(data: any) {
+	return {
+		title: data.title ?? data.Title ?? "榜线预测",
+		subtitle: data.subtitle ?? data.Subtitle,
+		eventId: data.eventId ?? data.EventID,
+		eventName: data.eventName ?? data.EventName,
+		region: data.region ?? data.Region,
+		regionLabel: data.regionLabel ?? data.RegionLabel,
+		status: data.status ?? data.Status,
+		updatedAt: data.updatedAt ?? data.UpdatedAt,
+		items: data.items ?? data.Items ?? [],
 	};
 }
 
@@ -444,6 +479,12 @@ function createElement(req: RenderRequest) {
 		case "churn_ranking_list":
 		case "churn_ranking":
 			return <ChurnRankingList {...normalizeRankingList(data)} />;
+		case "water_table":
+		case "csb":
+			return <WaterTable {...normalizeWaterTable(data)} />;
+		case "forecast_ranking_list":
+		case "forecast_ranking":
+			return <ForecastRankingList {...normalizeForecastRanking(data)} />;
 		default:
 			return <HelpCard {...defaultHelpData()} />;
 	}

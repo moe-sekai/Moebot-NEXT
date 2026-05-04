@@ -3,13 +3,15 @@ import { BaseCard } from './base'
 import { theme } from '../styles/theme'
 import { SekaiCardThumbnail } from './SekaiCardThumbnail'
 import type { RankingListProps } from './RankingList'
+import { ScoreDeltaText, ScoreText } from './ScoreText'
 
-export function ChurnRankingList({ title, subtitle, rankings, eventId, eventName, assetSource = 'main-jp' }: RankingListProps) {
-  const shown = rankings.slice(0, 10)
+export function ChurnRankingList({ title, subtitle, rankings, eventId, eventName, updatedAt, assetSource = 'main-jp', regionLabel, boardType, targetId }: RankingListProps) {
+  const shown = rankings
+  const autoSubtitle = subtitle ?? [eventName ?? '实时查房', eventId ? `Event #${eventId}` : undefined, boardType === 'worldlink' && targetId ? `WL 角色 ${targetId}` : undefined, regionLabel, updatedAt ? `更新 ${fmtTime(updatedAt)}` : undefined].filter(Boolean).join(' · ')
   return (
     <BaseCard
       title={title}
-      subtitle={subtitle ?? `${eventName ?? '实时查房'}${eventId ? ` · Event #${eventId}` : ''}`}
+      subtitle={autoSubtitle}
       accentColor={theme.colors.accent}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
@@ -76,13 +78,9 @@ function ChurnRow({ entry, assetSource }: { entry: RankingListProps['rankings'][
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, width: 160 }}>
-        <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: 900 }}>
-          {entry.score.toLocaleString()}P
-        </span>
+        <ScoreText value={entry.score} fontSize={theme.fontSize.lg} />
         {entry.scoreDelta ? (
-          <span style={{ display: 'flex', color: deltaColor, fontSize: theme.fontSize.sm, fontWeight: 900 }}>
-            {entry.scoreDelta > 0 ? '+' : ''}{entry.scoreDelta.toLocaleString()}
-          </span>
+          <ScoreDeltaText value={entry.scoreDelta} color={deltaColor} fontSize={theme.fontSize.sm} />
         ) : (
           <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: theme.fontSize.xs }}>—</span>
         )}
@@ -93,11 +91,12 @@ function ChurnRow({ entry, assetSource }: { entry: RankingListProps['rankings'][
 
 function RankingAvatar({ entry, size, assetSource }: { entry: RankingListProps['rankings'][number]; size: number; assetSource: AssetSourceType | string }) {
   const card = entry.leaderCard
+  const avatarUrl = entry.avatarUrl ?? (entry.leaderCharacterId ? getCharacterIconUrl(entry.leaderCharacterId) : undefined)
   if (card) {
     const rarity = card.cardRarityType ?? card.rarity ?? 'rarity_1'
     const attr = card.attr ?? 'cute'
     const isTrained = card.defaultImage === 'special_training' || Boolean(card.isTrained)
-    const thumbnailUrl = card.thumbnailUrl ?? (card.assetbundleName ? getCardThumbnailUrl(card.assetbundleName, false, assetSource, 'png') : undefined)
+    const thumbnailUrl = card.thumbnailUrl ?? avatarUrl ?? (card.assetbundleName ? getCardThumbnailUrl(card.assetbundleName, false, assetSource, 'png') : undefined)
     const trainedThumbnailUrl = card.trainedThumbnailUrl ?? (card.assetbundleName ? getCardThumbnailUrl(card.assetbundleName, true, assetSource, 'png') : undefined)
     return (
       <SekaiCardThumbnail
@@ -112,7 +111,6 @@ function RankingAvatar({ entry, size, assetSource }: { entry: RankingListProps['
     )
   }
 
-  const avatarUrl = entry.avatarUrl ?? (entry.leaderCharacterId ? getCharacterIconUrl(entry.leaderCharacterId) : undefined)
   return (
     <div
       style={{
@@ -130,6 +128,12 @@ function RankingAvatar({ entry, size, assetSource }: { entry: RankingListProps['
       {avatarUrl ? <img src={avatarUrl} width={size} height={size} style={{ objectFit: 'cover' }} /> : <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: theme.fontSize.sm, fontWeight: 900 }}>#{entry.rank}</span>}
     </div>
   )
+}
+
+function fmtTime(value: number | string) {
+  const date = new Date(typeof value === 'number' && value < 1_000_000_000_000 ? value * 1000 : value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
 function Badge({ text, color }: { text: string; color: string }) {

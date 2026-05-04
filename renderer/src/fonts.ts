@@ -9,9 +9,9 @@ export interface FontData {
 }
 
 const FONTS_DIR = join(process.cwd(), 'assets', 'fonts')
-// Satori's OpenType parser supports TTF/OTF/WOFF but currently rejects WOFF2
-// with `Unsupported OpenType signature wOF2`, so keep WOFF2 files available in
-// assets/fonts but skip them at runtime unless they are converted beforehand.
+// Satori currently accepts TTF/OTF/WOFF font data, but not WOFF2.
+// WOFF2 files are allowed to live in assets/fonts for humans, but must be
+// skipped at runtime or Satori will fail with `Unsupported OpenType signature wOF2`.
 const SUPPORTED_FONT_EXTENSIONS = new Set(['.otf', '.ttf', '.woff'])
 const UNSUPPORTED_FONT_EXTENSIONS = new Set(['.woff2'])
 
@@ -45,7 +45,7 @@ async function loadLocalFonts(): Promise<FontData[]> {
       .map(entry => entry.name)
       .sort((a, b) => a.localeCompare(b))
     if (unsupportedFiles.length > 0) {
-      console.warn(`[renderer] Skipping unsupported WOFF2 font(s): ${unsupportedFiles.join(', ')}`)
+      console.warn(`[renderer] Skipping unsupported WOFF2 font(s) because Satori only supports TTF/OTF/WOFF: ${unsupportedFiles.join(', ')}`)
     }
 
     const files = entries
@@ -133,6 +133,7 @@ function fileExtension(fileName: string): string {
 
 function inferFontFamily(fileName: string): string {
   const normalized = fileName.toLowerCase()
+  if (normalized.includes('moebotscoresans')) return 'Moebot Score Sans'
   if (normalized.includes('noto')) return 'Noto Sans CJK SC'
   if (normalized.includes('plex')) return 'IBM Plex Sans'
   if (normalized.includes('yuruka')) return 'Yuruka Std'
@@ -155,10 +156,11 @@ function inferFontWeight(fileName: string): number {
 
 function scoreFontFile(fileName: string): number {
   const normalized = fileName.toLowerCase()
-  if (normalized.includes('noto')) return 0
-  if (normalized.includes('plex')) return 1
-  if (normalized.includes('maoken')) return 2
-  if (normalized.includes('fangtang') || normalized.includes('shangshou')) return 3
-  if (normalized.includes('yuruka')) return 4
+  if (normalized.includes('moebotscoresans')) return 0
+  if (normalized.includes('noto')) return 1
+  if (normalized.includes('plex')) return 2
+  if (normalized.includes('maoken')) return 3
+  if (normalized.includes('fangtang') || normalized.includes('shangshou')) return 4
+  if (normalized.includes('yuruka')) return 5
   return 10
 }

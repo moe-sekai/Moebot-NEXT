@@ -69,6 +69,39 @@ func TestSearchAndBuildCardListParsesLunabotStyleFilters(t *testing.T) {
 	}
 }
 
+func TestParseInlineRankingTargetArgument(t *testing.T) {
+	service := NewService("/", nil, nil, nil, nil)
+	parsed := service.Parse("/cnsk1-10")
+	if parsed.Definition == nil || parsed.Definition.ID != "ranking-target" {
+		t.Fatalf("definition = %+v", parsed.Definition)
+	}
+	if parsed.CommandText != "cnsk" || parsed.Argument != "1-10" || parsed.Region != config.RegionCN {
+		t.Fatalf("parsed command = %q argument = %q region = %q", parsed.CommandText, parsed.Argument, parsed.Region)
+	}
+}
+
+func TestParseInlineForecastDoesNotMatchSk(t *testing.T) {
+	service := NewService("/", nil, nil, nil, nil)
+	parsed := service.Parse("/skp165")
+	if parsed.Definition == nil || parsed.Definition.ID != "forecast-ranking" {
+		t.Fatalf("definition = %+v", parsed.Definition)
+	}
+	if parsed.CommandText != "skp" || parsed.Argument != "165" {
+		t.Fatalf("parsed command = %q argument = %q", parsed.CommandText, parsed.Argument)
+	}
+}
+
+func TestParseInlineSkLineDoesNotMatchSk(t *testing.T) {
+	service := NewService("/", nil, nil, nil, nil)
+	parsed := service.Parse("/sk线100")
+	if parsed.Definition == nil || parsed.Definition.ID != "ranking-list" {
+		t.Fatalf("definition = %+v", parsed.Definition)
+	}
+	if parsed.CommandText != "sk线" || parsed.Argument != "100" {
+		t.Fatalf("parsed command = %q argument = %q", parsed.CommandText, parsed.Argument)
+	}
+}
+
 func TestValidateAliasesRejectsProtectedAndShortAlias(t *testing.T) {
 	if _, _, err := ValidateAliases(map[string][]string{"查卡": []string{"card"}}); err == nil {
 		t.Fatal("expected protected preset alias conflict")

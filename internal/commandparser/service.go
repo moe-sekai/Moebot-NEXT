@@ -3,14 +3,17 @@ package commandparser
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"moebot-next/internal/assets"
 	"moebot-next/internal/cardquery"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/ranking"
 	"moebot-next/internal/renderer"
 	"moebot-next/internal/servers"
 )
@@ -136,9 +139,18 @@ func (s *Service) Parse(input string) ParseResult {
 
 	match, ok := s.matchCommand(commandText)
 	if !ok {
-		result.Message = fmt.Sprintf("未匹配到指令「%s」。", commandText)
-		result.Suggestions = s.suggestionsFor(commandText)
-		return result
+		if inlineCommand, inlineArgument, inlineMatch, inlineOK := s.matchInlineArgumentCommand(body); inlineOK {
+			commandText = inlineCommand
+			argument = inlineArgument
+			match = inlineMatch
+			ok = true
+			result.CommandText = commandText
+			result.Argument = argument
+		} else {
+			result.Message = fmt.Sprintf("未匹配到指令「%s」。", commandText)
+			result.Suggestions = s.suggestionsFor(commandText)
+			return result
+		}
 	}
 
 	def := match.Definition
@@ -160,9 +172,18 @@ func (s *Service) Parse(input string) ParseResult {
 		return result
 	}
 
+	if payloadResult, ok := s.buildRealtimePayload(def, result.Region, argument); ok {
+		result.Results = payloadResult.Results
+		result.Selected = payloadResult.Selected
+		result.CanRender = payloadResult.Selected != nil && payloadResult.Selected.Payload != nil
+		result.Message = payloadResult.Message
+		result.Warnings = append(result.Warnings, payloadResult.Warnings...)
+		return result
+	}
+
 	if def.RenderMode == RenderModePreview || def.SearchType == SearchTypeNone {
 		result.CanRender = def.PreviewID != ""
-		result.Message = "该功能会使用 Satori 静态样例预览；聊天端会按真实上下文执行。"
+		result.Message = "该功能暂未接入实时解析数据，将使用 Satori 静态样例预览；聊天端会按真实上下文执行。"
 		return result
 	}
 
@@ -232,6 +253,15 @@ func (s *Service) matchCommand(commandText string) (commandMatch, bool) {
 		return match, true
 	}
 	for _, region := range config.RegionKeys() {
+		if strings.HasPrefix(commandText, region+"wl") && len(commandText) > len(region)+len("wl") {
+			base := strings.TrimPrefix(commandText, region+"wl")
+			if match, ok := s.matchBase(base, region); ok && isWorldLinkInlineDefinitionID(match.Definition.ID) {
+				match.Name = commandText
+				match.Base = "wl" + match.Base
+				match.Region = region
+				return match, true
+			}
+		}
 		if strings.HasPrefix(commandText, region) && len(commandText) > len(region) {
 			base := strings.TrimPrefix(commandText, region)
 			if match, ok := s.matchBase(base, region); ok {
@@ -264,6 +294,145 @@ func (s *Service) matchBase(base string, region string) (commandMatch, bool) {
 		}
 	}
 	return commandMatch{}, false
+}
+
+func (s *Service) matchInlineArgumentCommand(body string) (string, string, commandMatch, bool) {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return "", "", commandMatch{}, false
+	}
+	for _, candidate := range s.inlineArgumentCommandCandidates() {
+		if !hasCommandPrefixFold(body, candidate.Name) {
+			continue
+		}
+		rest := strings.TrimSpace(body[len(candidate.Name):])
+		if !isInlineArgumentAllowed(candidate.Definition.ID, rest) {
+			continue
+		}
+		match := candidate.Match
+		match.Name = body[:len(candidate.Name)]
+		return match.Name, rest, match, true
+	}
+	return "", "", commandMatch{}, false
+}
+
+type inlineArgumentCommandCandidate struct {
+	Name       string
+	Definition Definition
+	Match      commandMatch
+}
+
+func (s *Service) inlineArgumentCommandCandidates() []inlineArgumentCommandCandidate {
+	candidates := []inlineArgumentCommandCandidate{}
+	add := func(name string, def Definition, source string, region string, base string) {
+		name = strings.TrimSpace(name)
+		if name == "" || !isInlineArgumentDefinitionID(def.ID) {
+			return
+		}
+		match := commandMatch{
+			Name:       name,
+			Base:       base,
+			Region:     region,
+			Source:     source,
+			Definition: def,
+		}
+		candidates = append(candidates, inlineArgumentCommandCandidate{Name: name, Definition: def, Match: match})
+	}
+	for _, def := range s.Definitions {
+		for _, command := range def.Commands {
+			add(command, def, MatchPrimary, "", command)
+			for _, region := range config.RegionKeys() {
+				add(region+command, def, MatchPrimary, region, command)
+			}
+		}
+		for _, alias := range def.PresetAliases {
+			add(alias, def, MatchPresetAlias, "", alias)
+			for _, region := range config.RegionKeys() {
+				add(region+alias, def, MatchPresetAlias, region, alias)
+			}
+		}
+		for _, alias := range def.CustomAliases {
+			add(alias, def, MatchCustomAlias, "", alias)
+			for _, region := range config.RegionKeys() {
+				add(region+alias, def, MatchCustomAlias, region, alias)
+			}
+		}
+	}
+	return sortInlineArgumentCommandCandidates(candidates)
+}
+
+func sortInlineArgumentCommandCandidates(candidates []inlineArgumentCommandCandidate) []inlineArgumentCommandCandidate {
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if len(candidates[i].Name) != len(candidates[j].Name) {
+			return len(candidates[i].Name) > len(candidates[j].Name)
+		}
+		priorityI := inlineArgumentDefinitionPriority(candidates[i].Definition.ID)
+		priorityJ := inlineArgumentDefinitionPriority(candidates[j].Definition.ID)
+		if priorityI != priorityJ {
+			return priorityI < priorityJ
+		}
+		return strings.ToLower(candidates[i].Name) < strings.ToLower(candidates[j].Name)
+	})
+	return candidates
+}
+
+func inlineArgumentDefinitionPriority(id string) int {
+	switch id {
+	case "ranking-list", "forecast-ranking":
+		return 0
+	case "water-table", "churn-ranking":
+		return 1
+	case "ranking-target":
+		return 2
+	default:
+		return 10
+	}
+}
+
+func isInlineArgumentDefinitionID(id string) bool {
+	switch id {
+	case "ranking-list", "ranking-target", "churn-ranking", "water-table", "forecast-ranking":
+		return true
+	default:
+		return false
+	}
+}
+
+func isWorldLinkInlineDefinitionID(id string) bool {
+	switch id {
+	case "ranking-list", "ranking-target", "churn-ranking", "water-table":
+		return true
+	default:
+		return false
+	}
+}
+
+func isInlineArgumentAllowed(definitionID string, rest string) bool {
+	rest = strings.TrimSpace(rest)
+	if rest == "" {
+		return true
+	}
+	switch definitionID {
+	case "ranking-list", "ranking-target", "churn-ranking", "water-table", "forecast-ranking":
+		return startsWithRankingArgument(rest)
+	default:
+		return true
+	}
+}
+
+func startsWithRankingArgument(value string) bool {
+	if value == "" {
+		return false
+	}
+	first, _ := utf8.DecodeRuneInString(value)
+	return first == '#' || first == '+' || first == '-' || first == '＋' || first == '－' || (first >= '0' && first <= '9')
+}
+
+func hasCommandPrefixFold(value string, command string) bool {
+	if len(value) < len(command) {
+		return false
+	}
+	return strings.EqualFold(value[:len(command)], command)
 }
 
 func (s *Service) stripCommandPrefix(text string) string {
@@ -321,6 +490,173 @@ func runtimeUnavailableMessage(runtime *servers.Runtime) string {
 	return "服务器配置不可用。"
 }
 
+type realtimePayloadResult struct {
+	Results  []EntityResult
+	Selected *EntityResult
+	Message  string
+	Warnings []string
+}
+
+func (s *Service) buildRealtimePayload(def Definition, region string, argument string) (realtimePayloadResult, bool) {
+	if !isRankingDefinition(def.ID) {
+		return realtimePayloadResult{}, false
+	}
+	runtime := s.runtimeForRegion(region)
+	if runtime == nil || !runtime.Enabled || runtime.Ranking == nil {
+		return realtimePayloadResult{Message: runtimeUnavailableMessage(runtime), Warnings: []string{"榜线 API 未配置，将使用静态预览兜底。"}}, true
+	}
+	store := runtime.Store
+	resolver := runtime.Assets
+	switch def.ID {
+	case "ranking-list":
+		board, err := runtime.Ranking.GetLatest()
+		if err != nil {
+			return realtimePayloadResult{Message: "榜线获取失败：" + err.Error(), Warnings: []string{"实时数据获取失败，将使用静态预览兜底。"}}, true
+		}
+		view := *board
+		view.Rankings = filterRankingEntriesForParser(board.Rankings, defaultRankingTiersForParser())
+		if len(view.Rankings) == 0 {
+			view.Rankings = firstRankingEntriesForParser(board.Rankings, 10)
+		}
+		payload := renderer.BuildRankingListPayloadWithStore("活动榜线", view, store, resolver)
+		payload.Subtitle = rankingSubtitleForParser(region, view)
+		selected := EntityResult{ID: view.EventID, Title: "实时榜线", Subtitle: payload.Subtitle, Type: "ranking_list", Payload: payload}
+		return realtimePayloadResult{Results: rankingRowsForParser(view.Rankings), Selected: &selected, Message: fmt.Sprintf("已获取 %s 真实榜线数据（%d 条）。", config.RegionLabel(region), len(view.Rankings))}, true
+	case "ranking-target":
+		board, err := runtime.Ranking.GetLatest()
+		if err != nil {
+			return realtimePayloadResult{Message: "sk 获取失败：" + err.Error(), Warnings: []string{"实时数据获取失败，将使用静态预览兜底。"}}, true
+		}
+		entries := resolveRankingArgumentForParser(board.Rankings, argument, false)
+		if len(entries) == 0 {
+			entries = firstRankingEntriesForParser(board.Rankings, 1)
+		}
+		view := *board
+		view.Rankings = entries
+		payload := renderer.BuildRankingListPayloadWithStore("sk", view, store, resolver)
+		payload.Subtitle = rankingSubtitleForParser(region, view)
+		selected := EntityResult{ID: view.EventID, Title: "实时 sk", Subtitle: payload.Subtitle, Type: "ranking_list", Payload: payload}
+		return realtimePayloadResult{Results: rankingRowsForParser(view.Rankings), Selected: &selected, Message: fmt.Sprintf("已获取 %s 真实 sk 数据（%d 条）。", config.RegionLabel(region), len(view.Rankings))}, true
+	case "churn-ranking":
+		board, err := runtime.Ranking.GetChurn()
+		if err != nil {
+			return realtimePayloadResult{Message: "查房获取失败：" + err.Error(), Warnings: []string{"实时数据获取失败，将使用静态预览兜底。"}}, true
+		}
+		s.hydrateChurnBoardAvatars(runtime, board)
+		entries := resolveRankingArgumentForParser(board.Rankings, argument, false)
+		if len(entries) == 0 {
+			entries = filterRankingEntriesForParser(board.Rankings, defaultRankingTiersForParser())
+		}
+		if len(entries) == 0 {
+			entries = firstRankingEntriesForParser(board.Rankings, 10)
+		}
+		view := *board
+		view.Rankings = entries
+		payload := renderer.BuildChurnRankingListPayloadWithStore(view, store, resolver)
+		payload.Title = "查房"
+		payload.Subtitle = rankingSubtitleForParser(region, view)
+		selected := EntityResult{ID: view.EventID, Title: "实时查房", Subtitle: payload.Subtitle, Type: "churn_ranking_list", Payload: payload}
+		return realtimePayloadResult{Results: rankingRowsForParser(view.Rankings), Selected: &selected, Message: fmt.Sprintf("已获取 %s 真实查房数据（%d 条）。", config.RegionLabel(region), len(view.Rankings))}, true
+	case "water-table":
+		board, err := runtime.Ranking.GetChurn()
+		if err != nil {
+			return realtimePayloadResult{Message: "查水表获取失败：" + err.Error(), Warnings: []string{"实时数据获取失败，将使用静态预览兜底。"}}, true
+		}
+		s.hydrateChurnBoardAvatars(runtime, board)
+		entries := resolveRankingArgumentForParser(board.Rankings, argument, true)
+		if len(entries) == 0 {
+			entries = firstRankingEntriesForParser(board.Rankings, 1)
+		}
+		if len(entries) == 0 {
+			return realtimePayloadResult{Message: "没有可用查水表数据。", Warnings: []string{"实时数据为空，将使用静态预览兜底。"}}, true
+		}
+		payload := renderer.BuildWaterTablePayloadWithStore(*board, entries[0], store, resolver)
+		payload.Subtitle = rankingSubtitleForParser(region, *board)
+		selected := EntityResult{ID: entries[0].Rank, Title: "实时查水表", Subtitle: payload.Subtitle, Type: "water_table", Payload: payload}
+		return realtimePayloadResult{Results: rankingRowsForParser(entries), Selected: &selected, Message: fmt.Sprintf("已获取 %s 真实查水表数据。", config.RegionLabel(region))}, true
+	case "forecast-ranking":
+		if region != config.RegionCN && region != config.RegionJP {
+			return realtimePayloadResult{Message: "榜线预测仅支持国服/日服。", Warnings: []string{"当前区服不支持预测，将使用静态预览兜底。"}}, true
+		}
+		events, err := runtime.Ranking.GetForecastEvents()
+		if err != nil {
+			return realtimePayloadResult{Message: "预测活动列表获取失败：" + err.Error(), Warnings: []string{"实时数据获取失败，将使用静态预览兜底。"}}, true
+		}
+		event := selectForecastEventForParser(events, argument)
+		if event.EventID == 0 {
+			return realtimePayloadResult{Message: "没有可用预测活动。", Warnings: []string{"实时数据为空，将使用静态预览兜底。"}}, true
+		}
+		board, err := runtime.Ranking.GetForecastLatest(event.EventID)
+		if err != nil {
+			return realtimePayloadResult{Message: "预测榜线获取失败：" + err.Error(), Warnings: []string{"实时数据获取失败，将使用静态预览兜底。"}}, true
+		}
+		payload := renderer.BuildForecastRankingPayload(*board, event.Name, region, config.RegionLabel(region))
+		selected := EntityResult{ID: event.EventID, Title: "真实榜线预测", Subtitle: event.Name, Type: "forecast_ranking_list", Payload: payload}
+		return realtimePayloadResult{Results: forecastRowsForParser(board.Items), Selected: &selected, Message: fmt.Sprintf("已获取 %s 真实预测数据（Event #%d）。", config.RegionLabel(region), event.EventID)}, true
+	}
+	return realtimePayloadResult{}, false
+}
+
+func (s *Service) runtimeForRegion(region string) *servers.Runtime {
+	if s.Servers == nil {
+		return nil
+	}
+	return s.Servers.Get(region)
+}
+
+func (s *Service) hydrateChurnBoardAvatars(runtime *servers.Runtime, churn *ranking.Board) {
+	if runtime == nil || runtime.Ranking == nil || churn == nil || len(churn.Rankings) == 0 {
+		return
+	}
+	latest, err := runtime.Ranking.GetLatest()
+	if err != nil || latest == nil || len(latest.Rankings) == 0 {
+		return
+	}
+	hydrateRankingEntriesFromLatestForParser(churn.Rankings, latest.Rankings)
+}
+
+func hydrateRankingEntriesFromLatestForParser(churn []ranking.RankingEntry, latest []ranking.RankingEntry) {
+	byUID := make(map[string]ranking.RankingEntry, len(latest))
+	byRank := make(map[int]ranking.RankingEntry, len(latest))
+	for _, entry := range latest {
+		if uid := entry.UserID.String(); uid != "" {
+			byUID[uid] = entry
+		}
+		byRank[entry.Rank] = entry
+	}
+	for i := range churn {
+		if churn[i].LeaderCard != nil {
+			continue
+		}
+		var src ranking.RankingEntry
+		if uid := churn[i].UserID.String(); uid != "" {
+			src = byUID[uid]
+		}
+		if src.LeaderCard == nil && churn[i].Rank > 0 {
+			src = byRank[churn[i].Rank]
+		}
+		if src.LeaderCard == nil {
+			continue
+		}
+		churn[i].LeaderCard = src.LeaderCard
+		if churn[i].Name == "" {
+			churn[i].Name = src.Name
+		}
+		if churn[i].Word == "" {
+			churn[i].Word = src.Word
+		}
+	}
+}
+
+func isRankingDefinition(id string) bool {
+	switch id {
+	case "ranking-list", "ranking-target", "churn-ranking", "water-table", "forecast-ranking":
+		return true
+	default:
+		return false
+	}
+}
+
 func templateForPayload(fallback string, payload any) string {
 	switch payload.(type) {
 	case renderer.CardListPayload:
@@ -333,9 +669,240 @@ func templateForPayload(fallback string, payload any) string {
 		return "gacha_list"
 	case renderer.VirtualLiveListPayload:
 		return "virtual_live_list"
+	case renderer.WaterTablePayload:
+		return "water_table"
+	case renderer.ForecastRankingPayload:
+		return "forecast_ranking_list"
 	default:
 		return fallback
 	}
+}
+
+func defaultRankingTiersForParser() []int {
+	return []int{10, 20, 30, 40, 50, 100, 200, 300, 400, 500, 1000, 2000, 3000, 4000, 5000, 10000, 20000, 30000, 40000, 50000, 100000}
+}
+
+func resolveRankingArgumentForParser(entries []ranking.RankingEntry, argument string, single bool) []ranking.RankingEntry {
+	argument = strings.TrimSpace(argument)
+	if argument == "" {
+		return nil
+	}
+	var ranks []int
+	var uid string
+	for _, token := range strings.Fields(argument) {
+		if strings.Contains(token, "-") {
+			items, ok := parseRankingRangeForParser(token)
+			if ok {
+				ranks = append(ranks, items...)
+				continue
+			}
+		}
+		if rank, ok := parseRankingNumberForParser(token); ok {
+			ranks = append(ranks, rank)
+			continue
+		}
+		if looksLikeUIDForParser(token) {
+			uid = token
+		}
+	}
+	if uid != "" {
+		for _, entry := range entries {
+			if entry.UserID.String() == uid {
+				return []ranking.RankingEntry{entry}
+			}
+		}
+	}
+	if single && len(ranks) > 1 {
+		ranks = ranks[:1]
+	}
+	return filterRankingEntriesForParser(entries, ranks)
+}
+
+func filterRankingEntriesForParser(entries []ranking.RankingEntry, ranks []int) []ranking.RankingEntry {
+	out := make([]ranking.RankingEntry, 0, len(ranks))
+	for _, rank := range dedupeRankingNumbersForParser(ranks) {
+		if rank <= 0 || len(entries) == 0 {
+			continue
+		}
+		out = append(out, nearestRankingEntryForParser(entries, rank))
+	}
+	return out
+}
+
+func firstRankingEntriesForParser(entries []ranking.RankingEntry, limit int) []ranking.RankingEntry {
+	if len(entries) == 0 || limit <= 0 {
+		return nil
+	}
+	if len(entries) < limit {
+		limit = len(entries)
+	}
+	return append([]ranking.RankingEntry(nil), entries[:limit]...)
+}
+
+func nearestRankingEntryForParser(entries []ranking.RankingEntry, rank int) ranking.RankingEntry {
+	best := entries[0]
+	bestDiff := absIntForParser(best.Rank - rank)
+	for _, entry := range entries[1:] {
+		diff := absIntForParser(entry.Rank - rank)
+		if diff < bestDiff {
+			best = entry
+			bestDiff = diff
+		}
+	}
+	return best
+}
+
+func parseRankingRangeForParser(token string) ([]int, bool) {
+	parts := strings.Split(token, "-")
+	if len(parts) != 2 {
+		return nil, false
+	}
+	start, ok1 := parseRankingNumberForParser(parts[0])
+	end, ok2 := parseRankingNumberForParser(parts[1])
+	if !ok1 || !ok2 || start <= 0 || end <= 0 {
+		return nil, false
+	}
+	if start > end {
+		start, end = end, start
+	}
+	if end-start > 19 {
+		end = start + 19
+	}
+	out := make([]int, 0, end-start+1)
+	for i := start; i <= end; i++ {
+		out = append(out, i)
+	}
+	return out, true
+}
+
+func parseRankingNumberForParser(token string) (int, bool) {
+	value := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(token, "#")))
+	if value == "" {
+		return 0, false
+	}
+	multiplier := 1
+	if strings.HasSuffix(value, "w") || strings.HasSuffix(value, "万") {
+		multiplier = 10000
+		value = strings.TrimSuffix(strings.TrimSuffix(value, "w"), "万")
+	} else if strings.HasSuffix(value, "k") || strings.HasSuffix(value, "千") {
+		multiplier = 1000
+		value = strings.TrimSuffix(strings.TrimSuffix(value, "k"), "千")
+	}
+	number, err := strconv.Atoi(value)
+	if err != nil || number <= 0 {
+		return 0, false
+	}
+	return number * multiplier, true
+}
+
+func looksLikeUIDForParser(token string) bool {
+	if len(token) < 8 {
+		return false
+	}
+	for _, r := range token {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func dedupeRankingNumbersForParser(values []int) []int {
+	seen := map[int]struct{}{}
+	out := make([]int, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func rankingRowsForParser(entries []ranking.RankingEntry) []EntityResult {
+	rows := make([]EntityResult, 0, len(entries))
+	for _, entry := range entries {
+		rows = append(rows, EntityResult{ID: entry.Rank, Title: fmt.Sprintf("#%d %s", entry.Rank, firstNonEmptyForParser(entry.Name, "Unknown")), Subtitle: fmt.Sprintf("%dP · UID %s", entry.Score, entry.UserID.String()), Type: "ranking"})
+	}
+	return rows
+}
+
+func forecastRowsForParser(items []ranking.ForecastItem) []EntityResult {
+	rows := make([]EntityResult, 0, len(items))
+	for _, item := range items {
+		prediction, ok := item.PredictedScore()
+		subtitle := fmt.Sprintf("当前 %dP", item.Score)
+		if item.IsFinal {
+			subtitle += " · 最终线"
+		} else if ok {
+			subtitle += fmt.Sprintf(" · 预测 %dP", prediction)
+		}
+		rows = append(rows, EntityResult{ID: item.Rank, Title: fmt.Sprintf("#%d", item.Rank), Subtitle: subtitle, Type: "forecast_ranking"})
+	}
+	return rows
+}
+
+func selectForecastEventForParser(events []ranking.ForecastEvent, argument string) ranking.ForecastEvent {
+	if id, ok := parseRankingNumberForParser(argument); ok {
+		for _, event := range events {
+			if event.EventID == id {
+				return event
+			}
+		}
+		return ranking.ForecastEvent{EventID: id, Name: fmt.Sprintf("Event %d", id)}
+	}
+	for _, event := range events {
+		if event.Status == "active" && event.HasRealtimeData {
+			return event
+		}
+	}
+	for _, event := range events {
+		if event.HasRealtimeData || event.HasFinalizedData {
+			return event
+		}
+	}
+	if len(events) > 0 {
+		return events[0]
+	}
+	return ranking.ForecastEvent{}
+}
+
+func rankingSubtitleForParser(region string, board ranking.Board) string {
+	parts := []string{config.RegionLabel(region)}
+	if board.EventID > 0 {
+		parts = append(parts, fmt.Sprintf("Event #%d", board.EventID))
+	}
+	if board.BoardType == "worldlink" && board.TargetID > 0 {
+		parts = append(parts, fmt.Sprintf("WL 角色 %d", board.TargetID))
+	}
+	if board.UpdatedAt > 0 {
+		parts = append(parts, "更新 "+formatMillis(normalizeMillisForParser(board.UpdatedAt)))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func normalizeMillisForParser(value int64) int64 {
+	if value > 0 && value < 1_000_000_000_000 {
+		return value * 1000
+	}
+	return value
+}
+
+func firstNonEmptyForParser(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func absIntForParser(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func searchAndBuild(def Definition, store *masterdata.Store, resolver *assets.Resolver, argument string) ([]EntityResult, *EntityResult) {

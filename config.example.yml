@@ -48,6 +48,8 @@ sekai_api:
   rate_limit: 30
 
 ranking_api:
+  # 公开实时榜 API；普通榜/查房/WL 支持 cn / jp / tw / kr / en。
+  # 预测 API 固定使用 https://rk.exmeaning.com/public，当前仅支持 cn / jp。
   base_url: "https://rks.exmeaning.com"
   region: "cn"
   timeout: 10

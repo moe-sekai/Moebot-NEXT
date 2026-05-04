@@ -320,18 +320,6 @@ export interface SearchResponse {
 	message: string;
 }
 
-export interface RenderPreviewMeta {
-	id: string;
-	name: string;
-	description: string;
-	command: string;
-	templatePath: string;
-	viewerSource: string;
-	status: "ready" | "draft" | string;
-	width: number;
-	height: number;
-}
-
 export interface RenderTiming {
 	fonts_ms: number | null;
 	images_ms: number | null;
@@ -352,13 +340,6 @@ export interface RendererPreviewImageResult {
 	url: string;
 	blob: Blob;
 	timings: RenderTiming;
-}
-
-export interface RendererPreviewsResponse {
-	data: RenderPreviewMeta[];
-	total: number;
-	ok: boolean;
-	message: string;
 }
 
 export interface RendererCardThumbnailCacheStatus {

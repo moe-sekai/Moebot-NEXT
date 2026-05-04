@@ -19,6 +19,7 @@ type regionalCommand struct {
 	Base        string
 	Primary     string
 	MatchSource string
+	WorldLink   bool
 }
 
 var regionalPrefixes = []string{config.RegionJP, config.RegionCN, config.RegionTW, config.RegionKR, config.RegionEN}

@@ -248,6 +248,10 @@ type RankingListPayload struct {
 	EventID     int                   `json:"eventId,omitempty"`
 	UpdatedAt   int64                 `json:"updatedAt,omitempty"`
 	AssetSource string                `json:"assetSource,omitempty"`
+	Region      string                `json:"region,omitempty"`
+	RegionLabel string                `json:"regionLabel,omitempty"`
+	BoardType   string                `json:"boardType,omitempty"`
+	TargetID    int                   `json:"targetId,omitempty"`
 }
 
 type RankingEntryPayload struct {
@@ -258,6 +262,8 @@ type RankingEntryPayload struct {
 	Score               int64                   `json:"score"`
 	UserID              string                  `json:"userId,omitempty"`
 	ScoreDelta          int64                   `json:"scoreDelta,omitempty"`
+	AvatarURL           string                  `json:"avatarUrl,omitempty"`
+	LeaderCharacterID   int                     `json:"leaderCharacterId,omitempty"`
 	LeaderCard          *ProfileDeckCardPayload `json:"leaderCard,omitempty"`
 	Churn48h            int                     `json:"churn48h,omitempty"`
 	RecentActivityCount int                     `json:"recentActivityCount,omitempty"`
@@ -274,9 +280,17 @@ func BuildRankingListPayload(title string, board ranking.Board) RankingListPaylo
 }
 
 func BuildRankingListPayloadWithAssets(title string, board ranking.Board, resolver *assets.Resolver) RankingListPayload {
-	payload := RankingListPayload{Title: title, EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: assetSourceForResolver(resolver)}
+	payload := RankingListPayload{Title: title, EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: assetSourceForResolver(resolver), Region: board.Region, BoardType: board.BoardType, TargetID: board.TargetID}
 	for _, entry := range board.Rankings {
 		payload.Rankings = append(payload.Rankings, buildRankingEntryPayload(entry))
+	}
+	return payload
+}
+
+func BuildRankingListPayloadWithStore(title string, board ranking.Board, store *masterdata.Store, resolver *assets.Resolver) RankingListPayload {
+	payload := RankingListPayload{Title: title, EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: assetSourceForResolver(resolver), Region: board.Region, BoardType: board.BoardType, TargetID: board.TargetID}
+	for _, entry := range board.Rankings {
+		payload.Rankings = append(payload.Rankings, buildRankingEntryPayloadWithStore(entry, store, resolver))
 	}
 	return payload
 }
@@ -286,9 +300,13 @@ func BuildChurnRankingListPayload(board ranking.Board) RankingListPayload {
 }
 
 func BuildChurnRankingListPayloadWithAssets(board ranking.Board, resolver *assets.Resolver) RankingListPayload {
-	payload := RankingListPayload{Title: "查房", Subtitle: "活跃度 / 时速 / 最近分数变化", EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: assetSourceForResolver(resolver)}
+	return BuildChurnRankingListPayloadWithStore(board, nil, resolver)
+}
+
+func BuildChurnRankingListPayloadWithStore(board ranking.Board, store *masterdata.Store, resolver *assets.Resolver) RankingListPayload {
+	payload := RankingListPayload{Title: "查房", Subtitle: "活跃度 / 时速 / 最近分数变化", EventID: board.EventID, UpdatedAt: board.UpdatedAt, AssetSource: assetSourceForResolver(resolver), Region: board.Region, BoardType: board.BoardType, TargetID: board.TargetID}
 	for _, entry := range board.Rankings {
-		item := buildRankingEntryPayload(entry)
+		item := buildRankingEntryPayloadWithStore(entry, store, resolver)
 		if entry.LastChange != nil {
 			item.ScoreDelta = entry.LastChange.Delta
 		}
@@ -309,6 +327,31 @@ func BuildChurnRankingListPayloadWithAssets(board ranking.Board, resolver *asset
 		item.IsTierLine = entry.Rank > 100 && entry.UserID.String() == ""
 		item.Signature = fmt.Sprintf("48H %d · 1H速 %s · 20m×3 %s", entry.Churn48h, formatCompactSpeed(item.Growth1h), formatCompactSpeed(item.Speed20m3))
 		payload.Rankings = append(payload.Rankings, item)
+	}
+	return payload
+}
+
+func BuildWaterTablePayloadWithStore(board ranking.Board, entry ranking.RankingEntry, store *masterdata.Store, resolver *assets.Resolver) WaterTablePayload {
+	payload := WaterTablePayload{Title: "查水表", Subtitle: "小时周回 / 停车时间", EventID: board.EventID, UpdatedAt: board.UpdatedAt, Region: board.Region, BoardType: board.BoardType, TargetID: board.TargetID, AssetSource: assetSourceForResolver(resolver)}
+	payload.Entry = buildRankingEntryPayloadWithStore(entry, store, resolver)
+	payload.Entry.Churn48h = entry.Churn48h
+	payload.Entry.Growth1h = entry.Growth1h
+	if entry.LastChange != nil {
+		payload.Entry.ScoreDelta = entry.LastChange.Delta
+	}
+	payload.HourlyChurn = append([]ranking.HourlyChurn(nil), entry.HourlyChurn...)
+	payload.Parking = append([]ranking.ParkingPeriod(nil), entry.ParkingPeriods...)
+	return payload
+}
+
+func BuildForecastRankingPayload(board ranking.ForecastBoard, eventName string, region string, regionLabel string) ForecastRankingPayload {
+	payload := ForecastRankingPayload{Title: "榜线预测", EventID: board.EventID, EventName: eventName, Region: region, RegionLabel: regionLabel, Status: board.Status, UpdatedAt: board.UpdatedUnixMilli()}
+	if eventName != "" {
+		payload.Subtitle = eventName
+	}
+	for _, item := range board.Items {
+		prediction, ok := item.PredictedScore()
+		payload.Items = append(payload.Items, ForecastRankingEntryPayload{Rank: item.Rank, Score: item.Score, Prediction: prediction, HasPrediction: ok, CollectTime: item.CollectUnixMilli(), IsFinal: item.IsFinal})
 	}
 	return payload
 }
@@ -373,6 +416,35 @@ func formatCompactSpeed(value int64) string {
 }
 
 func buildRankingEntryPayload(entry ranking.RankingEntry) RankingEntryPayload {
+	return buildRankingEntryPayloadWithStore(entry, nil, nil)
+}
+
+func resolveRankingLeaderCard(store *masterdata.Store, cardID int, characterID int) *masterdata.CardInfo {
+	if store == nil {
+		return nil
+	}
+	if cardID > 0 {
+		if card := store.GetCard(cardID); card != nil && card.AssetbundleName != "" {
+			return card
+		}
+	}
+	if characterID <= 0 {
+		return nil
+	}
+	var best *masterdata.CardInfo
+	for _, card := range store.AllCards() {
+		if card.CharacterID != characterID || card.AssetbundleName == "" {
+			continue
+		}
+		if best == nil || card.ReleaseAt > best.ReleaseAt || (card.ReleaseAt == best.ReleaseAt && card.ID > best.ID) {
+			copyCard := card
+			best = &copyCard
+		}
+	}
+	return best
+}
+
+func buildRankingEntryPayloadWithStore(entry ranking.RankingEntry, store *masterdata.Store, resolver *assets.Resolver) RankingEntryPayload {
 	payload := RankingEntryPayload{
 		Rank:      entry.Rank,
 		Name:      entry.Name,
@@ -381,6 +453,7 @@ func buildRankingEntryPayload(entry ranking.RankingEntry) RankingEntryPayload {
 		UserID:    entry.UserID.String(),
 	}
 	if entry.LeaderCard != nil {
+		payload.LeaderCharacterID = entry.LeaderCard.CharacterID
 		payload.LeaderCard = &ProfileDeckCardPayload{
 			CardID:       entry.LeaderCard.CardID,
 			ID:           entry.LeaderCard.CardID,
@@ -388,6 +461,25 @@ func buildRankingEntryPayload(entry ranking.RankingEntry) RankingEntryPayload {
 			Mastery:      entry.LeaderCard.MasterRank,
 			IsTrained:    entry.LeaderCard.DefaultImage == "special_training",
 			DefaultImage: entry.LeaderCard.DefaultImage,
+		}
+		if entry.LeaderCard.CharacterID > 0 {
+			payload.LeaderCard.CharacterName = characterName(entry.LeaderCard.CharacterID)
+		}
+		if store != nil {
+			if card := resolveRankingLeaderCard(store, entry.LeaderCard.CardID, entry.LeaderCard.CharacterID); card != nil {
+				payload.LeaderCard.CardID = card.ID
+				payload.LeaderCard.ID = card.ID
+				payload.LeaderCard.CharacterName = characterName(card.CharacterID)
+				payload.LeaderCharacterID = card.CharacterID
+				payload.LeaderCard.Rarity = card.CardRarityType
+				payload.LeaderCard.CardRarityType = card.CardRarityType
+				payload.LeaderCard.Attr = card.Attr
+				payload.LeaderCard.AssetbundleName = card.AssetbundleName
+				assetResolver := resolverOrDefault(resolver)
+				payload.LeaderCard.ThumbnailURL = assetResolver.GetCardThumbnailURL(card.AssetbundleName, false)
+				payload.LeaderCard.TrainedThumbnailURL = assetResolver.GetCardThumbnailURL(card.AssetbundleName, true)
+				payload.AvatarURL = payload.LeaderCard.ThumbnailURL
+			}
 		}
 	}
 	return payload
@@ -459,6 +551,42 @@ type ProfileDeckCardPayload struct {
 	Mastery             int    `json:"mastery,omitempty"`
 	IsTrained           bool   `json:"isTrained,omitempty"`
 	DefaultImage        string `json:"defaultImage,omitempty"`
+}
+
+type WaterTablePayload struct {
+	Title       string                  `json:"title"`
+	Subtitle    string                  `json:"subtitle,omitempty"`
+	Entry       RankingEntryPayload     `json:"entry"`
+	HourlyChurn []ranking.HourlyChurn   `json:"hourlyChurn,omitempty"`
+	Parking     []ranking.ParkingPeriod `json:"parkingPeriods,omitempty"`
+	EventID     int                     `json:"eventId,omitempty"`
+	UpdatedAt   int64                   `json:"updatedAt,omitempty"`
+	Region      string                  `json:"region,omitempty"`
+	RegionLabel string                  `json:"regionLabel,omitempty"`
+	BoardType   string                  `json:"boardType,omitempty"`
+	TargetID    int                     `json:"targetId,omitempty"`
+	AssetSource string                  `json:"assetSource,omitempty"`
+}
+
+type ForecastRankingPayload struct {
+	Title       string                        `json:"title"`
+	Subtitle    string                        `json:"subtitle,omitempty"`
+	EventID     int                           `json:"eventId,omitempty"`
+	EventName   string                        `json:"eventName,omitempty"`
+	Region      string                        `json:"region,omitempty"`
+	RegionLabel string                        `json:"regionLabel,omitempty"`
+	Status      string                        `json:"status,omitempty"`
+	UpdatedAt   int64                         `json:"updatedAt,omitempty"`
+	Items       []ForecastRankingEntryPayload `json:"items"`
+}
+
+type ForecastRankingEntryPayload struct {
+	Rank          int   `json:"rank"`
+	Score         int64 `json:"score"`
+	Prediction    int64 `json:"prediction,omitempty"`
+	HasPrediction bool  `json:"hasPrediction,omitempty"`
+	CollectTime   int64 `json:"collectTime,omitempty"`
+	IsFinal       bool  `json:"isFinal,omitempty"`
 }
 
 // BuildProfileCardPayload adapts an API profile into ProfileCard renderer props.
