@@ -22,7 +22,11 @@ type MasterData struct {
 	MusicDifficulties []MusicDifficulty   `json:"musicDifficulties"`
 	Events            []EventInfo         `json:"events"`
 	EventDeckBonuses  []EventDeckBonus    `json:"eventDeckBonuses"`
+	EventCards        []EventCard         `json:"eventCards"`
+	EventMusics       []EventMusic        `json:"eventMusics"`
+	VirtualLives      []VirtualLive       `json:"virtualLives"`
 	Gachas            []GachaInfo         `json:"gachas"`
+	CardSupplies      []CardSupplyInfo    `json:"cardSupplies"`
 	Skills            []SkillInfo         `json:"skills"`
 	CharacterUnits    []GameCharacterUnit `json:"gameCharacterUnits"`
 	Honors            []HonorInfo         `json:"honors"`
@@ -262,6 +266,64 @@ type EventDeckBonus struct {
 	BonusRate           float64 `json:"bonusRate"`
 }
 
+// EventCard links an event to its featured cards.
+type EventCard struct {
+	ID      int `json:"id"`
+	EventID int `json:"eventId"`
+	CardID  int `json:"cardId"`
+}
+
+// EventMusic links an event to its written / associated music.
+type EventMusic struct {
+	ID      int `json:"id"`
+	EventID int `json:"eventId"`
+	MusicID int `json:"musicId"`
+	Seq     int `json:"seq"`
+}
+
+// ----------------------------- Virtual Live types ---------------------------
+
+// VirtualLive represents an in-game virtual live / after live schedule group.
+type VirtualLive struct {
+	ID                    int                    `json:"id"`
+	Name                  string                 `json:"name"`
+	AssetbundleName       string                 `json:"assetbundleName"`
+	StartAt               int64                  `json:"startAt"`
+	EndAt                 int64                  `json:"endAt"`
+	VirtualLiveType       string                 `json:"virtualLiveType"`
+	VirtualLiveSchedules  []VirtualLiveSchedule  `json:"virtualLiveSchedules"`
+	VirtualLiveRewards    []VirtualLiveReward    `json:"virtualLiveRewards"`
+	VirtualLiveCharacters []VirtualLiveCharacter `json:"virtualLiveCharacters"`
+}
+
+// VirtualLiveSchedule is one playable/viewable time window for a virtual live.
+type VirtualLiveSchedule struct {
+	ID            int   `json:"id"`
+	VirtualLiveID int   `json:"virtualLiveId"`
+	Seq           int   `json:"seq"`
+	StartAt       int64 `json:"startAt"`
+	EndAt         int64 `json:"endAt"`
+}
+
+// VirtualLiveReward identifies a reward resource box for a virtual live.
+type VirtualLiveReward struct {
+	ID              int    `json:"id"`
+	VirtualLiveID   int    `json:"virtualLiveId"`
+	VirtualLiveType string `json:"virtualLiveType"`
+	ResourceBoxID   int    `json:"resourceBoxId"`
+}
+
+// VirtualLiveCharacter describes a character appearing in a virtual live.
+type VirtualLiveCharacter struct {
+	ID                            int    `json:"id"`
+	VirtualLiveID                 int    `json:"virtualLiveId"`
+	GameCharacterUnitID           int    `json:"gameCharacterUnitId"`
+	GameCharacterID               int    `json:"gameCharacterId"`
+	SubGameCharacter2dID          int    `json:"subGameCharacter2dId"`
+	VirtualLivePerformanceType    string `json:"virtualLivePerformanceType"`
+	VirtualLiveCharacterGroupType string `json:"virtualLiveCharacterGroupType"`
+}
+
 // ----------------------------- Gacha types ---------------------------------
 
 // GachaInfo represents a gacha / banner.
@@ -297,13 +359,22 @@ type GachaCardRarityRate struct {
 	Rate           float64 `json:"rate"`
 }
 
+// ----------------------------- Card supply types ----------------------------
+
+// CardSupplyInfo describes how a card is supplied, such as normal, limited, or fes.
+type CardSupplyInfo struct {
+	ID             int    `json:"id"`
+	CardSupplyType string `json:"cardSupplyType"`
+}
+
 // ----------------------------- Skill types ---------------------------------
 
 // SkillInfo represents a card's skill.
 type SkillInfo struct {
-	ID           int           `json:"id"`
-	Description  string        `json:"description"`
-	SkillEffects []SkillEffect `json:"skillEffects"`
+	ID                    int           `json:"id"`
+	Description           string        `json:"description"`
+	DescriptionSpriteName string        `json:"descriptionSpriteName"`
+	SkillEffects          []SkillEffect `json:"skillEffects"`
 }
 
 // SkillEffect is one effect component of a skill.

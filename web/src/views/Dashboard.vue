@@ -71,131 +71,137 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from "vue";
 import {
-  getHealth,
-  getMasterdataSummary,
-  getPublicConfig,
-  getRecentCommands,
-  getRendererHealth,
-  getStatus,
-} from '../api/client'
+	getHealth,
+	getMasterdataSummary,
+	getPublicConfig,
+	getRecentCommands,
+	getRendererHealth,
+	getStatus,
+} from "../api/client";
 import type {
-  HealthResponse,
-  MasterdataSummary as MasterdataSummaryData,
-  PublicConfig,
-  RecentCommand,
-  RendererHealth,
-  RuntimeStatus,
-} from '../api/types'
-import CommandList from '../components/CommandList.vue'
-import MasterdataSummary from '../components/MasterdataSummary.vue'
-import MetricCard from '../components/MetricCard.vue'
-import PageHeader from '../components/PageHeader.vue'
-import RecentCommands from '../components/RecentCommands.vue'
-import StatusCard from '../components/StatusCard.vue'
-import UiAlert from '../components/ui/UiAlert.vue'
-import UiBadge from '../components/ui/UiBadge.vue'
-import UiButton from '../components/ui/UiButton.vue'
-import UiCard from '../components/ui/UiCard.vue'
-import UiSkeleton from '../components/ui/UiSkeleton.vue'
+	HealthResponse,
+	MasterdataSummary as MasterdataSummaryData,
+	PublicConfig,
+	RecentCommand,
+	RendererHealth,
+	RuntimeStatus,
+} from "../api/types";
+import CommandList from "../components/CommandList.vue";
+import MasterdataSummary from "../components/MasterdataSummary.vue";
+import MetricCard from "../components/MetricCard.vue";
+import PageHeader from "../components/PageHeader.vue";
+import RecentCommands from "../components/RecentCommands.vue";
+import StatusCard from "../components/StatusCard.vue";
+import UiAlert from "../components/ui/UiAlert.vue";
+import UiBadge from "../components/ui/UiBadge.vue";
+import UiButton from "../components/ui/UiButton.vue";
+import UiCard from "../components/ui/UiCard.vue";
+import UiSkeleton from "../components/ui/UiSkeleton.vue";
 
-const health = ref<HealthResponse | null>(null)
-const status = ref<RuntimeStatus | null>(null)
-const summary = ref<MasterdataSummaryData | null>(null)
-const rendererHealth = ref<RendererHealth | null>(null)
-const publicConfig = ref<PublicConfig | null>(null)
-const recentCommands = ref<RecentCommand[]>([])
-const recentMessage = ref('')
+const health = ref<HealthResponse | null>(null);
+const status = ref<RuntimeStatus | null>(null);
+const summary = ref<MasterdataSummaryData | null>(null);
+const rendererHealth = ref<RendererHealth | null>(null);
+const publicConfig = ref<PublicConfig | null>(null);
+const recentCommands = ref<RecentCommand[]>([]);
+const recentMessage = ref("");
 
-const loading = ref(false)
-const recentLoading = ref(false)
-const pageError = ref('')
-const summaryError = ref('')
-const rendererError = ref('')
-const recentError = ref('')
+const loading = ref(false);
+const recentLoading = ref(false);
+const pageError = ref("");
+const summaryError = ref("");
+const rendererError = ref("");
+const recentError = ref("");
 
 const webPortLabel = computed(() => {
-  const port = publicConfig.value?.web.port ?? status.value?.web.port ?? 8080
-  return `:${port}`
-})
+	const port = publicConfig.value?.web.port ?? status.value?.web.port ?? 8080;
+	return `:${port}`;
+});
 
 const rendererUrl = computed(() => {
-  return publicConfig.value?.renderer.base_url || status.value?.renderer.base_url || 'http://127.0.0.1:3001'
-})
+	return (
+		publicConfig.value?.renderer.base_url ||
+		status.value?.renderer.base_url ||
+		"http://127.0.0.1:3001"
+	);
+});
 
 const rendererLatency = computed(() => {
-  const latency = rendererHealth.value?.latency_ms ?? status.value?.renderer.latency_ms
-  return typeof latency === 'number' ? `${latency} ms` : '等待检测'
-})
+	const latency =
+		rendererHealth.value?.latency_ms ?? status.value?.renderer.latency_ms;
+	return typeof latency === "number" ? `${latency} ms` : "等待检测";
+});
 
 const botMeta = computed(() => {
-  if (!status.value) return 'OneBot v11 反向 WebSocket 默认监听 :6700'
-  return `${status.value.bot.driver_type} · ${status.value.bot.listen || '未配置监听地址'}`
-})
+	if (!status.value) return "OneBot v11 反向 WebSocket 默认监听 :6700";
+	return `${status.value.bot.driver_type} · ${status.value.bot.listen || "未配置监听地址"}`;
+});
 
 const webMeta = computed(() => {
-  if (!status.value) return 'Fiber + Vue 3 + Vite'
-  return `${status.value.web.host}:${status.value.web.port}`
-})
+	if (!status.value) return "Fiber + Vue 3 + Vite";
+	return `${status.value.web.host}:${status.value.web.port}`;
+});
 
 const rendererMeta = computed(() => {
-  if (!status.value) return rendererUrl.value
-  return `${status.value.renderer.base_url} · ${status.value.renderer.latency_ms} ms`
-})
+	if (!status.value) return rendererUrl.value;
+	return `${status.value.renderer.base_url} · ${status.value.renderer.latency_ms} ms`;
+});
 
-const masterdataMeta = computed(() => masterdataCountLabel.value)
+const masterdataMeta = computed(() => masterdataCountLabel.value);
 
 const masterdataCountLabel = computed(() => {
-  const counts = status.value?.masterdata.counts ?? summary.value?.counts
-  if (!counts) return '等待数据加载'
-  return `卡牌 ${counts.cards} / 曲目 ${counts.musics} / 活动 ${counts.events} / 卡池 ${counts.gachas}`
-})
+	const counts = status.value?.masterdata.counts ?? summary.value?.counts;
+	if (!counts) return "等待数据加载";
+	return `卡牌 ${counts.cards} / 曲目 ${counts.musics} / 活动 ${counts.events} / 卡池 ${counts.gachas} / 演唱会 ${counts.virtual_lives ?? 0}`;
+});
 
 onMounted(async () => {
-  await Promise.all([loadOverview(), loadRecentCommands()])
-})
+	await Promise.all([loadOverview(), loadRecentCommands()]);
+});
 
 async function loadOverview() {
-  loading.value = true
-  pageError.value = ''
-  summaryError.value = ''
-  rendererError.value = ''
-  try {
-    const [healthData, statusData, configData, summaryData, rendererData] = await Promise.all([
-      getHealth(),
-      getStatus(),
-      getPublicConfig(),
-      getMasterdataSummary(),
-      getRendererHealth(),
-    ])
-    health.value = healthData
-    status.value = statusData
-    publicConfig.value = configData
-    summary.value = summaryData
-    rendererHealth.value = rendererData
-  } catch (err) {
-    pageError.value = normalizeError(err, '加载运行状态失败')
-  } finally {
-    loading.value = false
-  }
+	loading.value = true;
+	pageError.value = "";
+	summaryError.value = "";
+	rendererError.value = "";
+	try {
+		const [healthData, statusData, configData, summaryData, rendererData] =
+			await Promise.all([
+				getHealth(),
+				getStatus(),
+				getPublicConfig(),
+				getMasterdataSummary(),
+				getRendererHealth(),
+			]);
+		health.value = healthData;
+		status.value = statusData;
+		publicConfig.value = configData;
+		summary.value = summaryData;
+		rendererHealth.value = rendererData;
+	} catch (err) {
+		pageError.value = normalizeError(err, "加载运行状态失败");
+	} finally {
+		loading.value = false;
+	}
 }
 
 async function loadRecentCommands() {
-  recentLoading.value = true
-  recentError.value = ''
-  try {
-    const result = await getRecentCommands(8)
-    recentCommands.value = result.data ?? []
-    recentMessage.value = result.message
-  } catch (err) {
-    recentError.value = normalizeError(err, '加载最近命令失败')
-  } finally {
-    recentLoading.value = false
-  }
+	recentLoading.value = true;
+	recentError.value = "";
+	try {
+		const result = await getRecentCommands(8);
+		recentCommands.value = result.data ?? [];
+		recentMessage.value = result.message;
+	} catch (err) {
+		recentError.value = normalizeError(err, "加载最近命令失败");
+	} finally {
+		recentLoading.value = false;
+	}
 }
 
 function normalizeError(err: unknown, fallback: string) {
-  return err instanceof Error ? `${fallback}：${err.message}` : fallback
+	return err instanceof Error ? `${fallback}：${err.message}` : fallback;
 }
 </script>

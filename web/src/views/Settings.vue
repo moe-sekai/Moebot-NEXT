@@ -290,491 +290,686 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, ref } from 'vue'
-import { getPublicConfig, reloadMasterdata, updatePublicConfig } from '../api/client'
-import type { ConfigOption, MasterdataCounts, PublicConfig, PublicServerProfile, UpdatePublicConfigPayload } from '../api/types'
-import SvgIcon, { type IconName } from '../components/icons/SvgIcon.vue'
-import PageHeader from '../components/PageHeader.vue'
-import UiAlert from '../components/ui/UiAlert.vue'
-import UiBadge from '../components/ui/UiBadge.vue'
-import UiButton from '../components/ui/UiButton.vue'
-import UiCard from '../components/ui/UiCard.vue'
-import UiSkeleton from '../components/ui/UiSkeleton.vue'
+import { computed, defineComponent, h, onMounted, ref } from "vue";
+import {
+	getPublicConfig,
+	reloadMasterdata,
+	updatePublicConfig,
+} from "../api/client";
+import type {
+	ConfigOption,
+	MasterdataCounts,
+	PublicConfig,
+	PublicServerProfile,
+	UpdatePublicConfigPayload,
+} from "../api/types";
+import SvgIcon, { type IconName } from "../components/icons/SvgIcon.vue";
+import PageHeader from "../components/PageHeader.vue";
+import UiAlert from "../components/ui/UiAlert.vue";
+import UiBadge from "../components/ui/UiBadge.vue";
+import UiButton from "../components/ui/UiButton.vue";
+import UiCard from "../components/ui/UiCard.vue";
+import UiSkeleton from "../components/ui/UiSkeleton.vue";
 
 interface ConfigItem {
-  label: string
-  value: string | number | boolean
-  badge?: boolean
+	label: string;
+	value: string | number | boolean;
+	badge?: boolean;
 }
 
 interface MasterdataForm {
-  region: string
-  source: string
-  custom_url: string
-  custom_fallback_url: string
-  local_path: string
-  refresh_interval: number
+	region: string;
+	source: string;
+	custom_url: string;
+	custom_fallback_url: string;
+	local_path: string;
+	refresh_interval: number;
 }
 
 interface AssetsForm {
-  region: string
-  source: string
-  mirror: string
-  custom_base_url: string
-  music_alias_url: string
-  sticker_path: string
+	region: string;
+	source: string;
+	mirror: string;
+	custom_base_url: string;
+	music_alias_url: string;
+	sticker_path: string;
 }
 
 interface ServerProfileForm {
-  enabled: boolean
-  masterdata: MasterdataForm
-  assets: AssetsForm
-  sekai_api: {
-    enabled: boolean
-    region: string
-    timeout: number
-    rate_limit: number
-  }
-  ranking_api: {
-    region: string
-    timeout: number
-  }
+	enabled: boolean;
+	masterdata: MasterdataForm;
+	assets: AssetsForm;
+	sekai_api: {
+		enabled: boolean;
+		region: string;
+		timeout: number;
+		rate_limit: number;
+	};
+	ranking_api: {
+		region: string;
+		timeout: number;
+	};
 }
 
 interface SettingsForm {
-  server: { region: string }
-  renderer: { precision: number }
-  servers: Record<string, ServerProfileForm>
+	server: { region: string };
+	renderer: { precision: number };
+	servers: Record<string, ServerProfileForm>;
 }
 
 type ServerEntry = {
-  option: ConfigOption
-  form: ServerProfileForm
-  state?: PublicServerProfile
-}
+	option: ConfigOption;
+	form: ServerProfileForm;
+	state?: PublicServerProfile;
+};
 
 const fallbackRegions: ConfigOption[] = [
-  { key: 'cn', label: '国服' },
-  { key: 'jp', label: '日服' },
-  { key: 'tw', label: '台服' },
-  { key: 'kr', label: '韩服' },
-  { key: 'en', label: '国际服' },
-]
+	{ key: "cn", label: "国服" },
+	{ key: "jp", label: "日服" },
+	{ key: "tw", label: "台服" },
+	{ key: "kr", label: "韩服" },
+	{ key: "en", label: "国际服" },
+];
 const fallbackMasterdataSources: ConfigOption[] = [
-  { key: 'moesekai', label: 'MoeSekai', regions: ['jp', 'cn'] },
-  { key: 'haruki', label: 'Haruki GitHub', regions: ['jp', 'cn', 'tw', 'kr', 'en'] },
-  { key: '8823', label: '8823 GitHub', regions: ['jp', 'cn', 'tw'] },
-  { key: 'custom', label: '自定义', regions: ['jp', 'cn', 'tw', 'kr', 'en'] },
-]
+	{ key: "moesekai", label: "MoeSekai", regions: ["jp", "cn"] },
+	{
+		key: "haruki",
+		label: "Haruki GitHub",
+		regions: ["jp", "cn", "tw", "kr", "en"],
+	},
+	{ key: "8823", label: "8823 GitHub", regions: ["jp", "cn", "tw"] },
+	{ key: "custom", label: "自定义", regions: ["jp", "cn", "tw", "kr", "en"] },
+];
 const fallbackAssetSources: ConfigOption[] = [
-  { key: 'moesekai', label: 'MoeSekai', regions: ['jp', 'cn'] },
-  { key: 'sekai_best', label: 'sekai.best', regions: ['jp', 'cn', 'tw', 'kr', 'en'] },
-  { key: 'custom', label: '自定义', regions: ['jp', 'cn', 'tw', 'kr', 'en'] },
-]
+	{ key: "moesekai", label: "MoeSekai", regions: ["jp", "cn"] },
+	{
+		key: "sekai_best",
+		label: "sekai.best",
+		regions: ["jp", "cn", "tw", "kr", "en"],
+	},
+	{ key: "custom", label: "自定义", regions: ["jp", "cn", "tw", "kr", "en"] },
+];
 const fallbackAssetMirrors: ConfigOption[] = [
-  { key: 'main', label: '主镜像' },
-  { key: 'backup', label: '备用镜像' },
-  { key: 'overseas', label: '海外镜像' },
-  { key: 'overseas_backup', label: '海外备用' },
-]
+	{ key: "main", label: "主镜像" },
+	{ key: "backup", label: "备用镜像" },
+	{ key: "overseas", label: "海外镜像" },
+	{ key: "overseas_backup", label: "海外备用" },
+];
 
-const config = ref<PublicConfig | null>(null)
-const form = ref<SettingsForm>(createEmptyForm())
-const activeTab = ref("jp")
-const savedSnapshot = ref('')
-const loading = ref(false)
-const saving = ref(false)
-const reloading = ref('')
-const error = ref('')
-const success = ref('')
+const config = ref<PublicConfig | null>(null);
+const form = ref<SettingsForm>(createEmptyForm());
+const activeTab = ref("jp");
+const savedSnapshot = ref("");
+const loading = ref(false);
+const saving = ref(false);
+const reloading = ref("");
+const error = ref("");
+const success = ref("");
 
-const regionOptions = computed(() => config.value?.presets.regions ?? fallbackRegions)
-const masterdataSourceOptions = computed(() => config.value?.presets.masterdata_sources ?? fallbackMasterdataSources)
-const assetSourceOptions = computed(() => config.value?.presets.asset_sources ?? fallbackAssetSources)
-const assetMirrorOptions = computed(() => config.value?.presets.asset_mirrors ?? fallbackAssetMirrors)
+const regionOptions = computed(
+	() => config.value?.presets.regions ?? fallbackRegions,
+);
+const masterdataSourceOptions = computed(
+	() => config.value?.presets.masterdata_sources ?? fallbackMasterdataSources,
+);
+const assetSourceOptions = computed(
+	() => config.value?.presets.asset_sources ?? fallbackAssetSources,
+);
+const assetMirrorOptions = computed(
+	() => config.value?.presets.asset_mirrors ?? fallbackAssetMirrors,
+);
 
 const dirty = computed(() => {
-  if (!config.value) return false
-  return JSON.stringify(buildPayload()) !== savedSnapshot.value
-})
-const serverEntries = computed<ServerEntry[]>(() => regionOptions.value.map(region => ({ option: region, form: ensureServerForm(region.key), state: config.value?.servers?.[region.key] })))
-const serverProfilesSupported = computed(() => serverEntries.value.every(entry => serverProfileSupported(entry.form)))
-const canSave = computed(() => serverProfilesSupported.value && form.value.renderer.precision > 0)
-const rendererOutputScaleText = computed(() => `${formatNumber(form.value.renderer.precision)}x`)
+	if (!config.value) return false;
+	return JSON.stringify(buildPayload()) !== savedSnapshot.value;
+});
+const serverEntries = computed<ServerEntry[]>(() =>
+	regionOptions.value.map((region) => ({
+		option: region,
+		form: ensureServerForm(region.key),
+		state: config.value?.servers?.[region.key],
+	})),
+);
+const serverProfilesSupported = computed(() =>
+	serverEntries.value.every((entry) => serverProfileSupported(entry.form)),
+);
+const canSave = computed(
+	() => serverProfilesSupported.value && form.value.renderer.precision > 0,
+);
+const rendererOutputScaleText = computed(
+	() => `${formatNumber(form.value.renderer.precision)}x`,
+);
 
 const webItems = computed<ConfigItem[]>(() => [
-  { label: 'Host', value: config.value?.web.host ?? '-' },
-  { label: 'Port', value: config.value?.web.port ?? '-' },
-])
+	{ label: "Host", value: config.value?.web.host ?? "-" },
+	{ label: "Port", value: config.value?.web.port ?? "-" },
+]);
 
 const botItems = computed<ConfigItem[]>(() => [
-  { label: '驱动类型', value: config.value?.bot.driver_type ?? '-' },
-  { label: '监听地址', value: config.value?.bot.listen ?? '-' },
-  { label: '命令前缀', value: config.value?.bot.command_prefix ?? '-' },
-  { label: '自定义关键词', value: aliasCount(config.value?.bot.command_aliases), badge: true },
-  { label: '昵称', value: config.value?.bot.nickname?.join(' / ') || '-' },
-  { label: 'URL 已配置', value: Boolean(config.value?.bot.url_configured), badge: true },
-  { label: 'Token 已设置', value: Boolean(config.value?.bot.token_set), badge: true },
-])
+	{ label: "驱动类型", value: config.value?.bot.driver_type ?? "-" },
+	{ label: "监听地址", value: config.value?.bot.listen ?? "-" },
+	{ label: "命令前缀", value: config.value?.bot.command_prefix ?? "-" },
+	{
+		label: "自定义关键词",
+		value: aliasCount(config.value?.bot.command_aliases),
+		badge: true,
+	},
+	{ label: "昵称", value: config.value?.bot.nickname?.join(" / ") || "-" },
+	{
+		label: "URL 已配置",
+		value: Boolean(config.value?.bot.url_configured),
+		badge: true,
+	},
+	{
+		label: "Token 已设置",
+		value: Boolean(config.value?.bot.token_set),
+		badge: true,
+	},
+]);
 
 const rendererItems = computed<ConfigItem[]>(() => [
-  { label: 'Base URL', value: config.value?.renderer.base_url ?? '-' },
-  { label: 'Host', value: config.value?.renderer.host ?? '-' },
-  { label: 'Port', value: config.value?.renderer.port ?? '-' },
-  { label: '当前精度', value: `${formatNumber(config.value?.renderer.precision ?? 1.5)}x` },
-  { label: '缓存启用', value: Boolean(config.value?.renderer.cache.enabled), badge: true },
-  { label: '缓存路径', value: config.value?.renderer.cache.path ?? '-' },
-  { label: '缓存上限', value: `${config.value?.renderer.cache.max_size_mb ?? '-'} MB` },
-  { label: '缓存 TTL', value: `${config.value?.renderer.cache.ttl_hours ?? '-'} 小时` },
-])
+	{ label: "Base URL", value: config.value?.renderer.base_url ?? "-" },
+	{ label: "Host", value: config.value?.renderer.host ?? "-" },
+	{ label: "Port", value: config.value?.renderer.port ?? "-" },
+	{
+		label: "当前精度",
+		value: `${formatNumber(config.value?.renderer.precision ?? 1.5)}x`,
+	},
+	{
+		label: "缓存启用",
+		value: Boolean(config.value?.renderer.cache.enabled),
+		badge: true,
+	},
+	{ label: "缓存路径", value: config.value?.renderer.cache.path ?? "-" },
+	{
+		label: "缓存上限",
+		value: `${config.value?.renderer.cache.max_size_mb ?? "-"} MB`,
+	},
+	{
+		label: "缓存 TTL",
+		value: `${config.value?.renderer.cache.ttl_hours ?? "-"} 小时`,
+	},
+]);
 
 const masterdataItems = computed<ConfigItem[]>(() => [
-  { label: '区服', value: `${config.value?.masterdata.region_label ?? '-'} (${config.value?.masterdata.region ?? '-'})` },
-  { label: '来源', value: config.value?.masterdata.source_label || config.value?.masterdata.source || '-' },
-  { label: '主 URL', value: config.value?.masterdata.url || '-' },
-  { label: '备用 URL', value: config.value?.masterdata.fallback_url || '-' },
-  { label: '源可用', value: Boolean(config.value?.masterdata.supported), badge: true },
-  { label: '本地路径', value: config.value?.masterdata.local_path ?? '-' },
-  { label: '刷新间隔', value: `${config.value?.masterdata.refresh_interval ?? '-'} 秒` },
-])
+	{
+		label: "区服",
+		value: `${config.value?.masterdata.region_label ?? "-"} (${config.value?.masterdata.region ?? "-"})`,
+	},
+	{
+		label: "来源",
+		value:
+			config.value?.masterdata.source_label ||
+			config.value?.masterdata.source ||
+			"-",
+	},
+	{ label: "主 URL", value: config.value?.masterdata.url || "-" },
+	{ label: "备用 URL", value: config.value?.masterdata.fallback_url || "-" },
+	{
+		label: "源可用",
+		value: Boolean(config.value?.masterdata.supported),
+		badge: true,
+	},
+	{ label: "本地路径", value: config.value?.masterdata.local_path ?? "-" },
+	{
+		label: "刷新间隔",
+		value: `${config.value?.masterdata.refresh_interval ?? "-"} 秒`,
+	},
+]);
 
 const sekaiApiItems = computed<ConfigItem[]>(() => [
-  { label: '启用', value: Boolean(config.value?.sekai_api.enabled), badge: true },
-  { label: 'Base URL 已配置', value: Boolean(config.value?.sekai_api.base_url_configured), badge: true },
-  { label: '区服', value: config.value?.sekai_api.region ?? '-' },
-  { label: '请求头已配置', value: Boolean(config.value?.sekai_api.headers_configured), badge: true },
-  { label: 'Ranking 区服', value: config.value?.ranking_api?.region ?? '-' },
-])
+	{
+		label: "启用",
+		value: Boolean(config.value?.sekai_api.enabled),
+		badge: true,
+	},
+	{
+		label: "Base URL 已配置",
+		value: Boolean(config.value?.sekai_api.base_url_configured),
+		badge: true,
+	},
+	{ label: "区服", value: config.value?.sekai_api.region ?? "-" },
+	{
+		label: "请求头已配置",
+		value: Boolean(config.value?.sekai_api.headers_configured),
+		badge: true,
+	},
+	{ label: "Ranking 区服", value: config.value?.ranking_api?.region ?? "-" },
+]);
 
 function aliasCount(aliases?: Record<string, string[]>) {
-  if (!aliases) return false
-  return Object.values(aliases).reduce((total, list) => total + (Array.isArray(list) ? list.length : 0), 0) > 0
+	if (!aliases) return false;
+	return (
+		Object.values(aliases).reduce(
+			(total, list) => total + (Array.isArray(list) ? list.length : 0),
+			0,
+		) > 0
+	);
 }
 
 const assetItems = computed<ConfigItem[]>(() => [
-  { label: '区服', value: `${config.value?.assets.region_label ?? '-'} (${config.value?.assets.region ?? '-'})` },
-  { label: '来源', value: config.value?.assets.source_label || config.value?.assets.source || '-' },
-  { label: '镜像', value: config.value?.assets.mirror_label || config.value?.assets.mirror || '-' },
-  { label: 'Base URL', value: config.value?.assets.base_url || '-' },
-  { label: 'Renderer Source', value: config.value?.assets.renderer_source || '-' },
-  { label: '曲名别名配置', value: Boolean(config.value?.assets.music_alias_configured), badge: true },
-  { label: '贴纸路径', value: config.value?.assets.sticker_path ?? '-' },
-  { label: '版本', value: config.value?.version ?? '-' },
-])
+	{
+		label: "区服",
+		value: `${config.value?.assets.region_label ?? "-"} (${config.value?.assets.region ?? "-"})`,
+	},
+	{
+		label: "来源",
+		value:
+			config.value?.assets.source_label || config.value?.assets.source || "-",
+	},
+	{
+		label: "镜像",
+		value:
+			config.value?.assets.mirror_label || config.value?.assets.mirror || "-",
+	},
+	{ label: "Base URL", value: config.value?.assets.base_url || "-" },
+	{
+		label: "Renderer Source",
+		value: config.value?.assets.renderer_source || "-",
+	},
+	{
+		label: "曲名别名配置",
+		value: Boolean(config.value?.assets.music_alias_configured),
+		badge: true,
+	},
+	{ label: "贴纸路径", value: config.value?.assets.sticker_path ?? "-" },
+	{ label: "版本", value: config.value?.version ?? "-" },
+]);
 
 const ConfigSection = defineComponent({
-  props: {
-    title: { type: String, required: true },
-    description: { type: String, required: true },
-    icon: { type: String as () => IconName, required: true },
-    items: { type: Array as () => ConfigItem[], required: true },
-  },
-  setup(props) {
-    return () => h(UiCard, { className: 'settings-card' }, () => [
-      h('div', { class: 'settings-card__heading' }, [
-        h('div', { class: 'settings-card__icon' }, [h(SvgIcon, { name: props.icon, size: 22 })]),
-        h('div', null, [h('h2', props.title), h('p', props.description)]),
-      ]),
-      h('dl', { class: 'settings-list' }, props.items.map(item => h('div', { key: item.label }, [
-        h('dt', item.label),
-        h('dd', item.badge
-          ? h(UiBadge, { variant: item.value ? 'success' : 'warning' }, () => item.value ? '是' : '否')
-          : String(item.value)),
-      ]))),
-    ])
-  },
-})
+	props: {
+		title: { type: String, required: true },
+		description: { type: String, required: true },
+		icon: { type: String as () => IconName, required: true },
+		items: { type: Array as () => ConfigItem[], required: true },
+	},
+	setup(props) {
+		return () =>
+			h(UiCard, { className: "settings-card" }, () => [
+				h("div", { class: "settings-card__heading" }, [
+					h("div", { class: "settings-card__icon" }, [
+						h(SvgIcon, { name: props.icon, size: 22 }),
+					]),
+					h("div", null, [h("h2", props.title), h("p", props.description)]),
+				]),
+				h(
+					"dl",
+					{ class: "settings-list" },
+					props.items.map((item) =>
+						h("div", { key: item.label }, [
+							h("dt", item.label),
+							h(
+								"dd",
+								item.badge
+									? h(
+											UiBadge,
+											{ variant: item.value ? "success" : "warning" },
+											() => (item.value ? "是" : "否"),
+										)
+									: String(item.value),
+							),
+						]),
+					),
+				),
+			]);
+	},
+});
 
-onMounted(loadConfig)
+onMounted(loadConfig);
 
 async function loadConfig() {
-  loading.value = true
-  error.value = ''
-  success.value = ''
-  try {
-    const data = await getPublicConfig()
-    config.value = data
-    applyConfigToForm(data)
-  } catch (err) {
-    error.value = getErrorMessage(err, '加载配置失败。')
-  } finally {
-    loading.value = false
-  }
+	loading.value = true;
+	error.value = "";
+	success.value = "";
+	try {
+		const data = await getPublicConfig();
+		config.value = data;
+		applyConfigToForm(data);
+	} catch (err) {
+		error.value = getErrorMessage(err, "加载配置失败。");
+	} finally {
+		loading.value = false;
+	}
 }
 
 async function saveSettings() {
-  saving.value = true
-  error.value = ''
-  success.value = ''
-  try {
-    const response = await updatePublicConfig(buildPayload())
-    config.value = response.config
-    applyConfigToForm(response.config)
-    success.value = response.message || '设置已保存。'
-  } catch (err) {
-    error.value = getErrorMessage(err, '保存设置失败。')
-  } finally {
-    saving.value = false
-  }
+	saving.value = true;
+	error.value = "";
+	success.value = "";
+	try {
+		const response = await updatePublicConfig(buildPayload());
+		config.value = response.config;
+		applyConfigToForm(response.config);
+		success.value = response.message || "设置已保存。";
+	} catch (err) {
+		error.value = getErrorMessage(err, "保存设置失败。");
+	} finally {
+		saving.value = false;
+	}
 }
 
 async function reloadMasterdataNow(region = form.value.server.region) {
-  reloading.value = region
-  error.value = ''
-  success.value = ''
-  try {
-    const result = await reloadMasterdata(region)
-    success.value = `${result.message}：卡牌 ${result.counts.cards} / 曲目 ${result.counts.musics} / 活动 ${result.counts.events} / 卡池 ${result.counts.gachas}`
-    await loadConfig()
-  } catch (err) {
-    error.value = getErrorMessage(err, '重载 Masterdata 失败。')
-  } finally {
-    reloading.value = ''
-  }
+	reloading.value = region;
+	error.value = "";
+	success.value = "";
+	try {
+		const result = await reloadMasterdata(region);
+		success.value = `${result.message}：卡牌 ${result.counts.cards} / 曲目 ${result.counts.musics} / 活动 ${result.counts.events} / 卡池 ${result.counts.gachas} / 演唱会 ${result.counts.virtual_lives ?? 0}`;
+		await loadConfig();
+	} catch (err) {
+		error.value = getErrorMessage(err, "重载 Masterdata 失败。");
+	} finally {
+		reloading.value = "";
+	}
 }
 
 function createEmptyForm(): SettingsForm {
-  return {
-    server: { region: 'jp' },
-    renderer: { precision: 1.5 },
-    servers: {},
-  }
+	return {
+		server: { region: "jp" },
+		renderer: { precision: 1.5 },
+		servers: {},
+	};
 }
 
 function applyConfigToForm(data: PublicConfig) {
-  const defaultRegion = data.server.region || 'jp'
-  form.value = {
-    server: { region: defaultRegion },
-    renderer: { precision: data.renderer.precision || 1.5 },
-    servers: {},
-  }
-  for (const option of regionOptions.value) {
-    const server = data.servers?.[option.key] ?? (option.key === defaultRegion ? {
-      enabled: true,
-      masterdata: data.masterdata,
-      assets: data.assets,
-      sekai_api: data.sekai_api,
-      ranking_api: data.ranking_api,
-    } : undefined)
-    form.value.servers[option.key] = createServerForm(option.key, server)
-    normalizeServerProfile(option.key, false)
-  }
-  savedSnapshot.value = JSON.stringify(buildPayload())
+	const defaultRegion = data.server.region || "jp";
+	form.value = {
+		server: { region: defaultRegion },
+		renderer: { precision: data.renderer.precision || 1.5 },
+		servers: {},
+	};
+	for (const option of regionOptions.value) {
+		const server =
+			data.servers?.[option.key] ??
+			(option.key === defaultRegion
+				? {
+						enabled: true,
+						masterdata: data.masterdata,
+						assets: data.assets,
+						sekai_api: data.sekai_api,
+						ranking_api: data.ranking_api,
+					}
+				: undefined);
+		form.value.servers[option.key] = createServerForm(option.key, server);
+		normalizeServerProfile(option.key, false);
+	}
+	savedSnapshot.value = JSON.stringify(buildPayload());
 }
 
 function buildPayload(): UpdatePublicConfigPayload {
-  const defaultProfile = ensureServerForm(form.value.server.region)
-  return {
-    server: { region: form.value.server.region },
-    renderer: { precision: Number(form.value.renderer.precision) || 1.5 },
-    masterdata: buildMasterdataPayload(defaultProfile.masterdata),
-    assets: buildAssetsPayload(defaultProfile.assets),
-    servers: Object.fromEntries(regionOptions.value.map(option => [option.key, buildServerPayload(option.key)])),
-  }
+	const defaultProfile = ensureServerForm(form.value.server.region);
+	return {
+		server: { region: form.value.server.region },
+		renderer: { precision: Number(form.value.renderer.precision) || 1.5 },
+		masterdata: buildMasterdataPayload(defaultProfile.masterdata),
+		assets: buildAssetsPayload(defaultProfile.assets),
+		servers: Object.fromEntries(
+			regionOptions.value.map((option) => [
+				option.key,
+				buildServerPayload(option.key),
+			]),
+		),
+	};
 }
 
 function buildMasterdataPayload(masterdata: MasterdataForm) {
-  return {
-    region: masterdata.region,
-    source: masterdata.source,
-    custom_url: masterdata.custom_url,
-    custom_fallback_url: masterdata.custom_fallback_url,
-    local_path: masterdata.local_path,
-    refresh_interval: Number(masterdata.refresh_interval) || 0,
-  }
+	return {
+		region: masterdata.region,
+		source: masterdata.source,
+		custom_url: masterdata.custom_url,
+		custom_fallback_url: masterdata.custom_fallback_url,
+		local_path: masterdata.local_path,
+		refresh_interval: Number(masterdata.refresh_interval) || 0,
+	};
 }
 
 function buildAssetsPayload(assets: AssetsForm) {
-  return {
-    region: assets.region,
-    source: assets.source,
-    mirror: assets.mirror,
-    custom_base_url: assets.custom_base_url,
-    music_alias_url: assets.music_alias_url,
-    sticker_path: assets.sticker_path,
-  }
+	return {
+		region: assets.region,
+		source: assets.source,
+		mirror: assets.mirror,
+		custom_base_url: assets.custom_base_url,
+		music_alias_url: assets.music_alias_url,
+		sticker_path: assets.sticker_path,
+	};
 }
 
 function setDefaultRegion(region: string) {
-  form.value.server.region = region
-  const defaultProfile = ensureServerForm(region)
-  defaultProfile.enabled = true
-  normalizeServerProfile(region)
-  success.value = ''
+	form.value.server.region = region;
+	const defaultProfile = ensureServerForm(region);
+	defaultProfile.enabled = true;
+	normalizeServerProfile(region);
+	success.value = "";
 }
 
 function normalizeRendererPrecision() {
-  const precision = Number(form.value.renderer.precision)
-  if (!Number.isFinite(precision) || precision <= 0) {
-    form.value.renderer.precision = 1.5
-  }
+	const precision = Number(form.value.renderer.precision);
+	if (!Number.isFinite(precision) || precision <= 0) {
+		form.value.renderer.precision = 1.5;
+	}
 }
 
-function createServerForm(region: string, server?: Partial<PublicServerProfile>): ServerProfileForm {
-  const masterdata = server?.masterdata
-  const assets = server?.assets
-  return {
-    enabled: server?.enabled ?? region === 'jp',
-    masterdata: {
-      region: masterdata?.region || region,
-      source: masterdata?.source || (region === 'jp' || region === 'cn' ? 'moesekai' : 'haruki'),
-      custom_url: masterdata?.custom_url || (masterdata?.source === 'custom' ? masterdata?.url || '' : ''),
-      custom_fallback_url: masterdata?.custom_fallback_url || (masterdata?.source === 'custom' ? masterdata?.fallback_url || '' : ''),
-      local_path: masterdata?.local_path || `./data/master/${region}`,
-      refresh_interval: masterdata?.refresh_interval ?? 3600,
-    },
-    assets: {
-      region: assets?.region || region,
-      source: assets?.source || (region === 'jp' || region === 'cn' ? 'moesekai' : 'sekai_best'),
-      mirror: assets?.mirror || 'main',
-      custom_base_url: assets?.custom_base_url || (assets?.source === 'custom' ? assets?.base_url || '' : ''),
-      music_alias_url: assets?.music_alias_url || '',
-      sticker_path: assets?.sticker_path || './assets/stickers',
-    },
-    sekai_api: {
-      enabled: server?.sekai_api?.enabled ?? false,
-      region: server?.sekai_api?.region || region,
-      timeout: server?.sekai_api?.timeout ?? 10,
-      rate_limit: server?.sekai_api?.rate_limit ?? 30,
-    },
-    ranking_api: {
-      region: server?.ranking_api?.region || region,
-      timeout: server?.ranking_api?.timeout ?? 10,
-    },
-  }
+function createServerForm(
+	region: string,
+	server?: Partial<PublicServerProfile>,
+): ServerProfileForm {
+	const masterdata = server?.masterdata;
+	const assets = server?.assets;
+	return {
+		enabled: server?.enabled ?? region === "jp",
+		masterdata: {
+			region: masterdata?.region || region,
+			source:
+				masterdata?.source ||
+				(region === "jp" || region === "cn" ? "moesekai" : "haruki"),
+			custom_url:
+				masterdata?.custom_url ||
+				(masterdata?.source === "custom" ? masterdata?.url || "" : ""),
+			custom_fallback_url:
+				masterdata?.custom_fallback_url ||
+				(masterdata?.source === "custom" ? masterdata?.fallback_url || "" : ""),
+			local_path: masterdata?.local_path || `./data/master/${region}`,
+			refresh_interval: masterdata?.refresh_interval ?? 3600,
+		},
+		assets: {
+			region: assets?.region || region,
+			source:
+				assets?.source ||
+				(region === "jp" || region === "cn" ? "moesekai" : "sekai_best"),
+			mirror: assets?.mirror || "main",
+			custom_base_url:
+				assets?.custom_base_url ||
+				(assets?.source === "custom" ? assets?.base_url || "" : ""),
+			music_alias_url: assets?.music_alias_url || "",
+			sticker_path: assets?.sticker_path || "./assets/stickers",
+		},
+		sekai_api: {
+			enabled: server?.sekai_api?.enabled ?? false,
+			region: server?.sekai_api?.region || region,
+			timeout: server?.sekai_api?.timeout ?? 10,
+			rate_limit: server?.sekai_api?.rate_limit ?? 30,
+		},
+		ranking_api: {
+			region: server?.ranking_api?.region || region,
+			timeout: server?.ranking_api?.timeout ?? 10,
+		},
+	};
 }
 
 function ensureServerForm(region: string) {
-  if (!form.value.servers[region]) {
-    form.value.servers[region] = createServerForm(region)
-  }
-  return form.value.servers[region]
+	if (!form.value.servers[region]) {
+		form.value.servers[region] = createServerForm(region);
+	}
+	return form.value.servers[region];
 }
 
 function buildServerPayload(region: string) {
-  const profile = ensureServerForm(region)
-  return {
-    enabled: isRegionLocked(region) ? true : profile.enabled,
-    masterdata: buildMasterdataPayload(profile.masterdata),
-    assets: buildAssetsPayload(profile.assets),
-    sekai_api: {
-      enabled: profile.sekai_api.enabled,
-      region: profile.sekai_api.region,
-      timeout: Number(profile.sekai_api.timeout) || 10,
-      rate_limit: Number(profile.sekai_api.rate_limit) || 30,
-    },
-    ranking_api: {
-      region: profile.ranking_api.region,
-      timeout: Number(profile.ranking_api.timeout) || 10,
-    },
-  }
+	const profile = ensureServerForm(region);
+	return {
+		enabled: isRegionLocked(region) ? true : profile.enabled,
+		masterdata: buildMasterdataPayload(profile.masterdata),
+		assets: buildAssetsPayload(profile.assets),
+		sekai_api: {
+			enabled: profile.sekai_api.enabled,
+			region: profile.sekai_api.region,
+			timeout: Number(profile.sekai_api.timeout) || 10,
+			rate_limit: Number(profile.sekai_api.rate_limit) || 30,
+		},
+		ranking_api: {
+			region: profile.ranking_api.region,
+			timeout: Number(profile.ranking_api.timeout) || 10,
+		},
+	};
 }
 
 function normalizeServerProfile(region: string, clearSuccess = true) {
-  const profile = ensureServerForm(region)
-  profile.masterdata.region = region
-  profile.assets.region = region
-  if (!optionAvailable(findOption(masterdataSourceOptions.value, profile.masterdata.source), region)) {
-    profile.masterdata.source = firstAvailableOption(masterdataSourceOptions.value, region)?.key ?? 'custom'
-  }
-  if (!optionAvailable(findOption(assetSourceOptions.value, profile.assets.source), region)) {
-    profile.assets.source = firstAvailableOption(assetSourceOptions.value, region)?.key ?? 'custom'
-  }
-  if (profile.assets.source !== 'moesekai') {
-    profile.assets.mirror = ''
-  } else if (!profile.assets.mirror) {
-    profile.assets.mirror = 'main'
-  }
-  if (clearSuccess) success.value = ''
+	const profile = ensureServerForm(region);
+	profile.masterdata.region = region;
+	profile.assets.region = region;
+	if (
+		!optionAvailable(
+			findOption(masterdataSourceOptions.value, profile.masterdata.source),
+			region,
+		)
+	) {
+		profile.masterdata.source =
+			firstAvailableOption(masterdataSourceOptions.value, region)?.key ??
+			"custom";
+	}
+	if (
+		!optionAvailable(
+			findOption(assetSourceOptions.value, profile.assets.source),
+			region,
+		)
+	) {
+		profile.assets.source =
+			firstAvailableOption(assetSourceOptions.value, region)?.key ?? "custom";
+	}
+	if (profile.assets.source !== "moesekai") {
+		profile.assets.mirror = "";
+	} else if (!profile.assets.mirror) {
+		profile.assets.mirror = "main";
+	}
+	if (clearSuccess) success.value = "";
 }
 
 function serverProfileSupported(profile: ServerProfileForm) {
-  return masterdataProfileSupported(profile) && assetProfileSupported(profile)
+	return masterdataProfileSupported(profile) && assetProfileSupported(profile);
 }
 
 function masterdataProfileSupported(profile: ServerProfileForm) {
-  return optionAvailable(findOption(masterdataSourceOptions.value, profile.masterdata.source), profile.masterdata.region)
+	return optionAvailable(
+		findOption(masterdataSourceOptions.value, profile.masterdata.source),
+		profile.masterdata.region,
+	);
 }
 
 function assetProfileSupported(profile: ServerProfileForm) {
-  return optionAvailable(findOption(assetSourceOptions.value, profile.assets.source), profile.assets.region)
+	return optionAvailable(
+		findOption(assetSourceOptions.value, profile.assets.source),
+		profile.assets.region,
+	);
 }
 
 function optionAvailable(option: ConfigOption | undefined, region: string) {
-  if (!option) return false
-  return !option.regions?.length || option.regions.includes(region)
+	if (!option) return false;
+	return !option.regions?.length || option.regions.includes(region);
 }
 
 function findOption(options: ConfigOption[], key: string) {
-  return options.find(option => option.key === key)
+	return options.find((option) => option.key === key);
 }
 
 function firstAvailableOption(options: ConfigOption[], region: string) {
-  return options.find(option => optionAvailable(option, region))
+	return options.find((option) => optionAvailable(option, region));
 }
 
 function regionLabel(region: string) {
-  return findOption(regionOptions.value, region)?.label ?? region
+	return findOption(regionOptions.value, region)?.label ?? region;
 }
 
 function sourceLabel(options: ConfigOption[], key: string) {
-  return findOption(options, key)?.label ?? key
+	return findOption(options, key)?.label ?? key;
 }
 
 function sourceSupportText(options: ConfigOption[], key: string) {
-  const regions = findOption(options, key)?.regions
-  if (!regions?.length) return '全部区服'
-  return regions.map(region => regionLabel(region)).join(' / ')
+	const regions = findOption(options, key)?.regions;
+	if (!regions?.length) return "全部区服";
+	return regions.map((region) => regionLabel(region)).join(" / ");
 }
 
 function isRegionLocked(region: string) {
-  return region === 'jp' || region === form.value.server.region
+	return region === "jp" || region === form.value.server.region;
 }
 
 function countsText(counts?: MasterdataCounts) {
-  return `卡 ${counts?.cards ?? 0} / 曲 ${counts?.musics ?? 0} / 活 ${counts?.events ?? 0} / 池 ${counts?.gachas ?? 0}`
+	return `卡 ${counts?.cards ?? 0} / 曲 ${counts?.musics ?? 0} / 活 ${counts?.events ?? 0} / 池 ${counts?.gachas ?? 0} / 演 ${counts?.virtual_lives ?? 0}`;
 }
 
 function formatTime(value?: string | null) {
-  return value ? new Date(value).toLocaleString() : '-'
+	return value ? new Date(value).toLocaleString() : "-";
 }
 
 function formatNumber(value: number) {
-  if (!Number.isFinite(value)) return '-'
-  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+	if (!Number.isFinite(value)) return "-";
+	return Number.isInteger(value)
+		? String(value)
+		: value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function masterdataPreview(entry: ServerEntry, kind: 'primary' | 'fallback') {
-  const masterdata = entry.form.masterdata
-  if (masterdata.source === 'custom') {
-    return kind === 'primary' ? masterdata.custom_url || '-' : masterdata.custom_fallback_url || '-'
-  }
-  const current = entry.state?.masterdata
-  if (!current || current.source !== masterdata.source || current.region !== masterdata.region) {
-    return '保存后由后端解析'
-  }
-  return kind === 'primary' ? current.url || '-' : current.fallback_url || '-'
+function masterdataPreview(entry: ServerEntry, kind: "primary" | "fallback") {
+	const masterdata = entry.form.masterdata;
+	if (masterdata.source === "custom") {
+		return kind === "primary"
+			? masterdata.custom_url || "-"
+			: masterdata.custom_fallback_url || "-";
+	}
+	const current = entry.state?.masterdata;
+	if (
+		!current ||
+		current.source !== masterdata.source ||
+		current.region !== masterdata.region
+	) {
+		return "保存后由后端解析";
+	}
+	return kind === "primary" ? current.url || "-" : current.fallback_url || "-";
 }
 
-function assetsPreview(entry: ServerEntry, kind: 'base' | 'renderer') {
-  const assets = entry.form.assets
-  if (assets.source === 'custom') {
-    return kind === 'base' ? assets.custom_base_url || '-' : assets.custom_base_url || '-'
-  }
-  const current = entry.state?.assets
-  if (!current || current.source !== assets.source || current.region !== assets.region || current.mirror !== assets.mirror) {
-    return '保存后由后端解析'
-  }
-  return kind === 'base' ? current.base_url || '-' : current.renderer_source || '-'
+function assetsPreview(entry: ServerEntry, kind: "base" | "renderer") {
+	const assets = entry.form.assets;
+	if (assets.source === "custom") {
+		return kind === "base"
+			? assets.custom_base_url || "-"
+			: assets.custom_base_url || "-";
+	}
+	const current = entry.state?.assets;
+	if (
+		!current ||
+		current.source !== assets.source ||
+		current.region !== assets.region ||
+		current.mirror !== assets.mirror
+	) {
+		return "保存后由后端解析";
+	}
+	return kind === "base"
+		? current.base_url || "-"
+		: current.renderer_source || "-";
 }
 
 function masterdataHint(entry: ServerEntry) {
-  if (!entry.form.enabled) return '该区服未启用；启用并保存后即可重载。'
-  return entry.state?.masterdata.error || entry.state?.masterdata.load_error || '保存来源后可立即重载；失败时会继续保留本地缓存兜底。'
+	if (!entry.form.enabled) return "该区服未启用；启用并保存后即可重载。";
+	return (
+		entry.state?.masterdata.error ||
+		entry.state?.masterdata.load_error ||
+		"保存来源后可立即重载；失败时会继续保留本地缓存兜底。"
+	);
 }
 
 function getErrorMessage(err: unknown, fallback: string) {
-  const maybeAxios = err as { response?: { data?: { message?: string } }; message?: string }
-  return maybeAxios.response?.data?.message || maybeAxios.message || fallback
+	const maybeAxios = err as {
+		response?: { data?: { message?: string } };
+		message?: string;
+	};
+	return maybeAxios.response?.data?.message || maybeAxios.message || fallback;
 }
 </script>

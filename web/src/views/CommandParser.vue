@@ -53,7 +53,7 @@
             <div><dt>来源</dt><dd>{{ matchSourceLabel(parsed.match_source) }}</dd></div>
             <div><dt>区服</dt><dd>{{ parsed.region_label }} ({{ parsed.region?.toUpperCase() }})</dd></div>
             <div><dt>参数</dt><dd>{{ parsed.argument || '-' }}</dd></div>
-            <div><dt>模板</dt><dd>{{ parsed.definition?.template || '-' }}</dd></div>
+            <div><dt>模板</dt><dd>{{ parsed.selected?.type?.endsWith('_list') ? parsed.selected.type : (parsed.definition?.template || '-') }}</dd></div>
           </dl>
 
           <div v-if="parsed.selected" class="selected-result">

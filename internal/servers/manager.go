@@ -18,16 +18,17 @@ import (
 
 // Runtime contains all per-server resources used by commands and the web panel.
 type Runtime struct {
-	Region    string
-	Label     string
-	Enabled   bool
-	Profile   config.GameServerConfig
-	Store     *masterdata.Store
-	Loader    *masterdata.Loader
-	Assets    *assets.Resolver
-	Sekai     *sekai.Client
-	Ranking   *ranking.Client
-	LoadError error
+	Region       string
+	Label        string
+	Enabled      bool
+	Profile      config.GameServerConfig
+	Store        *masterdata.Store
+	Loader       *masterdata.Loader
+	Assets       *assets.Resolver
+	MusicAliases map[int]assets.MusicAlias
+	Sekai        *sekai.Client
+	Ranking      *ranking.Client
+	LoadError    error
 }
 
 // Manager owns all configured game server runtimes.
@@ -81,6 +82,9 @@ func (m *Manager) ApplyConfig(cfg *config.Config) {
 		if runtime.Enabled {
 			runtime.Loader = masterdata.NewLoader(profile.Masterdata, runtime.Store, region)
 			runtime.Assets, runtime.LoadError = assets.NewResolver(profile.Assets, region)
+			if previous := old[region]; previous != nil && previous.MusicAliases != nil {
+				runtime.MusicAliases = previous.MusicAliases
+			}
 			runtime.Sekai = sekai.NewClient(profile.SekaiAPI)
 			runtime.Ranking = ranking.NewClient(ranking.Config{
 				BaseURL: profile.RankingAPI.BaseURL,
@@ -104,10 +108,25 @@ func (m *Manager) LoadEnabled() {
 		} else {
 			runtime.LoadError = nil
 		}
+		m.loadMusicAliases(runtime)
 	}
 }
 
 // StartPeriodicRefresh starts per-region refresh loops.
+func (m *Manager) loadMusicAliases(runtime *Runtime) {
+	if runtime == nil || !runtime.Enabled {
+		return
+	}
+	url := runtime.Profile.Assets.MusicAliasURL
+	aliases, err := assets.LoadMusicAliases(url)
+	if err != nil {
+		log.Debug().Err(err).Str("region", runtime.Region).Msg("Music alias load failed; music search will use masterdata only")
+		return
+	}
+	runtime.MusicAliases = aliases
+	log.Debug().Str("region", runtime.Region).Int("aliases", len(aliases)).Msg("Music aliases loaded")
+}
+
 func (m *Manager) StartPeriodicRefresh() {
 	for _, runtime := range m.EnabledRuntimes() {
 		interval := runtime.Profile.Masterdata.RefreshInterval
@@ -169,6 +188,7 @@ func (m *Manager) Reload(region string) (*Runtime, error) {
 		return runtime, err
 	}
 	runtime.LoadError = nil
+	m.loadMusicAliases(runtime)
 	return runtime, nil
 }
 

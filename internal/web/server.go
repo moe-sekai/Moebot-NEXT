@@ -117,6 +117,7 @@ func (s *Server) registerRoutes() {
 	api.Get("/search/musics", s.handleSearchMusics)
 	api.Get("/search/events", s.handleSearchEvents)
 	api.Get("/search/gachas", s.handleSearchGachas)
+	api.Get("/search/virtual-lives", s.handleSearchVirtualLives)
 
 	// TODO: auth middleware, settings, renderer preview, WebSocket
 }

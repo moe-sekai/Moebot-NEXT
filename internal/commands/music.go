@@ -2,10 +2,14 @@ package commands
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"moebot-next/internal/assets"
 	"moebot-next/internal/bot"
+	"moebot-next/internal/masterdata"
 	"moebot-next/internal/renderer"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
@@ -40,28 +44,53 @@ func registerMusicDetailCommand(deps *Deps, command string) {
 				return
 			}
 
-			results := runtime.Store.SearchMusics(keyword)
-			if len(results) == 0 {
-				ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的曲目", keyword)))
+			if strings.EqualFold(keyword, "leak") || keyword == "剧透" || keyword == "未来" {
+				musics := filterLeakMusics(runtime.Store.AllMusics())
+				if len(musics) == 0 {
+					ctx.SendChain(message.Text("当前没有未发布曲目"))
+					return
+				}
+				sendMusicList(ctx, deps, runtime.Store, runtime.Assets, recordCommand, runtime.Region, start, "未发布曲目", "leak", musics, 1, 1, len(musics))
+				return
+			}
+			if ids, ok := parseMultipleMusicIDs(keyword); ok {
+				musics := collectMusicsByIDs(runtime.Store, ids)
+				if len(musics) == 0 {
+					ctx.SendChain(message.Text("没有找到指定 ID 的曲目"))
+					return
+				}
+				sendMusicList(ctx, deps, runtime.Store, runtime.Assets, recordCommand, runtime.Region, start, "曲目列表", keyword, musics, 1, 1, len(musics))
 				return
 			}
 
-			music := results[0]
-			payload := renderer.BuildMusicDetailPayloadWithAssets(runtime.Store, music, runtime.Assets)
-
+			result := searchMusicAdvanced(runtime.Store, runtime.MusicAliases, keyword, "")
+			if result.Music == nil {
+				ctx.SendChain(message.Text(result.Message))
+				return
+			}
+			if len(result.Musics) > 1 {
+				sendMusicList(ctx, deps, runtime.Store, runtime.Assets, recordCommand, runtime.Region, start, "活动关联曲目", keyword, result.Musics, 1, 1, len(result.Musics))
+				return
+			}
+			payload := renderer.BuildMusicDetailPayloadWithAssets(runtime.Store, *result.Music, runtime.Assets)
 			if deps.Renderer != nil && deps.Renderer.Health() {
-				png, err := deps.Renderer.Render(renderer.RenderRequest{
-					Template: "music_detail",
-					Data:     payload,
-				})
+				png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "music_detail", Data: payload})
 				if err == nil {
-					ctx.SendChain(message.ImageBytes(png))
+					if result.Message != "" {
+						ctx.SendChain(message.ImageBytes(png), message.Text("\n"+result.Message))
+					} else {
+						ctx.SendChain(message.ImageBytes(png))
+					}
 					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 					return
 				}
 			}
 
-			ctx.SendChain(message.Text(formatMusicText(payload)))
+			text := formatMusicText(payload)
+			if result.Message != "" {
+				text += "\n" + result.Message
+			}
+			ctx.SendChain(message.Text(text))
 			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
@@ -89,26 +118,98 @@ func registerChartCommand(deps *Deps) {
 				return
 			}
 
-			results := runtime.Store.SearchMusics(keyword)
-			if len(results) == 0 {
-				ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的谱面", keyword)))
+			query, options := parseMusicQuery(keyword)
+			if query == "" {
+				ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的谱面关键词~\n例: /%s master 千本樱", commandName)))
+				return
+			}
+			result := searchMusicAdvanced(runtime.Store, runtime.MusicAliases, query, options.Difficulty)
+			if result.Music == nil {
+				ctx.SendChain(message.Text(result.Message))
 				return
 			}
 
-			payload := renderer.BuildMusicDetailPayloadWithAssets(runtime.Store, results[0], runtime.Assets)
+			payload := renderer.BuildMusicDetailPayloadWithAssets(runtime.Store, *result.Music, runtime.Assets)
+			payload = selectedDifficultyPayload(payload, options.Difficulty)
 			if deps.Renderer != nil && deps.Renderer.Health() {
 				png, err := deps.Renderer.Render(buildChartRenderRequest(payload))
 				if err == nil {
-					ctx.SendChain(message.ImageBytes(png))
+					if result.Message != "" {
+						ctx.SendChain(message.ImageBytes(png), message.Text("\n"+result.Message))
+					} else {
+						ctx.SendChain(message.ImageBytes(png))
+					}
 					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 					return
 				}
 			}
 
-			ctx.SendChain(message.Text(formatChartText(payload)))
+			text := formatChartText(payload)
+			if result.Message != "" {
+				text += "\n" + result.Message
+			}
+			ctx.SendChain(message.Text(text))
 			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
+}
+
+func sendMusicList(ctx *zero.Ctx, deps *Deps, store *masterdata.Store, resolver *assets.Resolver, recordCommand string, region string, start time.Time, title string, subtitle string, musics []masterdata.MusicInfo, page int, totalPages int, total int) {
+	assetResolver := resolver
+	payload := renderer.BuildMusicListPayloadWithAssets(title, subtitle, musics, store, assetResolver, page, totalPages, total)
+	if deps.Renderer != nil && deps.Renderer.Health() {
+		png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "music_list", Data: payload})
+		if err == nil {
+			ctx.SendChain(message.ImageBytes(png))
+			bot.RecordCommandRegion(deps.DB, recordCommand, region, ctx, start)
+			return
+		}
+	}
+	ctx.SendChain(message.Text(formatMusicListText(payload)))
+	bot.RecordCommandRegion(deps.DB, recordCommand, region, ctx, start)
+}
+
+func filterLeakMusics(musics []masterdata.MusicInfo) []masterdata.MusicInfo {
+	now := time.Now().UnixMilli()
+	out := make([]masterdata.MusicInfo, 0)
+	for _, music := range musics {
+		if music.PublishedAt > now {
+			out = append(out, music)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].PublishedAt != out[j].PublishedAt {
+			return out[i].PublishedAt < out[j].PublishedAt
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+func parseMultipleMusicIDs(keyword string) ([]int, bool) {
+	fields := strings.Fields(keyword)
+	if len(fields) <= 1 {
+		return nil, false
+	}
+	ids := make([]int, 0, len(fields))
+	for _, field := range fields {
+		id, err := strconv.Atoi(field)
+		if err != nil || id <= 0 {
+			return nil, false
+		}
+		ids = append(ids, id)
+	}
+	return ids, true
+}
+
+func collectMusicsByIDs(store *masterdata.Store, ids []int) []masterdata.MusicInfo {
+	out := make([]masterdata.MusicInfo, 0, len(ids))
+	for _, id := range ids {
+		if music := store.GetMusic(id); music != nil {
+			out = append(out, *music)
+		}
+	}
+	return out
 }
 
 func buildChartRenderRequest(payload renderer.MusicDetailPayload) renderer.RenderRequest {
@@ -116,6 +217,14 @@ func buildChartRenderRequest(payload renderer.MusicDetailPayload) renderer.Rende
 		Template: "chart_detail",
 		Data:     payload,
 	}
+}
+
+func formatMusicListText(payload renderer.MusicListPayload) string {
+	lines := []string{fmt.Sprintf("%s（共 %d 首）", payload.Title, payload.Total)}
+	for _, music := range payload.Musics {
+		lines = append(lines, fmt.Sprintf("#%d %s", music.ID, music.Title))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatMusicText(music renderer.MusicDetailPayload) string {

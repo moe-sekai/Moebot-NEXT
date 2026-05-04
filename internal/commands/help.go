@@ -18,7 +18,7 @@ func helpText() string {
 	return `🎵 Moebot NEXT — PJSK 多服务器查询机器人
 
 📋 可用指令:
-  /查卡 [关键词]      — 搜索卡牌信息
+  /查卡 [ID/筛选]     — 纯 ID 查详情，其它角色/属性/限定条件查列表
   /查曲 [关键词]      — 搜索曲目信息
   /查歌 [关键词]      — /查曲 的别名
   /查谱 [关键词]      — 查询谱面等级与 notes
@@ -35,7 +35,7 @@ func helpText() string {
   /帮助               — 显示本帮助信息
 
 🌐 服务器前缀: jp / cn / tw / kr / en
-💡 例: /cn查卡 初音、/en查曲 tell your world、/kr榜线 1000
+💡 例: /cn查卡 1204、/jp查卡 mnr 4 蓝 限定、/en查曲 tell your world、/kr榜线 1000
 💡 无前缀查询会优先使用你的绑定服务器，未绑定则默认日服。
 🌐 管理面板: http://localhost:8080`
 }

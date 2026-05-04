@@ -2,8 +2,10 @@ package commandparser
 
 import (
 	"testing"
+	"time"
 
 	"moebot-next/internal/config"
+	"moebot-next/internal/masterdata"
 )
 
 func TestParseCardPrimaryAndPresetAliases(t *testing.T) {
@@ -37,6 +39,33 @@ func TestParseCustomAliasAndRegion(t *testing.T) {
 	}
 	if parsed.Region != config.RegionCN {
 		t.Fatalf("region = %q, want cn", parsed.Region)
+	}
+}
+
+func TestSearchAndBuildCardListParsesLunabotStyleFilters(t *testing.T) {
+	store := masterdata.NewStore()
+	now := time.Now().UnixMilli()
+	store.SetAll(&masterdata.MasterData{Cards: []masterdata.CardInfo{
+		{ID: 10, CharacterID: 9, CardRarityType: "rarity_4", Attr: "cute", Prefix: "心羽四星", ReleaseAt: now, SupportUnit: "none"},
+		{ID: 11, CharacterID: 9, CardRarityType: "rarity_3", Attr: "cute", Prefix: "心羽三星", ReleaseAt: now - 1, SupportUnit: "none"},
+		{ID: 20, CharacterID: 5, CardRarityType: "rarity_4", Attr: "cool", Prefix: "实乃理限定", ReleaseAt: now, SupportUnit: "none", CardSupplyID: 1},
+		{ID: 21, CharacterID: 5, CardRarityType: "rarity_4", Attr: "cool", Prefix: "实乃理常驻", ReleaseAt: now - 1, SupportUnit: "none"},
+	}, CardSupplies: []masterdata.CardSupplyInfo{{ID: 1, CardSupplyType: "term_limited"}}})
+
+	rows, selected := searchAndBuild(BaseDefinitions()[0], store, nil, "khn 四星")
+	if selected == nil || selected.Type != "card_list" {
+		t.Fatalf("selected = %#v, want card_list", selected)
+	}
+	if len(rows) != 1 || rows[0].ID != 10 {
+		t.Fatalf("rows = %#v, want only khn rarity_4", rows)
+	}
+
+	rows, selected = searchAndBuild(BaseDefinitions()[0], store, nil, "mnr 4 蓝 限定")
+	if selected == nil || selected.Type != "card_list" {
+		t.Fatalf("selected = %#v, want card_list", selected)
+	}
+	if len(rows) != 1 || rows[0].ID != 20 {
+		t.Fatalf("rows = %#v, want only limited cool mnr 4*", rows)
 	}
 }
 

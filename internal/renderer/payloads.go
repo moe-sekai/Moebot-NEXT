@@ -53,6 +53,8 @@ type MusicDetailPayload struct {
 	FillerSec           float64                  `json:"fillerSec,omitempty"`
 	IsNewlyWrittenMusic bool                     `json:"isNewlyWrittenMusic,omitempty"`
 	IsFullLength        bool                     `json:"isFullLength,omitempty"`
+	SelectedDifficulty  string                   `json:"selectedDifficulty,omitempty"`
+	ChartURL            string                   `json:"chartUrl,omitempty"`
 	AssetSource         string                   `json:"assetSource,omitempty"`
 }
 
@@ -82,6 +84,9 @@ type EventInfoPayload struct {
 	DeckBonuses       []EventDeckBonusPayload `json:"deckBonuses,omitempty"`
 	BonusAttr         string                  `json:"bonusAttr,omitempty"`
 	BonusCharacters   []string                `json:"bonusCharacters,omitempty"`
+	BannerURL         string                  `json:"bannerUrl,omitempty"`
+	LogoURL           string                  `json:"logoUrl,omitempty"`
+	StoryBannerURL    string                  `json:"storyBannerUrl,omitempty"`
 	AssetSource       string                  `json:"assetSource,omitempty"`
 }
 
@@ -146,6 +151,94 @@ type GachaRatePayload struct {
 	CardRarityType string  `json:"cardRarityType"`
 	LotteryType    string  `json:"lotteryType,omitempty"`
 	Rate           float64 `json:"rate"`
+}
+
+type CardListPayload struct {
+	Title       string              `json:"title"`
+	Subtitle    string              `json:"subtitle,omitempty"`
+	Cards       []CardDetailPayload `json:"cards"`
+	Page        int                 `json:"page,omitempty"`
+	TotalPages  int                 `json:"totalPages,omitempty"`
+	Total       int                 `json:"total,omitempty"`
+	AssetSource string              `json:"assetSource,omitempty"`
+}
+
+type MusicListPayload struct {
+	Title       string               `json:"title"`
+	Subtitle    string               `json:"subtitle,omitempty"`
+	Musics      []MusicDetailPayload `json:"musics"`
+	Page        int                  `json:"page,omitempty"`
+	TotalPages  int                  `json:"totalPages,omitempty"`
+	Total       int                  `json:"total,omitempty"`
+	AssetSource string               `json:"assetSource,omitempty"`
+}
+
+type EventListPayload struct {
+	Title       string             `json:"title"`
+	Subtitle    string             `json:"subtitle,omitempty"`
+	Events      []EventInfoPayload `json:"events"`
+	Page        int                `json:"page,omitempty"`
+	TotalPages  int                `json:"totalPages,omitempty"`
+	Total       int                `json:"total,omitempty"`
+	AssetSource string             `json:"assetSource,omitempty"`
+}
+
+type GachaListPayload struct {
+	Title       string             `json:"title"`
+	Subtitle    string             `json:"subtitle,omitempty"`
+	Gachas      []GachaInfoPayload `json:"gachas"`
+	Page        int                `json:"page,omitempty"`
+	TotalPages  int                `json:"totalPages,omitempty"`
+	Total       int                `json:"total,omitempty"`
+	AssetSource string             `json:"assetSource,omitempty"`
+}
+
+type VirtualLiveListPayload struct {
+	Title        string               `json:"title"`
+	Subtitle     string               `json:"subtitle,omitempty"`
+	VirtualLives []VirtualLivePayload `json:"virtualLives"`
+	Page         int                  `json:"page,omitempty"`
+	TotalPages   int                  `json:"totalPages,omitempty"`
+	Total        int                  `json:"total,omitempty"`
+	AssetSource  string               `json:"assetSource,omitempty"`
+}
+
+type VirtualLivePayload struct {
+	ID              int                           `json:"id"`
+	Name            string                        `json:"name"`
+	AssetbundleName string                        `json:"assetbundleName,omitempty"`
+	VirtualLiveType string                        `json:"virtualLiveType,omitempty"`
+	StartAt         int64                         `json:"startAt"`
+	EndAt           int64                         `json:"endAt"`
+	CurrentStartAt  int64                         `json:"currentStartAt,omitempty"`
+	CurrentEndAt    int64                         `json:"currentEndAt,omitempty"`
+	Living          bool                          `json:"living,omitempty"`
+	RestCount       int                           `json:"restCount,omitempty"`
+	Schedules       []VirtualLiveSchedulePayload  `json:"schedules,omitempty"`
+	Rewards         []VirtualLiveRewardPayload    `json:"rewards,omitempty"`
+	Characters      []VirtualLiveCharacterPayload `json:"characters,omitempty"`
+	AssetSource     string                        `json:"assetSource,omitempty"`
+}
+
+type VirtualLiveSchedulePayload struct {
+	ID      int   `json:"id,omitempty"`
+	Seq     int   `json:"seq,omitempty"`
+	StartAt int64 `json:"startAt"`
+	EndAt   int64 `json:"endAt"`
+}
+
+type VirtualLiveRewardPayload struct {
+	ID              int    `json:"id,omitempty"`
+	VirtualLiveType string `json:"virtualLiveType,omitempty"`
+	ResourceBoxID   int    `json:"resourceBoxId,omitempty"`
+}
+
+type VirtualLiveCharacterPayload struct {
+	ID                  int    `json:"id,omitempty"`
+	GameCharacterID     int    `json:"gameCharacterId,omitempty"`
+	GameCharacterUnitID int    `json:"gameCharacterUnitId,omitempty"`
+	CharacterName       string `json:"characterName,omitempty"`
+	PerformanceType     string `json:"performanceType,omitempty"`
 }
 
 type RankingListPayload struct {
@@ -471,7 +564,7 @@ func BuildCardDetailPayload(store *masterdata.Store, card masterdata.CardInfo) C
 }
 
 // BuildCardDetailPayloadWithAssets adapts a card using a region-specific asset resolver.
-func BuildCardDetailPayloadWithAssets(_ *masterdata.Store, card masterdata.CardInfo, resolver *assets.Resolver) CardDetailPayload {
+func BuildCardDetailPayloadWithAssets(store *masterdata.Store, card masterdata.CardInfo, resolver *assets.Resolver) CardDetailPayload {
 	assetResolver := resolverOrDefault(resolver)
 	payload := CardDetailPayload{
 		ID:              card.ID,
@@ -485,7 +578,7 @@ func BuildCardDetailPayloadWithAssets(_ *masterdata.Store, card masterdata.CardI
 		Power:           maxCardPower(card),
 		SkillName:       card.CardSkillName,
 		GachaPhrase:     cleanDash(card.GachaPhrase),
-		SupplyType:      cardSupplyType(card.CardSupplyID),
+		SupplyType:      CardSupplyDisplayName(store, card),
 		CardSupplyID:    card.CardSupplyID,
 		AssetSource:     assetSourceForResolver(assetResolver),
 	}
@@ -561,6 +654,12 @@ func BuildEventInfoPayloadWithAssets(store *masterdata.Store, event masterdata.E
 		ClosedAt:          event.ClosedAt,
 		DistributionEndAt: event.DistributionEndAt,
 		AssetSource:       assetSourceForResolver(resolver),
+	}
+
+	if event.AssetbundleName != "" {
+		assetResolver := resolverOrDefault(resolver)
+		payload.BannerURL = assetResolver.GetEventBannerURL(event.AssetbundleName)
+		payload.LogoURL = assetResolver.GetEventLogoURL(event.AssetbundleName)
 	}
 
 	if store == nil {
@@ -651,6 +750,96 @@ func BuildGachaInfoPayloadWithAssets(store *masterdata.Store, gacha masterdata.G
 	return payload
 }
 
+func BuildCardListPayloadWithAssets(title string, subtitle string, cards []masterdata.CardInfo, store *masterdata.Store, resolver *assets.Resolver, page int, totalPages int, total int) CardListPayload {
+	payload := CardListPayload{Title: title, Subtitle: subtitle, Page: page, TotalPages: totalPages, Total: total, AssetSource: assetSourceForResolver(resolver)}
+	for _, card := range cards {
+		payload.Cards = append(payload.Cards, BuildCardDetailPayloadWithAssets(store, card, resolver))
+	}
+	return payload
+}
+
+func BuildMusicListPayloadWithAssets(title string, subtitle string, musics []masterdata.MusicInfo, store *masterdata.Store, resolver *assets.Resolver, page int, totalPages int, total int) MusicListPayload {
+	payload := MusicListPayload{Title: title, Subtitle: subtitle, Page: page, TotalPages: totalPages, Total: total, AssetSource: assetSourceForResolver(resolver)}
+	for _, music := range musics {
+		payload.Musics = append(payload.Musics, BuildMusicDetailPayloadWithAssets(store, music, resolver))
+	}
+	return payload
+}
+
+func BuildEventListPayloadWithAssets(title string, subtitle string, events []masterdata.EventInfo, store *masterdata.Store, resolver *assets.Resolver, page int, totalPages int, total int) EventListPayload {
+	payload := EventListPayload{Title: title, Subtitle: subtitle, Page: page, TotalPages: totalPages, Total: total, AssetSource: assetSourceForResolver(resolver)}
+	for _, event := range events {
+		eventPayload := BuildEventInfoPayloadWithAssets(store, event, resolver)
+		eventPayload.StoryBannerURL = defaultEventListStoryBannerURL(resolver)
+		payload.Events = append(payload.Events, eventPayload)
+	}
+	return payload
+}
+
+func defaultEventListStoryBannerURL(resolver *assets.Resolver) string {
+	assetResolver := resolverOrDefault(resolver)
+	return fmt.Sprintf("%s/event_story/event_show_2026/screen_image/banner_event_story.png", assetResolver.BaseURL())
+}
+
+func BuildGachaListPayloadWithAssets(title string, subtitle string, gachas []masterdata.GachaInfo, store *masterdata.Store, resolver *assets.Resolver, page int, totalPages int, total int) GachaListPayload {
+	payload := GachaListPayload{Title: title, Subtitle: subtitle, Page: page, TotalPages: totalPages, Total: total, AssetSource: assetSourceForResolver(resolver)}
+	for _, gacha := range gachas {
+		payload.Gachas = append(payload.Gachas, BuildGachaInfoPayloadWithAssets(store, gacha, resolver))
+	}
+	return payload
+}
+
+func BuildVirtualLiveListPayloadWithAssets(title string, subtitle string, lives []masterdata.VirtualLive, store *masterdata.Store, resolver *assets.Resolver, page int, totalPages int, total int) VirtualLiveListPayload {
+	payload := VirtualLiveListPayload{Title: title, Subtitle: subtitle, Page: page, TotalPages: totalPages, Total: total, AssetSource: assetSourceForResolver(resolver)}
+	for _, live := range lives {
+		payload.VirtualLives = append(payload.VirtualLives, BuildVirtualLivePayloadWithAssets(live, store, resolver))
+	}
+	return payload
+}
+
+func BuildVirtualLivePayloadWithAssets(live masterdata.VirtualLive, store *masterdata.Store, resolver *assets.Resolver) VirtualLivePayload {
+	payload := VirtualLivePayload{
+		ID:              live.ID,
+		Name:            live.Name,
+		AssetbundleName: live.AssetbundleName,
+		VirtualLiveType: live.VirtualLiveType,
+		StartAt:         live.StartAt,
+		EndAt:           live.EndAt,
+		AssetSource:     assetSourceForResolver(resolver),
+	}
+	now := time.Now().UnixMilli()
+	for _, schedule := range live.VirtualLiveSchedules {
+		payload.Schedules = append(payload.Schedules, VirtualLiveSchedulePayload{ID: schedule.ID, Seq: schedule.Seq, StartAt: schedule.StartAt, EndAt: schedule.EndAt})
+		if schedule.StartAt > now {
+			payload.RestCount++
+		}
+		if payload.CurrentStartAt == 0 && schedule.EndAt > now {
+			payload.CurrentStartAt = schedule.StartAt
+			payload.CurrentEndAt = schedule.EndAt
+			payload.Living = schedule.StartAt <= now
+		}
+	}
+	for _, reward := range live.VirtualLiveRewards {
+		payload.Rewards = append(payload.Rewards, VirtualLiveRewardPayload{ID: reward.ID, VirtualLiveType: reward.VirtualLiveType, ResourceBoxID: reward.ResourceBoxID})
+	}
+	for _, item := range live.VirtualLiveCharacters {
+		characterID := item.GameCharacterID
+		if characterID == 0 && store != nil && item.GameCharacterUnitID > 0 {
+			if unit := store.GetCharacterUnit(item.GameCharacterUnitID); unit != nil {
+				characterID = unit.GameCharacterID
+			}
+		}
+		payload.Characters = append(payload.Characters, VirtualLiveCharacterPayload{
+			ID:                  item.ID,
+			GameCharacterID:     characterID,
+			GameCharacterUnitID: item.GameCharacterUnitID,
+			CharacterName:       characterName(characterID),
+			PerformanceType:     item.VirtualLivePerformanceType,
+		})
+	}
+	return payload
+}
+
 func buildGachaPickupCardPayload(card masterdata.CardInfo, pickupType string, resolver *assets.Resolver) GachaPickupCardPayload {
 	payload := GachaPickupCardPayload{
 		ID:              card.ID,
@@ -722,11 +911,43 @@ func characterName(characterID int) string {
 	return "未知角色"
 }
 
-func cardSupplyType(cardSupplyID int) string {
-	if cardSupplyID <= 0 {
-		return ""
+// CardSupplyDisplayName returns a user-facing card supply label.
+func CardSupplyDisplayName(store *masterdata.Store, card masterdata.CardInfo) string {
+	if card.CardRarityType == "rarity_birthday" {
+		return "生日"
 	}
-	return fmt.Sprintf("供给 #%d", cardSupplyID)
+	return CardSupplyTypeDisplayName(CardSupplyType(store, card))
+}
+
+// CardSupplyType resolves a card's supply type from loaded masterdata.
+func CardSupplyType(store *masterdata.Store, card masterdata.CardInfo) string {
+	if card.CardSupplyID <= 0 || store == nil {
+		return "normal"
+	}
+	if supply := store.GetCardSupply(card.CardSupplyID); supply != nil && supply.CardSupplyType != "" {
+		return supply.CardSupplyType
+	}
+	return "normal"
+}
+
+// CardSupplyTypeDisplayName converts an upstream cardSupplyType into a label.
+func CardSupplyTypeDisplayName(supplyType string) string {
+	switch supplyType {
+	case "term_limited":
+		return "期间限定"
+	case "colorful_festival_limited":
+		return "CFes限定"
+	case "bloom_festival_limited":
+		return "BFes限定"
+	case "unit_event_limited":
+		return "WL限定"
+	case "collaboration_limited":
+		return "联动限定"
+	case "normal", "":
+		return "常驻"
+	default:
+		return supplyType
+	}
 }
 
 func cleanDash(value string) string {

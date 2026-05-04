@@ -689,6 +689,7 @@ func (s *Server) publicServerProfilesMap(defaultRegion string) fiber.Map {
 			MusicCount() int
 			EventCount() int
 			GachaCount() int
+			VirtualLiveCount() int
 		}
 		var loadError string
 		if s.Servers != nil {
@@ -956,11 +957,18 @@ func (s *Server) handleSearchEvents(c *fiber.Ctx) error {
 
 // handleSearchGachas searches gacha masterdata and returns lightweight rows.
 func (s *Server) handleSearchGachas(c *fiber.Ctx) error {
+	c.Locals("allow_empty_query", true)
 	if err := s.ensureSearchReady(c); err != nil {
 		return err
 	}
 	q := strings.TrimSpace(c.Query("q"))
 	results := s.defaultStore().SearchGachas(q)
+	if q == "" || strings.EqualFold(q, "当前") {
+		store := s.defaultStore()
+		if full, ok := store.(interface{ AllGachas() []masterdata.GachaInfo }); ok {
+			results = currentGachasForWeb(full.AllGachas())
+		}
+	}
 	rows := make([]fiber.Map, 0, len(results))
 	for _, gacha := range results {
 		rows = append(rows, fiber.Map{
@@ -977,6 +985,92 @@ func (s *Server) handleSearchGachas(c *fiber.Ctx) error {
 	return searchResponse(c, q, rows)
 }
 
+// handleSearchVirtualLives searches virtual live masterdata and returns lightweight rows.
+func (s *Server) handleSearchVirtualLives(c *fiber.Ctx) error {
+	c.Locals("allow_empty_query", true)
+	if err := s.ensureSearchReady(c); err != nil {
+		return err
+	}
+	q := strings.TrimSpace(c.Query("q"))
+	results := searchVirtualLivesForWeb(s.defaultStore().AllVirtualLives(), q)
+	rows := make([]fiber.Map, 0, len(results))
+	for _, live := range results {
+		start, end := virtualLiveBoundsForWeb(live)
+		rows = append(rows, fiber.Map{
+			"id":                live.ID,
+			"title":             live.Name,
+			"subtitle":          fmt.Sprintf("%s - %s", formatWebMillis(start), formatWebMillis(end)),
+			"type":              "virtual_live",
+			"virtual_live_type": live.VirtualLiveType,
+			"start_at":          start,
+			"end_at":            end,
+			"assetbundleName":   live.AssetbundleName,
+		})
+	}
+	return searchResponse(c, q, rows)
+}
+
+func currentGachasForWeb(gachas []masterdata.GachaInfo) []masterdata.GachaInfo {
+	now := time.Now().UnixMilli()
+	out := make([]masterdata.GachaInfo, 0)
+	for _, gacha := range gachas {
+		if gacha.StartAt <= now && (gacha.EndAt <= 0 || now <= gacha.EndAt) {
+			out = append(out, gacha)
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	for _, gacha := range gachas {
+		if gacha.StartAt <= now {
+			out = append(out, gacha)
+		}
+	}
+	if len(out) > 12 {
+		return out[len(out)-12:]
+	}
+	return out
+}
+
+func searchVirtualLivesForWeb(lives []masterdata.VirtualLive, q string) []masterdata.VirtualLive {
+	now := time.Now().UnixMilli()
+	q = strings.TrimSpace(strings.ToLower(q))
+	out := make([]masterdata.VirtualLive, 0)
+	for _, live := range lives {
+		start, end := virtualLiveBoundsForWeb(live)
+		if q == "" {
+			if end > now && start-now < int64(7*24*time.Hour/time.Millisecond) {
+				out = append(out, live)
+			}
+			continue
+		}
+		if fmt.Sprintf("%d", live.ID) == q || strings.Contains(strings.ToLower(live.Name), q) || strings.Contains(strings.ToLower(live.AssetbundleName), q) {
+			out = append(out, live)
+		}
+	}
+	return out
+}
+
+func virtualLiveBoundsForWeb(live masterdata.VirtualLive) (int64, int64) {
+	start, end := live.StartAt, live.EndAt
+	for i, schedule := range live.VirtualLiveSchedules {
+		if i == 0 || schedule.StartAt < start || start == 0 {
+			start = schedule.StartAt
+		}
+		if schedule.EndAt > end {
+			end = schedule.EndAt
+		}
+	}
+	return start, end
+}
+
+func formatWebMillis(ms int64) string {
+	if ms <= 0 {
+		return "-"
+	}
+	return time.UnixMilli(ms).Format("2006-01-02 15:04")
+}
+
 func (s *Server) masterdataSummaryMap() fiber.Map {
 	return s.masterdataSummaryMapForStore(s.defaultStore())
 }
@@ -986,20 +1080,23 @@ func (s *Server) masterdataSummaryMapForStore(store interface {
 	MusicCount() int
 	EventCount() int
 	GachaCount() int
+	VirtualLiveCount() int
 }) fiber.Map {
 	if store == nil {
 		return fiber.Map{
-			"cards":  0,
-			"musics": 0,
-			"events": 0,
-			"gachas": 0,
+			"cards":         0,
+			"musics":        0,
+			"events":        0,
+			"gachas":        0,
+			"virtual_lives": 0,
 		}
 	}
 	return fiber.Map{
-		"cards":  store.CardCount(),
-		"musics": store.MusicCount(),
-		"events": store.EventCount(),
-		"gachas": store.GachaCount(),
+		"cards":         store.CardCount(),
+		"musics":        store.MusicCount(),
+		"events":        store.EventCount(),
+		"gachas":        store.GachaCount(),
+		"virtual_lives": store.VirtualLiveCount(),
 	}
 }
 
@@ -1019,10 +1116,12 @@ func (s *Server) defaultStore() interface {
 	MusicCount() int
 	EventCount() int
 	GachaCount() int
+	VirtualLiveCount() int
 	SearchCards(string) []masterdata.CardInfo
 	SearchMusics(string) []masterdata.MusicInfo
 	SearchEvents(string) []masterdata.EventInfo
 	SearchGachas(string) []masterdata.GachaInfo
+	AllVirtualLives() []masterdata.VirtualLive
 } {
 	if s.Servers != nil {
 		if runtime := s.Servers.Default(); runtime != nil && runtime.Store != nil {
@@ -1034,7 +1133,8 @@ func (s *Server) defaultStore() interface {
 
 func (s *Server) ensureSearchReady(c *fiber.Ctx) error {
 	q := strings.TrimSpace(c.Query("q"))
-	if q == "" {
+	allowEmpty := c.Locals("allow_empty_query") == true
+	if q == "" && !allowEmpty {
 		return c.JSON(fiber.Map{
 			"data":    []fiber.Map{},
 			"total":   0,

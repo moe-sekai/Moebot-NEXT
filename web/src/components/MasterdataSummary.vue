@@ -27,31 +27,66 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { MasterdataSummary } from '../api/types'
-import SvgIcon from './icons/SvgIcon.vue'
-import UiAlert from './ui/UiAlert.vue'
-import UiBadge from './ui/UiBadge.vue'
-import UiCard from './ui/UiCard.vue'
-import UiSkeleton from './ui/UiSkeleton.vue'
+import { computed } from "vue";
+import type { MasterdataSummary } from "../api/types";
+import SvgIcon from "./icons/SvgIcon.vue";
+import UiAlert from "./ui/UiAlert.vue";
+import UiBadge from "./ui/UiBadge.vue";
+import UiCard from "./ui/UiCard.vue";
+import UiSkeleton from "./ui/UiSkeleton.vue";
 
 const props = defineProps<{
-  summary: MasterdataSummary | null
-  loading?: boolean
-  error?: string
-}>()
+	summary: MasterdataSummary | null;
+	loading?: boolean;
+	error?: string;
+}>();
 
-const counts = computed(() => props.summary?.counts ?? { cards: 0, musics: 0, events: 0, gachas: 0 })
+const counts = computed(
+	() =>
+		props.summary?.counts ?? {
+			cards: 0,
+			musics: 0,
+			events: 0,
+			gachas: 0,
+			virtual_lives: 0,
+		},
+);
 
 const items = computed(() => [
-  { key: 'cards', label: '卡牌数量', icon: 'preview' as const, value: counts.value.cards },
-  { key: 'musics', label: '曲目数量', icon: 'resources' as const, value: counts.value.musics },
-  { key: 'events', label: '活动数量', icon: 'clock' as const, value: counts.value.events },
-  { key: 'gachas', label: '卡池数量', icon: 'sparkle' as const, value: counts.value.gachas },
-])
+	{
+		key: "cards",
+		label: "卡牌数量",
+		icon: "preview" as const,
+		value: counts.value.cards,
+	},
+	{
+		key: "musics",
+		label: "曲目数量",
+		icon: "resources" as const,
+		value: counts.value.musics,
+	},
+	{
+		key: "events",
+		label: "活动数量",
+		icon: "clock" as const,
+		value: counts.value.events,
+	},
+	{
+		key: "gachas",
+		label: "卡池数量",
+		icon: "sparkle" as const,
+		value: counts.value.gachas,
+	},
+	{
+		key: "virtual_lives",
+		label: "演唱会数量",
+		icon: "clock" as const,
+		value: counts.value.virtual_lives ?? 0,
+	},
+]);
 
 const loadedAt = computed(() => {
-  if (!props.summary?.loaded_at) return '暂无记录'
-  return new Date(props.summary.loaded_at).toLocaleString()
-})
+	if (!props.summary?.loaded_at) return "暂无记录";
+	return new Date(props.summary.loaded_at).toLocaleString();
+});
 </script>

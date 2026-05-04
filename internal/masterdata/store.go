@@ -23,7 +23,11 @@ type Store struct {
 	musicDifficulties []MusicDifficulty
 	events            []EventInfo
 	eventDeckBonuses  []EventDeckBonus
+	eventCards        []EventCard
+	eventMusics       []EventMusic
+	virtualLives      []VirtualLive
 	gachas            []GachaInfo
+	cardSupplies      []CardSupplyInfo
 	skills            []SkillInfo
 	characterUnits    []GameCharacterUnit
 	honors            []HonorInfo
@@ -34,16 +38,20 @@ type Store struct {
 	musicByID         map[int]*MusicInfo
 	eventByID         map[int]*EventInfo
 	gachaByID         map[int]*GachaInfo
+	virtualLiveByID   map[int]*VirtualLive
+	cardSupplyByID    map[int]*CardSupplyInfo
 	skillByID         map[int]*SkillInfo
 	characterUnitByID map[int]*GameCharacterUnit
 	honorByID         map[int]*HonorInfo
 	musicVocalByID    map[int]*MusicVocal
 
 	// ---- derived / relation indexes ----
-	diffsByMusicID     map[int][]MusicDifficulty
-	bonusesByEventID   map[int][]EventDeckBonus
-	unitsByCharacterID map[int][]GameCharacterUnit
-	vocalsByMusicID    map[int][]MusicVocal
+	diffsByMusicID       map[int][]MusicDifficulty
+	bonusesByEventID     map[int][]EventDeckBonus
+	eventCardsByEventID  map[int][]EventCard
+	eventMusicsByEventID map[int][]EventMusic
+	unitsByCharacterID   map[int][]GameCharacterUnit
+	vocalsByMusicID      map[int][]MusicVocal
 }
 
 // NewStore creates an empty Store ready for use.
@@ -59,12 +67,16 @@ func (s *Store) initMaps() {
 	s.musicByID = make(map[int]*MusicInfo)
 	s.eventByID = make(map[int]*EventInfo)
 	s.gachaByID = make(map[int]*GachaInfo)
+	s.virtualLiveByID = make(map[int]*VirtualLive)
+	s.cardSupplyByID = make(map[int]*CardSupplyInfo)
 	s.skillByID = make(map[int]*SkillInfo)
 	s.characterUnitByID = make(map[int]*GameCharacterUnit)
 	s.honorByID = make(map[int]*HonorInfo)
 	s.musicVocalByID = make(map[int]*MusicVocal)
 	s.diffsByMusicID = make(map[int][]MusicDifficulty)
 	s.bonusesByEventID = make(map[int][]EventDeckBonus)
+	s.eventCardsByEventID = make(map[int][]EventCard)
+	s.eventMusicsByEventID = make(map[int][]EventMusic)
 	s.unitsByCharacterID = make(map[int][]GameCharacterUnit)
 	s.vocalsByMusicID = make(map[int][]MusicVocal)
 }
@@ -84,7 +96,11 @@ func (s *Store) SetAll(data *MasterData) {
 	s.musicDifficulties = data.MusicDifficulties
 	s.events = data.Events
 	s.eventDeckBonuses = data.EventDeckBonuses
+	s.eventCards = data.EventCards
+	s.eventMusics = data.EventMusics
+	s.virtualLives = data.VirtualLives
 	s.gachas = data.Gachas
+	s.cardSupplies = data.CardSupplies
 	s.skills = data.Skills
 	s.characterUnits = data.CharacterUnits
 	s.honors = data.Honors
@@ -112,6 +128,12 @@ func (s *Store) buildIndexes() {
 	for i := range s.gachas {
 		s.gachaByID[s.gachas[i].ID] = &s.gachas[i]
 	}
+	for i := range s.virtualLives {
+		s.virtualLiveByID[s.virtualLives[i].ID] = &s.virtualLives[i]
+	}
+	for i := range s.cardSupplies {
+		s.cardSupplyByID[s.cardSupplies[i].ID] = &s.cardSupplies[i]
+	}
 	for i := range s.skills {
 		s.skillByID[s.skills[i].ID] = &s.skills[i]
 	}
@@ -131,6 +153,12 @@ func (s *Store) buildIndexes() {
 	}
 	for _, b := range s.eventDeckBonuses {
 		s.bonusesByEventID[b.EventID] = append(s.bonusesByEventID[b.EventID], b)
+	}
+	for _, c := range s.eventCards {
+		s.eventCardsByEventID[c.EventID] = append(s.eventCardsByEventID[c.EventID], c)
+	}
+	for _, m := range s.eventMusics {
+		s.eventMusicsByEventID[m.EventID] = append(s.eventMusicsByEventID[m.EventID], m)
 	}
 	for _, u := range s.characterUnits {
 		s.unitsByCharacterID[u.GameCharacterID] = append(s.unitsByCharacterID[u.GameCharacterID], u)
@@ -170,6 +198,20 @@ func (s *Store) GetGacha(id int) *GachaInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.gachaByID[id]
+}
+
+// GetVirtualLive returns the virtual live with the given ID, or nil.
+func (s *Store) GetVirtualLive(id int) *VirtualLive {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.virtualLiveByID[id]
+}
+
+// GetCardSupply returns the card supply row with the given ID, or nil.
+func (s *Store) GetCardSupply(id int) *CardSupplyInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cardSupplyByID[id]
 }
 
 // GetSkill returns the skill with the given ID, or nil.
@@ -214,6 +256,20 @@ func (s *Store) GetEventDeckBonuses(eventID int) []EventDeckBonus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.bonusesByEventID[eventID]
+}
+
+// GetEventCards returns all card links for an event ID.
+func (s *Store) GetEventCards(eventID int) []EventCard {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]EventCard(nil), s.eventCardsByEventID[eventID]...)
+}
+
+// GetEventMusics returns all music links for an event ID.
+func (s *Store) GetEventMusics(eventID int) []EventMusic {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]EventMusic(nil), s.eventMusicsByEventID[eventID]...)
 }
 
 // GetCharacterUnits returns all unit memberships for a character ID.
@@ -267,6 +323,42 @@ func (s *Store) AllGachas() []GachaInfo {
 	defer s.mu.RUnlock()
 	out := make([]GachaInfo, len(s.gachas))
 	copy(out, s.gachas)
+	return out
+}
+
+// AllVirtualLives returns a copy of the full virtual-live list.
+func (s *Store) AllVirtualLives() []VirtualLive {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]VirtualLive, len(s.virtualLives))
+	copy(out, s.virtualLives)
+	return out
+}
+
+// AllEventCards returns a copy of the full event-card relation list.
+func (s *Store) AllEventCards() []EventCard {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]EventCard, len(s.eventCards))
+	copy(out, s.eventCards)
+	return out
+}
+
+// AllEventMusics returns a copy of the full event-music relation list.
+func (s *Store) AllEventMusics() []EventMusic {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]EventMusic, len(s.eventMusics))
+	copy(out, s.eventMusics)
+	return out
+}
+
+// AllCardSupplies returns a copy of the full card-supply list.
+func (s *Store) AllCardSupplies() []CardSupplyInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]CardSupplyInfo, len(s.cardSupplies))
+	copy(out, s.cardSupplies)
 	return out
 }
 
@@ -341,6 +433,13 @@ func (s *Store) GachaCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.gachas)
+}
+
+// VirtualLiveCount returns the number of loaded virtual lives.
+func (s *Store) VirtualLiveCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.virtualLives)
 }
 
 // IsLoaded reports whether any masterdata has been loaded into the store.

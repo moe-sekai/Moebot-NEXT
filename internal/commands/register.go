@@ -29,6 +29,7 @@ func RegisterAll(deps *Deps) {
 	RegisterMusic(deps)
 	RegisterEvent(deps)
 	RegisterGacha(deps)
+	RegisterVirtualLive(deps)
 	RegisterGachaSimulation(deps)
 	RegisterProfile(deps)
 	RegisterRanking(deps)

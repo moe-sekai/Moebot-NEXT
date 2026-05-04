@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"moebot-next/internal/assets"
+	"moebot-next/internal/cardquery"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/renderer"
@@ -178,7 +179,11 @@ func (s *Service) Parse(input string) ParseResult {
 	if selected != nil {
 		result.Selected = selected
 		result.CanRender = true
-		result.Message = fmt.Sprintf("已解析为「%s」，并命中 %s #%d。", def.Name, selected.Type, selected.ID)
+		if strings.HasSuffix(selected.Type, "_list") {
+			result.Message = fmt.Sprintf("已解析为「%s」，并生成 %s（%d 条候选）。", def.Name, selected.Title, len(results))
+		} else {
+			result.Message = fmt.Sprintf("已解析为「%s」，并命中 %s #%d。", def.Name, selected.Type, selected.ID)
+		}
 		return result
 	}
 
@@ -199,7 +204,8 @@ func (s *Service) Render(input string, width int, height int) (*renderer.Preview
 	}
 	def := *parsed.Definition
 	if parsed.Selected != nil && parsed.Selected.Payload != nil && def.Template != "" {
-		request := renderer.RenderRequest{Template: def.Template, Data: parsed.Selected.Payload, Width: width, Height: height}
+		template := templateForPayload(def.Template, parsed.Selected.Payload)
+		request := renderer.RenderRequest{Template: template, Data: parsed.Selected.Payload, Width: width, Height: height}
 		result, err := s.Renderer.RenderWithTrace(request)
 		if err == nil {
 			return result, parsed, nil
@@ -315,16 +321,45 @@ func runtimeUnavailableMessage(runtime *servers.Runtime) string {
 	return "服务器配置不可用。"
 }
 
+func templateForPayload(fallback string, payload any) string {
+	switch payload.(type) {
+	case renderer.CardListPayload:
+		return "card_list"
+	case renderer.MusicListPayload:
+		return "music_list"
+	case renderer.EventListPayload:
+		return "event_list"
+	case renderer.GachaListPayload:
+		return "gacha_list"
+	case renderer.VirtualLiveListPayload:
+		return "virtual_live_list"
+	default:
+		return fallback
+	}
+}
+
 func searchAndBuild(def Definition, store *masterdata.Store, resolver *assets.Resolver, argument string) ([]EntityResult, *EntityResult) {
+	argument = strings.TrimSpace(argument)
 	switch def.SearchType {
 	case SearchTypeCard:
-		cards := store.SearchCards(argument)
-		rows := make([]EntityResult, 0, len(cards))
-		for _, card := range cards {
+		result := cardquery.Resolve(store, argument)
+		cards := result.Cards
+		rows := make([]EntityResult, 0, result.Total)
+		allCards := cards
+		if result.Mode == cardquery.ModeList && result.Total > len(cards) {
+			all := cardquery.ResolveAll(store, argument)
+			allCards = all.Cards
+		}
+		for _, card := range allCards {
 			rows = append(rows, EntityResult{ID: card.ID, Title: card.Prefix, Subtitle: fmt.Sprintf("角色 #%d · %s", card.CharacterID, card.CardRarityType), Type: "card"})
 		}
 		if len(cards) == 0 {
 			return rows, nil
+		}
+		if result.Mode == cardquery.ModeList {
+			payload := renderer.BuildCardListPayloadWithAssets("卡牌查询", commandListSubtitle(argument), cards, store, resolver, result.Page, result.TotalPages, result.Total)
+			selected := EntityResult{ID: rows[0].ID, Title: "卡牌列表", Subtitle: fmt.Sprintf("共 %d 张，展示前 %d 张", result.Total, len(cards)), Type: "card_list", Payload: payload}
+			return rows, &selected
 		}
 		payload := renderer.BuildCardDetailPayloadWithAssets(store, cards[0], resolver)
 		selected := rows[0]
@@ -344,7 +379,13 @@ func searchAndBuild(def Definition, store *masterdata.Store, resolver *assets.Re
 		selected.Payload = payload
 		return rows, &selected
 	case SearchTypeEvent:
+		if argument == "" || strings.EqualFold(argument, "当前") {
+			argument = "当前"
+		}
 		events := store.SearchEvents(argument)
+		if argument == "当前" {
+			events = currentOrNextEventsForParser(store.AllEvents())
+		}
 		rows := make([]EntityResult, 0, len(events))
 		for _, event := range events {
 			rows = append(rows, EntityResult{ID: event.ID, Title: event.Name, Subtitle: fmt.Sprintf("%s · %s", event.EventType, event.Unit), Type: "event"})
@@ -352,12 +393,24 @@ func searchAndBuild(def Definition, store *masterdata.Store, resolver *assets.Re
 		if len(events) == 0 {
 			return rows, nil
 		}
+		if len(events) > 1 {
+			shown := events
+			if len(shown) > 12 {
+				shown = shown[:12]
+			}
+			payload := renderer.BuildEventListPayloadWithAssets("活动查询", commandListSubtitle(argument), shown, store, resolver, 1, (len(events)+11)/12, len(events))
+			selected := EntityResult{ID: rows[0].ID, Title: "活动列表", Subtitle: fmt.Sprintf("共 %d 个，展示前 %d 个", len(events), len(shown)), Type: "event_list", Payload: payload}
+			return rows, &selected
+		}
 		payload := renderer.BuildEventInfoPayloadWithAssets(store, events[0], resolver)
 		selected := rows[0]
 		selected.Payload = payload
 		return rows, &selected
 	case SearchTypeGacha:
 		gachas := store.SearchGachas(argument)
+		if argument == "" || strings.EqualFold(argument, "当前") {
+			gachas = currentGachasForParser(store.AllGachas())
+		}
 		rows := make([]EntityResult, 0, len(gachas))
 		for _, gacha := range gachas {
 			rows = append(rows, EntityResult{ID: gacha.ID, Title: gacha.Name, Subtitle: gachaSubtitle(gacha), Type: "gacha"})
@@ -369,9 +422,105 @@ func searchAndBuild(def Definition, store *masterdata.Store, resolver *assets.Re
 		selected := rows[0]
 		selected.Payload = payload
 		return rows, &selected
+	case SearchTypeVirtualLive:
+		lives := searchVirtualLivesForParser(store, argument)
+		rows := make([]EntityResult, 0, len(lives))
+		for _, live := range lives {
+			rows = append(rows, EntityResult{ID: live.ID, Title: live.Name, Subtitle: virtualLiveSubtitleForParser(live), Type: "virtual_live"})
+		}
+		if len(lives) == 0 {
+			return rows, nil
+		}
+		payload := renderer.BuildVirtualLiveListPayloadWithAssets("虚拟 Live", "近期演唱会", lives, store, resolver, 1, 1, len(lives))
+		selected := rows[0]
+		selected.Payload = payload
+		return rows, &selected
 	default:
 		return []EntityResult{}, nil
 	}
+}
+
+func commandListSubtitle(argument string) string {
+	argument = strings.TrimSpace(argument)
+	if argument == "" {
+		return "列表查询"
+	}
+	return "关键词：" + argument
+}
+
+func currentOrNextEventsForParser(events []masterdata.EventInfo) []masterdata.EventInfo {
+	now := time.Now().UnixMilli()
+	for _, event := range events {
+		if event.StartAt <= now && now <= event.ClosedAt {
+			return []masterdata.EventInfo{event}
+		}
+	}
+	for _, event := range events {
+		if event.StartAt > now {
+			return []masterdata.EventInfo{event}
+		}
+	}
+	return nil
+}
+
+func currentGachasForParser(gachas []masterdata.GachaInfo) []masterdata.GachaInfo {
+	now := time.Now().UnixMilli()
+	out := []masterdata.GachaInfo{}
+	for _, gacha := range gachas {
+		if gacha.StartAt <= now && (gacha.EndAt <= 0 || now <= gacha.EndAt) {
+			out = append(out, gacha)
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	for _, gacha := range gachas {
+		if gacha.StartAt <= now {
+			out = append(out, gacha)
+		}
+	}
+	if len(out) > 6 {
+		return out[len(out)-6:]
+	}
+	return out
+}
+
+func searchVirtualLivesForParser(store *masterdata.Store, argument string) []masterdata.VirtualLive {
+	lives := store.AllVirtualLives()
+	now := time.Now().UnixMilli()
+	argument = strings.TrimSpace(argument)
+	out := []masterdata.VirtualLive{}
+	for _, live := range lives {
+		start, end := virtualLiveBoundsForParser(live)
+		if argument == "" {
+			if end > now && start-now < int64(7*24*time.Hour/time.Millisecond) {
+				out = append(out, live)
+			}
+			continue
+		}
+		if fmt.Sprintf("%d", live.ID) == argument || strings.Contains(strings.ToLower(live.Name), strings.ToLower(argument)) || strings.Contains(strings.ToLower(live.AssetbundleName), strings.ToLower(argument)) {
+			out = append(out, live)
+		}
+	}
+	return out
+}
+
+func virtualLiveBoundsForParser(live masterdata.VirtualLive) (int64, int64) {
+	start, end := live.StartAt, live.EndAt
+	for i, schedule := range live.VirtualLiveSchedules {
+		if i == 0 || schedule.StartAt < start || start == 0 {
+			start = schedule.StartAt
+		}
+		if schedule.EndAt > end {
+			end = schedule.EndAt
+		}
+	}
+	return start, end
+}
+
+func virtualLiveSubtitleForParser(live masterdata.VirtualLive) string {
+	start, end := virtualLiveBoundsForParser(live)
+	return fmt.Sprintf("%s - %s", formatMillis(start), formatMillis(end))
 }
 
 func gachaSubtitle(gacha masterdata.GachaInfo) string {

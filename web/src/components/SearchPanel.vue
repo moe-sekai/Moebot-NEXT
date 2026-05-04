@@ -53,63 +53,65 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useMessage } from 'naive-ui'
-import { searchMasterdata } from '../api/client'
-import type { SearchResult, SearchType } from '../api/types'
-import SvgIcon from './icons/SvgIcon.vue'
-import UiAlert from './ui/UiAlert.vue'
-import UiBadge from './ui/UiBadge.vue'
-import UiButton from './ui/UiButton.vue'
-import UiCard from './ui/UiCard.vue'
+import { ref } from "vue";
+import { useMessage } from "naive-ui";
+import { searchMasterdata } from "../api/client";
+import type { SearchResult, SearchType } from "../api/types";
+import SvgIcon from "./icons/SvgIcon.vue";
+import UiAlert from "./ui/UiAlert.vue";
+import UiBadge from "./ui/UiBadge.vue";
+import UiButton from "./ui/UiButton.vue";
+import UiCard from "./ui/UiCard.vue";
 
-const messageApi = useMessage()
-const type = ref<SearchType>('cards')
-const keyword = ref('')
-const loading = ref(false)
-const error = ref('')
-const message = ref('')
-const searched = ref(false)
-const rows = ref<SearchResult[]>([])
+const messageApi = useMessage();
+const type = ref<SearchType>("cards");
+const keyword = ref("");
+const loading = ref(false);
+const error = ref("");
+const message = ref("");
+const searched = ref(false);
+const rows = ref<SearchResult[]>([]);
 
 const typeOptions = [
-  { label: '卡牌', value: 'cards' },
-  { label: '曲目', value: 'musics' },
-  { label: '活动', value: 'events' },
-  { label: '卡池', value: 'gachas' },
-]
+	{ label: "卡牌", value: "cards" },
+	{ label: "曲目", value: "musics" },
+	{ label: "活动", value: "events" },
+	{ label: "卡池", value: "gachas" },
+	{ label: "演唱会", value: "virtual-lives" },
+];
 
 async function runSearch() {
-  const q = keyword.value.trim()
-  searched.value = true
-  error.value = ''
-  message.value = ''
-  rows.value = []
+	const q = keyword.value.trim();
+	searched.value = true;
+	error.value = "";
+	message.value = "";
+	rows.value = [];
 
-  if (!q) {
-    messageApi.warning('请先输入搜索关键词')
-    return
-  }
+	if (!q) {
+		messageApi.warning("请先输入搜索关键词");
+		return;
+	}
 
-  loading.value = true
-  try {
-    const result = await searchMasterdata(type.value, q)
-    rows.value = result.data ?? []
-    message.value = result.message
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '搜索失败，请检查后端 API。'
-  } finally {
-    loading.value = false
-  }
+	loading.value = true;
+	try {
+		const result = await searchMasterdata(type.value, q);
+		rows.value = result.data ?? [];
+		message.value = result.message;
+	} catch (err) {
+		error.value =
+			err instanceof Error ? err.message : "搜索失败，请检查后端 API。";
+	} finally {
+		loading.value = false;
+	}
 }
 
 function typeLabel(value: string) {
-  const labels: Record<string, string> = {
-    card: '卡牌',
-    music: '曲目',
-    event: '活动',
-    gacha: '卡池',
-  }
-  return labels[value] ?? value
+	const labels: Record<string, string> = {
+		card: "卡牌",
+		music: "曲目",
+		event: "活动",
+		gacha: "卡池",
+	};
+	return labels[value] ?? value;
 }
 </script>

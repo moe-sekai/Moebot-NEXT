@@ -2,10 +2,13 @@ package commands
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"moebot-next/internal/bot"
+	"moebot-next/internal/masterdata"
 	"moebot-next/internal/renderer"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
@@ -30,25 +33,35 @@ func RegisterEvent(deps *Deps) {
 				return
 			}
 
-			if keyword == "" {
-				ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的活动关键词~\n例: /%s 周年", commandName)))
+			events, listMode, page, totalPages, total := searchEventsForCommand(runtime.Store, keyword)
+			if len(events) == 0 {
+				if keyword == "" {
+					ctx.SendChain(message.Text("当前没有可查询的活动"))
+				} else {
+					ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的活动", keyword)))
+				}
 				return
 			}
 
-			results := runtime.Store.SearchEvents(keyword)
-			if len(results) == 0 {
-				ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的活动", keyword)))
+			if listMode || len(events) > 1 {
+				payload := renderer.BuildEventListPayloadWithAssets("活动查询", eventSubtitle(keyword), events, runtime.Store, runtime.Assets, page, totalPages, total)
+				if deps.Renderer != nil && deps.Renderer.Health() {
+					png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "event_list", Data: payload})
+					if err == nil {
+						ctx.SendChain(message.ImageBytes(png))
+						bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
+						return
+					}
+				}
+				ctx.SendChain(message.Text(formatEventListText(payload)))
+				bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 				return
 			}
 
-			event := results[0]
+			event := events[0]
 			payload := renderer.BuildEventInfoPayloadWithAssets(runtime.Store, event, runtime.Assets)
-
 			if deps.Renderer != nil && deps.Renderer.Health() {
-				png, err := deps.Renderer.Render(renderer.RenderRequest{
-					Template: "event_info",
-					Data:     payload,
-				})
+				png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "event_info", Data: payload})
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))
 					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
@@ -60,6 +73,147 @@ func RegisterEvent(deps *Deps) {
 			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
+}
+
+func searchEventsForCommand(store *masterdata.Store, keyword string) ([]masterdata.EventInfo, bool, int, int, int) {
+	all, listMode := collectEventsForCommand(store, keyword)
+	if len(all) == 0 {
+		return nil, listMode, 1, 1, 0
+	}
+	if !listMode {
+		return all[:1], false, 1, 1, len(all)
+	}
+	options := parseSearchOptions(keyword)
+	paged, page, totalPages := paginate(all, options.Page, listPageSize)
+	return paged, true, page, totalPages, len(all)
+}
+
+func collectEventsForCommand(store *masterdata.Store, keyword string) ([]masterdata.EventInfo, bool) {
+	if store == nil {
+		return nil, false
+	}
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" || normalizeQuery(keyword) == "当前" || normalizeQuery(keyword) == "现在" {
+		if ev := currentOrNextEvent(store.AllEvents()); ev != nil {
+			return []masterdata.EventInfo{*ev}, false
+		}
+		return nil, false
+	}
+	if offset, ok := parseRelativeIndex(keyword); ok {
+		if ev := eventByOffset(store.AllEvents(), offset); ev != nil {
+			return []masterdata.EventInfo{*ev}, false
+		}
+		return nil, false
+	}
+	if id, err := strconv.Atoi(keyword); err == nil && id > 0 {
+		if event := store.GetEvent(id); event != nil {
+			return []masterdata.EventInfo{*event}, false
+		}
+	}
+	options := parseSearchOptions(keyword)
+	listMode := options.Year > 0 || options.Leak || options.Unit != "" || options.Attr != "" || options.Current
+	base := []masterdata.EventInfo{}
+	if options.Keyword != "" {
+		base = store.SearchEvents(options.Keyword)
+	} else {
+		base = store.AllEvents()
+		listMode = true
+	}
+	filtered := make([]masterdata.EventInfo, 0, len(base))
+	for _, event := range base {
+		if options.Year > 0 && !sameYear(event.StartAt, options.Year) {
+			continue
+		}
+		if options.Leak && !isFuture(event.StartAt) {
+			continue
+		}
+		if options.Current && !isNowBetween(event.StartAt, event.ClosedAt) {
+			continue
+		}
+		if options.Unit != "" && event.Unit != options.Unit {
+			continue
+		}
+		if options.Attr != "" && !eventHasAttr(store, event.ID, options.Attr) {
+			continue
+		}
+		filtered = append(filtered, event)
+	}
+	if listMode {
+		sort.SliceStable(filtered, func(i, j int) bool {
+			if filtered[i].StartAt != filtered[j].StartAt {
+				return filtered[i].StartAt < filtered[j].StartAt
+			}
+			return filtered[i].ID < filtered[j].ID
+		})
+	}
+	return filtered, listMode
+}
+
+func currentOrNextEvent(events []masterdata.EventInfo) *masterdata.EventInfo {
+	now := time.Now().UnixMilli()
+	sort.SliceStable(events, func(i, j int) bool { return events[i].StartAt < events[j].StartAt })
+	for _, event := range events {
+		if event.StartAt <= now && now <= event.ClosedAt {
+			return &event
+		}
+	}
+	for _, event := range events {
+		if event.StartAt > now {
+			return &event
+		}
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	return &events[len(events)-1]
+}
+
+func eventByOffset(events []masterdata.EventInfo, offset int) *masterdata.EventInfo {
+	cur := currentOrNextEvent(events)
+	if cur == nil {
+		return nil
+	}
+	sort.SliceStable(events, func(i, j int) bool { return events[i].StartAt < events[j].StartAt })
+	idx := 0
+	for i, event := range events {
+		if event.ID == cur.ID {
+			idx = i
+			break
+		}
+	}
+	if offset < 0 {
+		idx += offset + 1
+	} else {
+		idx += offset
+	}
+	if idx < 0 || idx >= len(events) {
+		return nil
+	}
+	return &events[idx]
+}
+
+func eventHasAttr(store *masterdata.Store, eventID int, attr string) bool {
+	for _, bonus := range store.GetEventDeckBonuses(eventID) {
+		if bonus.CardAttr == attr {
+			return true
+		}
+	}
+	return false
+}
+
+func eventSubtitle(keyword string) string {
+	if strings.TrimSpace(keyword) == "" {
+		return "当前/近期活动"
+	}
+	return "关键词：" + keyword
+}
+
+func formatEventListText(payload renderer.EventListPayload) string {
+	lines := []string{fmt.Sprintf("%s（第 %d/%d 页，共 %d 个）", payload.Title, payload.Page, payload.TotalPages, payload.Total)}
+	for _, event := range payload.Events {
+		lines = append(lines, fmt.Sprintf("#%d %s · %s", event.ID, event.Name, event.EventType))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatEventText(event renderer.EventInfoPayload) string {

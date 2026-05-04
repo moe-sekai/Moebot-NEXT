@@ -38,7 +38,11 @@ var masterFiles = []struct {
 	{"musicDifficulties", func(d *MasterData) any { return &d.MusicDifficulties }},
 	{"events", func(d *MasterData) any { return &d.Events }},
 	{"eventDeckBonuses", func(d *MasterData) any { return &d.EventDeckBonuses }},
+	{"eventCards", func(d *MasterData) any { return &d.EventCards }},
+	{"eventMusics", func(d *MasterData) any { return &d.EventMusics }},
+	{"virtualLives", func(d *MasterData) any { return &d.VirtualLives }},
 	{"gachas", func(d *MasterData) any { return &d.Gachas }},
+	{"cardSupplies", func(d *MasterData) any { return &d.CardSupplies }},
 	{"skills", func(d *MasterData) any { return &d.Skills }},
 	{"gameCharacterUnits", func(d *MasterData) any { return &d.CharacterUnits }},
 	{"honors", func(d *MasterData) any { return &d.Honors }},
@@ -137,6 +141,7 @@ func (l *Loader) LoadAll() error {
 		Int("musics", len(data.Musics)).
 		Int("events", len(data.Events)).
 		Int("gachas", len(data.Gachas)).
+		Int("virtual_lives", len(data.VirtualLives)).
 		Msg("Masterdata loaded into store")
 
 	return nil

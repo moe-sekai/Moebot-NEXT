@@ -2,10 +2,13 @@ package commands
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"moebot-next/internal/bot"
+	"moebot-next/internal/cardquery"
+	"moebot-next/internal/masterdata"
 	"moebot-next/internal/renderer"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
@@ -35,40 +38,85 @@ func RegisterCard(deps *Deps) {
 				return
 			}
 
-			// Search cards from regional masterdata
-			results := runtime.Store.SearchCards(keyword)
-			if len(results) == 0 {
-				ctx.SendChain(message.Text(fmt.Sprintf("没有找到与「%s」匹配的卡牌", keyword)))
+			result := cardquery.Resolve(runtime.Store, keyword)
+			if result.Message != "" {
+				ctx.SendChain(message.Text(result.Message))
 				return
 			}
 
-			// Take the best match and adapt it to renderer props.
-			card := results[0]
-			payload := renderer.BuildCardDetailPayloadWithAssets(runtime.Store, card, runtime.Assets)
+			if result.Mode == cardquery.ModeList {
+				payload := renderer.BuildCardListPayloadWithAssets("卡牌查询", cardListSubtitle(keyword, result.Query), result.Cards, runtime.Store, runtime.Assets, result.Page, result.TotalPages, result.Total)
+				if deps.Renderer != nil && deps.Renderer.Health() {
+					png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "card_list", Data: payload})
+					if err == nil {
+						ctx.SendChain(message.ImageBytes(png))
+						bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
+						return
+					}
+				}
+				ctx.SendChain(message.Text(formatCardListText(payload)))
+				bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
+				return
+			}
 
-			// Try to render an image via the renderer service.
+			card := result.Cards[0]
+			payload := renderer.BuildCardDetailPayloadWithAssets(runtime.Store, card, runtime.Assets)
 			if deps.Renderer != nil && deps.Renderer.Health() {
-				png, err := deps.Renderer.Render(renderer.RenderRequest{
-					Template: "card_detail",
-					Data:     payload,
-				})
+				png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "card_detail", Data: payload})
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))
 					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 					return
 				}
-				// Fallback to text if rendering fails
 			}
 
-			// Text fallback.
-			text := formatCardText(payload)
-			ctx.SendChain(message.Text(text))
+			ctx.SendChain(message.Text(formatCardText(payload)))
 			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
 }
 
+func cardsForCharacter(store *masterdata.Store, characterID int) []masterdata.CardInfo {
+	cards := make([]masterdata.CardInfo, 0)
+	for _, card := range store.AllCards() {
+		if card.CharacterID == characterID {
+			cards = append(cards, card)
+		}
+	}
+	sort.SliceStable(cards, func(i, j int) bool {
+		if cards[i].ReleaseAt != cards[j].ReleaseAt {
+			return cards[i].ReleaseAt < cards[j].ReleaseAt
+		}
+		return cards[i].ID < cards[j].ID
+	})
+	return cards
+}
+
+func cardListSubtitle(raw string, query cardquery.Query) string {
+	parts := make([]string, 0)
+	if query.Keyword != "" {
+		parts = append(parts, "关键词："+query.Keyword)
+	} else if strings.TrimSpace(raw) != "" {
+		parts = append(parts, "条件："+strings.TrimSpace(raw))
+	}
+	if query.Page > 1 {
+		parts = append(parts, fmt.Sprintf("第 %d 页", query.Page))
+	}
+	if len(parts) == 0 {
+		return "列表查询"
+	}
+	return strings.Join(parts, " · ")
+}
+
 // formatCardText formats a card's info as plain text.
+func formatCardListText(payload renderer.CardListPayload) string {
+	lines := []string{fmt.Sprintf("%s（第 %d/%d 页，共 %d 张）", payload.Title, payload.Page, payload.TotalPages, payload.Total)}
+	for _, card := range payload.Cards {
+		lines = append(lines, fmt.Sprintf("#%d %s · %s · %s", card.ID, card.Prefix, card.CharacterName, card.CardRarityType))
+	}
+	return strings.Join(lines, "\n")
+}
+
 func formatCardText(card renderer.CardDetailPayload) string {
 	lines := []string{
 		fmt.Sprintf("卡牌：%s", card.Prefix),

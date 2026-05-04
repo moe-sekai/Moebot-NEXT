@@ -59,47 +59,62 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { getRendererHealth, getStatus } from '../api/client'
-import type { RendererHealth, RuntimeStatus } from '../api/types'
-import PageHeader from '../components/PageHeader.vue'
-import StatusCard from '../components/StatusCard.vue'
-import UiAlert from '../components/ui/UiAlert.vue'
-import UiBadge from '../components/ui/UiBadge.vue'
-import UiButton from '../components/ui/UiButton.vue'
-import UiCard from '../components/ui/UiCard.vue'
-import UiSkeleton from '../components/ui/UiSkeleton.vue'
+import { computed, onMounted, ref } from "vue";
+import { getRendererHealth, getStatus } from "../api/client";
+import type { RendererHealth, RuntimeStatus } from "../api/types";
+import PageHeader from "../components/PageHeader.vue";
+import StatusCard from "../components/StatusCard.vue";
+import UiAlert from "../components/ui/UiAlert.vue";
+import UiBadge from "../components/ui/UiBadge.vue";
+import UiButton from "../components/ui/UiButton.vue";
+import UiCard from "../components/ui/UiCard.vue";
+import UiSkeleton from "../components/ui/UiSkeleton.vue";
 
-const status = ref<RuntimeStatus | null>(null)
-const rendererHealth = ref<RendererHealth | null>(null)
-const loading = ref(false)
-const error = ref('')
+const status = ref<RuntimeStatus | null>(null);
+const rendererHealth = ref<RendererHealth | null>(null);
+const loading = ref(false);
+const error = ref("");
 
-const botMeta = computed(() => status.value ? `${status.value.bot.driver_type} · ${status.value.bot.listen || '未配置监听地址'}` : '-')
-const webMeta = computed(() => status.value ? `${status.value.web.host}:${status.value.web.port}` : '-')
-const rendererMeta = computed(() => status.value ? `${status.value.renderer.base_url} · ${status.value.renderer.latency_ms} ms` : '-')
+const botMeta = computed(() =>
+	status.value
+		? `${status.value.bot.driver_type} · ${status.value.bot.listen || "未配置监听地址"}`
+		: "-",
+);
+const webMeta = computed(() =>
+	status.value ? `${status.value.web.host}:${status.value.web.port}` : "-",
+);
+const rendererMeta = computed(() =>
+	status.value
+		? `${status.value.renderer.base_url} · ${status.value.renderer.latency_ms} ms`
+		: "-",
+);
 const masterdataMeta = computed(() => {
-  const counts = status.value?.masterdata.counts
-  return counts ? `卡牌 ${counts.cards} / 曲目 ${counts.musics} / 活动 ${counts.events} / 卡池 ${counts.gachas}` : '-'
-})
+	const counts = status.value?.masterdata.counts;
+	return counts
+		? `卡牌 ${counts.cards} / 曲目 ${counts.musics} / 活动 ${counts.events} / 卡池 ${counts.gachas} / 演唱会 ${counts.virtual_lives ?? 0}`
+		: "-";
+});
 
-onMounted(loadStatus)
+onMounted(loadStatus);
 
 async function loadStatus() {
-  loading.value = true
-  error.value = ''
-  try {
-    const [statusData, rendererData] = await Promise.all([getStatus(), getRendererHealth()])
-    status.value = statusData
-    rendererHealth.value = rendererData
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '加载运行状态失败。'
-  } finally {
-    loading.value = false
-  }
+	loading.value = true;
+	error.value = "";
+	try {
+		const [statusData, rendererData] = await Promise.all([
+			getStatus(),
+			getRendererHealth(),
+		]);
+		status.value = statusData;
+		rendererHealth.value = rendererData;
+	} catch (err) {
+		error.value = err instanceof Error ? err.message : "加载运行状态失败。";
+	} finally {
+		loading.value = false;
+	}
 }
 
 function formatTime(value?: string | null) {
-  return value ? new Date(value).toLocaleString() : '-'
+	return value ? new Date(value).toLocaleString() : "-";
 }
 </script>
