@@ -17,6 +17,7 @@ import type {
 	RecentCommandsResponse,
 	UpdatePublicConfigPayload,
 	RendererHealth,
+	RendererCardThumbnailCacheStatus,
 	RendererPreviewImageResult,
 	RendererPreviewsResponse,
 	RuntimeStatus,
@@ -54,6 +55,23 @@ export async function getMasterdataSummary() {
 
 export async function getRendererHealth() {
 	const { data } = await api.get<RendererHealth>("/renderer/health");
+	return data;
+}
+
+export async function getRendererCardThumbnailCacheStatus(region?: string) {
+	const { data } = await api.get<RendererCardThumbnailCacheStatus>(
+		"/renderer/cache/card-thumbnails",
+		{ params: region ? { region } : undefined },
+	);
+	return data;
+}
+
+export async function preloadRendererCardThumbnails(region?: string) {
+	const { data } = await api.post<RendererCardThumbnailCacheStatus>(
+		"/renderer/cache/card-thumbnails/preload",
+		null,
+		{ params: region ? { region } : undefined, timeout: 0 },
+	);
 	return data;
 }
 
@@ -99,8 +117,9 @@ export async function renderParsedCommand(
 	return {
 		blob,
 		url: URL.createObjectURL(blob),
-		timings: {
+			timings: {
 			fonts_ms: parseHeaderNumber(response.headers["x-render-fonts-ms"]),
+			images_ms: parseHeaderNumber(response.headers["x-render-images-ms"]),
 			satori_ms: parseHeaderNumber(response.headers["x-render-satori-ms"]),
 			resvg_ms: parseHeaderNumber(response.headers["x-render-resvg-ms"]),
 			total_ms: parseHeaderNumber(response.headers["x-render-total-ms"]),
@@ -108,7 +127,13 @@ export async function renderParsedCommand(
 			network_ms: networkMs,
 			size_bytes:
 				parseHeaderNumber(response.headers["x-render-size-bytes"]) ?? blob.size,
+			image_total: parseHeaderNumber(response.headers["x-render-image-total"]),
+			image_remote: parseHeaderNumber(response.headers["x-render-image-remote"]),
+			image_cache_hits: parseHeaderNumber(response.headers["x-render-image-cache-hits"]),
+			image_cache_misses: parseHeaderNumber(response.headers["x-render-image-cache-misses"]),
+			image_cache_errors: parseHeaderNumber(response.headers["x-render-image-cache-errors"]),
 		},
+
 	};
 }
 
@@ -229,8 +254,9 @@ export async function renderRendererPreview(
 	return {
 		blob,
 		url: URL.createObjectURL(blob),
-		timings: {
+			timings: {
 			fonts_ms: parseHeaderNumber(response.headers["x-render-fonts-ms"]),
+			images_ms: parseHeaderNumber(response.headers["x-render-images-ms"]),
 			satori_ms: parseHeaderNumber(response.headers["x-render-satori-ms"]),
 			resvg_ms: parseHeaderNumber(response.headers["x-render-resvg-ms"]),
 			total_ms: parseHeaderNumber(response.headers["x-render-total-ms"]),
@@ -238,7 +264,13 @@ export async function renderRendererPreview(
 			network_ms: networkMs,
 			size_bytes:
 				parseHeaderNumber(response.headers["x-render-size-bytes"]) ?? blob.size,
+			image_total: parseHeaderNumber(response.headers["x-render-image-total"]),
+			image_remote: parseHeaderNumber(response.headers["x-render-image-remote"]),
+			image_cache_hits: parseHeaderNumber(response.headers["x-render-image-cache-hits"]),
+			image_cache_misses: parseHeaderNumber(response.headers["x-render-image-cache-misses"]),
+			image_cache_errors: parseHeaderNumber(response.headers["x-render-image-cache-errors"]),
 		},
+
 	};
 }
 

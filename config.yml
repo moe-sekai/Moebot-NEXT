@@ -48,8 +48,8 @@ renderer:
     cache:
         enabled: true
         path: ./data/cache
-        max_size_mb: 1024
-        ttl_hours: 24
+        max_size_mb: 0
+        ttl_hours: 0
 assets:
     source: moesekai
     region: jp

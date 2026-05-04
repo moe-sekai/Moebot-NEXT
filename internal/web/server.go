@@ -83,6 +83,8 @@ func (s *Server) registerRoutes() {
 	api.Get("/status", s.handleStatus)
 	api.Get("/masterdata/summary", s.handleMasterdataSummary)
 	api.Get("/renderer/health", s.handleRendererHealth)
+	api.Get("/renderer/cache/card-thumbnails", s.handleRendererCardThumbnailCacheStatus)
+	api.Post("/renderer/cache/card-thumbnails/preload", s.handleRendererCardThumbnailPreload)
 	api.Get("/renderer/previews", s.handleRendererPreviews)
 	api.Get("/renderer/previews/:id/image", s.handleRendererPreviewImage)
 	api.Get("/commands/recent", s.handleRecentCommands)

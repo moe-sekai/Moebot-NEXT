@@ -1,5 +1,6 @@
 export { renderToImage, renderToSvg, renderWithTrace, type RenderOptions, type RenderTrace } from './engine'
 export { ImageCache, type CacheOptions } from './cache'
+export { RendererAssetCache, rendererAssetCache, type AssetPreloadStatus, type ImageHydrationStats } from './asset-cache'
 export { loadFonts, type FontData } from './fonts'
 export * from './templates'
 export { listRenderPreviews, renderPreviewTemplate, type RenderPreviewMeta, type RenderPreviewResult, type RenderPreviewStatus } from './preview'

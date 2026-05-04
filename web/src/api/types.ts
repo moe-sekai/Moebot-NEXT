@@ -334,12 +334,18 @@ export interface RenderPreviewMeta {
 
 export interface RenderTiming {
 	fonts_ms: number | null;
+	images_ms: number | null;
 	satori_ms: number | null;
 	resvg_ms: number | null;
 	total_ms: number | null;
 	proxy_ms: number | null;
 	network_ms: number | null;
 	size_bytes: number | null;
+	image_total: number | null;
+	image_remote: number | null;
+	image_cache_hits: number | null;
+	image_cache_misses: number | null;
+	image_cache_errors: number | null;
 }
 
 export interface RendererPreviewImageResult {
@@ -353,6 +359,29 @@ export interface RendererPreviewsResponse {
 	total: number;
 	ok: boolean;
 	message: string;
+}
+
+export interface RendererCardThumbnailCacheStatus {
+	ok: boolean;
+	message: string;
+	region: string;
+	region_label: string;
+	total_cards: number;
+	total_urls: number;
+	enabled: boolean;
+	running: boolean;
+	cache_dir: string;
+	total: number;
+	cached: number;
+	missing: number;
+	failed: number;
+	downloaded: number;
+	skipped: number;
+	progress: number;
+	started_at: string | null;
+	completed_at: string | null;
+	errors: string[];
+	renderer_message?: string;
 }
 
 export type CommandMatchSource =

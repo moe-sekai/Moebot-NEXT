@@ -1,3 +1,4 @@
+import { rendererAssetCache } from "./asset-cache";
 import { renderWithTrace } from "./engine";
 import { listRenderPreviews, renderPreviewTemplate } from "./preview";
 import {
@@ -24,6 +25,12 @@ interface RenderRequest {
 	width?: number;
 	height?: number;
 	precision?: number;
+}
+
+interface CachePreloadRequest {
+	urls?: string[];
+	force?: boolean;
+	concurrency?: number;
 }
 
 const port = Number(process.env.PORT ?? 3001);
@@ -457,6 +464,8 @@ Bun.serve({
 					"GET /previews",
 					"GET /preview/:id",
 					"POST /render",
+					"POST /cache/card-thumbnails/preload",
+					"POST /cache/card-thumbnails/status",
 				],
 				note: "这是内部 Satori 渲染服务；管理面板请访问 http://127.0.0.1:8080/",
 			});
@@ -491,13 +500,56 @@ Bun.serve({
 						"cache-control": "no-store",
 						"x-render-total-ms": String(result.trace.timings.totalMs),
 						"x-render-fonts-ms": String(result.trace.timings.fontsMs),
+						"x-render-images-ms": String(result.trace.timings.imagesMs),
 						"x-render-satori-ms": String(result.trace.timings.satoriMs),
 						"x-render-resvg-ms": String(result.trace.timings.resvgMs),
 						"x-render-size-bytes": String(result.trace.sizeBytes),
+						"x-render-image-total": String(result.trace.imageCache.total),
+						"x-render-image-remote": String(result.trace.imageCache.remote),
+						"x-render-image-cache-hits": String(result.trace.imageCache.hits),
+						"x-render-image-cache-misses": String(result.trace.imageCache.misses),
+						"x-render-image-cache-errors": String(result.trace.imageCache.errors),
 					},
 				});
 			} catch (error) {
 				console.error("[renderer] preview render failed:", error);
+				return Response.json(
+					{
+						error: true,
+						message: error instanceof Error ? error.message : String(error),
+					},
+					{ status: 500 },
+				);
+			}
+		}
+
+		if (url.pathname === "/cache/card-thumbnails/preload" && request.method === "POST") {
+			try {
+				const body = (await request.json()) as CachePreloadRequest;
+				const status = await rendererAssetCache.startPreload(body.urls ?? [], {
+					force: body.force,
+					concurrency: body.concurrency,
+				});
+				return Response.json(status);
+			} catch (error) {
+				console.error("[renderer] preload card thumbnails failed:", error);
+				return Response.json(
+					{
+						error: true,
+						message: error instanceof Error ? error.message : String(error),
+					},
+					{ status: 500 },
+				);
+			}
+		}
+
+		if (url.pathname === "/cache/card-thumbnails/status" && request.method === "POST") {
+			try {
+				const body = (await request.json()) as CachePreloadRequest;
+				const status = await rendererAssetCache.statusForUrls(body.urls ?? []);
+				return Response.json(status);
+			} catch (error) {
+				console.error("[renderer] card thumbnail cache status failed:", error);
 				return Response.json(
 					{
 						error: true,
@@ -522,9 +574,15 @@ Bun.serve({
 						"cache-control": "no-store",
 						"x-render-total-ms": String(trace.timings.totalMs),
 						"x-render-fonts-ms": String(trace.timings.fontsMs),
+						"x-render-images-ms": String(trace.timings.imagesMs),
 						"x-render-satori-ms": String(trace.timings.satoriMs),
 						"x-render-resvg-ms": String(trace.timings.resvgMs),
 						"x-render-size-bytes": String(trace.sizeBytes),
+						"x-render-image-total": String(trace.imageCache.total),
+						"x-render-image-remote": String(trace.imageCache.remote),
+						"x-render-image-cache-hits": String(trace.imageCache.hits),
+						"x-render-image-cache-misses": String(trace.imageCache.misses),
+						"x-render-image-cache-errors": String(trace.imageCache.errors),
 					},
 				});
 			} catch (error) {

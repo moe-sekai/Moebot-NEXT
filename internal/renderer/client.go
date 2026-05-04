@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -23,6 +24,7 @@ type Client struct {
 	httpClient *http.Client
 	process    *exec.Cmd
 	precision  float64
+	cache      config.CacheConfig
 }
 
 // RenderRequest is sent to the renderer service.
@@ -55,13 +57,44 @@ type PreviewListResponse struct {
 
 // PreviewRenderResult contains a rendered preview image and renderer timing metadata.
 type PreviewRenderResult struct {
-	PNG        []byte
-	TotalMS    string
-	FontsMS    string
-	SatoriMS   string
-	ResvgMS    string
-	SizeBytes  string
-	StatusCode int
+	PNG              []byte
+	TotalMS          string
+	FontsMS          string
+	ImagesMS         string
+	SatoriMS         string
+	ResvgMS          string
+	SizeBytes        string
+	ImageTotal       string
+	ImageRemote      string
+	ImageCacheHits   string
+	ImageCacheMisses string
+	ImageCacheErrors string
+	StatusCode       int
+}
+
+// AssetPreloadStatus mirrors the renderer-side card thumbnail cache status payload.
+type AssetPreloadStatus struct {
+	OK          bool     `json:"ok"`
+	Enabled     bool     `json:"enabled"`
+	Running     bool     `json:"running"`
+	Message     string   `json:"message"`
+	CacheDir    string   `json:"cache_dir"`
+	Total       int      `json:"total"`
+	Cached      int      `json:"cached"`
+	Missing     int      `json:"missing"`
+	Failed      int      `json:"failed"`
+	Downloaded  int      `json:"downloaded"`
+	Skipped     int      `json:"skipped"`
+	Progress    float64  `json:"progress"`
+	StartedAt   *string  `json:"started_at"`
+	CompletedAt *string  `json:"completed_at"`
+	Errors      []string `json:"errors"`
+}
+
+type assetPreloadRequest struct {
+	URLs        []string `json:"urls"`
+	Force       bool     `json:"force,omitempty"`
+	Concurrency int      `json:"concurrency,omitempty"`
 }
 
 // New creates a new renderer client.
@@ -73,6 +106,7 @@ func New(cfg config.RendererConfig) *Client {
 	return &Client{
 		baseURL:   fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port),
 		precision: precision,
+		cache:     cfg.Cache,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -94,6 +128,7 @@ func (c *Client) StartProcess(rendererDir string, port int) error {
 		fmt.Sprintf("PORT=%d", port),
 		fmt.Sprintf("RENDER_PRECISION=%g", c.precision),
 	)
+	cmd.Env = append(cmd.Env, rendererCacheEnv(c.cache)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -165,14 +200,54 @@ func (c *Client) RenderWithTrace(req RenderRequest) (*PreviewRenderResult, error
 	}
 
 	return &PreviewRenderResult{
-		PNG:        png,
-		TotalMS:    resp.Header.Get("x-render-total-ms"),
-		FontsMS:    resp.Header.Get("x-render-fonts-ms"),
-		SatoriMS:   resp.Header.Get("x-render-satori-ms"),
-		ResvgMS:    resp.Header.Get("x-render-resvg-ms"),
-		SizeBytes:  resp.Header.Get("x-render-size-bytes"),
-		StatusCode: resp.StatusCode,
+		PNG:              png,
+		TotalMS:          resp.Header.Get("x-render-total-ms"),
+		FontsMS:          resp.Header.Get("x-render-fonts-ms"),
+		ImagesMS:         resp.Header.Get("x-render-images-ms"),
+		SatoriMS:         resp.Header.Get("x-render-satori-ms"),
+		ResvgMS:          resp.Header.Get("x-render-resvg-ms"),
+		SizeBytes:        resp.Header.Get("x-render-size-bytes"),
+		ImageTotal:       resp.Header.Get("x-render-image-total"),
+		ImageRemote:      resp.Header.Get("x-render-image-remote"),
+		ImageCacheHits:   resp.Header.Get("x-render-image-cache-hits"),
+		ImageCacheMisses: resp.Header.Get("x-render-image-cache-misses"),
+		ImageCacheErrors: resp.Header.Get("x-render-image-cache-errors"),
+		StatusCode:       resp.StatusCode,
 	}, nil
+}
+
+// StartCardThumbnailPreload asks the renderer service to preload card thumbnail URLs in the background.
+func (c *Client) StartCardThumbnailPreload(urls []string) (*AssetPreloadStatus, error) {
+	var result AssetPreloadStatus
+	err := c.postJSON("/cache/card-thumbnails/preload", assetPreloadRequest{URLs: urls}, &result)
+	return &result, err
+}
+
+// CardThumbnailPreloadStatus returns cache coverage for the given card thumbnail URLs.
+func (c *Client) CardThumbnailPreloadStatus(urls []string) (*AssetPreloadStatus, error) {
+	var result AssetPreloadStatus
+	err := c.postJSON("/cache/card-thumbnails/status", assetPreloadRequest{URLs: urls}, &result)
+	return &result, err
+}
+
+func (c *Client) postJSON(path string, payload interface{}, out interface{}) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal renderer request: %w", err)
+	}
+	resp, err := c.httpClient.Post(c.baseURL+path, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("renderer request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("renderer returned %d: %s", resp.StatusCode, string(errBody))
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode renderer response: %w", err)
+	}
+	return nil
 }
 
 // ListPreviews fetches Satori preview metadata from the renderer service.
@@ -238,13 +313,19 @@ func (c *Client) RenderPreviewWithTrace(id string, width int, height int) (*Prev
 	}
 
 	return &PreviewRenderResult{
-		PNG:        png,
-		TotalMS:    resp.Header.Get("x-render-total-ms"),
-		FontsMS:    resp.Header.Get("x-render-fonts-ms"),
-		SatoriMS:   resp.Header.Get("x-render-satori-ms"),
-		ResvgMS:    resp.Header.Get("x-render-resvg-ms"),
-		SizeBytes:  resp.Header.Get("x-render-size-bytes"),
-		StatusCode: resp.StatusCode,
+		PNG:              png,
+		TotalMS:          resp.Header.Get("x-render-total-ms"),
+		FontsMS:          resp.Header.Get("x-render-fonts-ms"),
+		ImagesMS:         resp.Header.Get("x-render-images-ms"),
+		SatoriMS:         resp.Header.Get("x-render-satori-ms"),
+		ResvgMS:          resp.Header.Get("x-render-resvg-ms"),
+		SizeBytes:        resp.Header.Get("x-render-size-bytes"),
+		ImageTotal:       resp.Header.Get("x-render-image-total"),
+		ImageRemote:      resp.Header.Get("x-render-image-remote"),
+		ImageCacheHits:   resp.Header.Get("x-render-image-cache-hits"),
+		ImageCacheMisses: resp.Header.Get("x-render-image-cache-misses"),
+		ImageCacheErrors: resp.Header.Get("x-render-image-cache-errors"),
+		StatusCode:       resp.StatusCode,
 	}, nil
 }
 
@@ -267,6 +348,30 @@ func (c *Client) Precision() float64 {
 		return config.DefaultRendererPrecision
 	}
 	return c.precision
+}
+
+func rendererCacheEnv(cache config.CacheConfig) []string {
+	cachePath := cache.Path
+	if cachePath == "" {
+		cachePath = "./data/cache"
+	}
+	if absPath, err := filepath.Abs(cachePath); err == nil {
+		cachePath = absPath
+	}
+	maxSizeBytes := int64(cache.MaxSizeMB) * 1024 * 1024
+	if cache.MaxSizeMB <= 0 {
+		maxSizeBytes = 0
+	}
+	ttlMS := int64(cache.TTLHours) * 60 * 60 * 1000
+	if cache.TTLHours <= 0 {
+		ttlMS = 0
+	}
+	return []string{
+		"RENDER_CACHE_ENABLED=" + strconv.FormatBool(cache.Enabled),
+		"RENDER_CACHE_DIR=" + cachePath,
+		"RENDER_CACHE_MAX_SIZE_BYTES=" + strconv.FormatInt(maxSizeBytes, 10),
+		"RENDER_CACHE_TTL_MS=" + strconv.FormatInt(ttlMS, 10),
+	}
 }
 
 // Health checks if the renderer service is alive.

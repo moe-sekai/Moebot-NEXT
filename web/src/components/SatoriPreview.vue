@@ -131,8 +131,10 @@ const selectedPreview = computed(() => previews.value.find(item => item.id === s
 const selectedCommandDefinition = computed(() => commandDefinitions.value.find(item => item.preview_id === selectedId.value) ?? null)
 const timingItems = computed(() => [
   { key: 'fonts', label: '字体加载', value: formatMs(timings.value.fonts_ms) },
+  { key: 'images', label: '图片缓存', value: formatMs(timings.value.images_ms) },
   { key: 'satori', label: 'Satori', value: formatMs(timings.value.satori_ms) },
   { key: 'resvg', label: 'resvg', value: formatMs(timings.value.resvg_ms) },
+  { key: 'cache', label: '图片命中', value: formatCacheHits() },
   { key: 'proxy', label: 'Go 代理', value: formatMs(timings.value.proxy_ms) },
   { key: 'network', label: '浏览器请求', value: formatMs(timings.value.network_ms) },
 ].filter(item => item.value !== '-'))
@@ -197,17 +199,29 @@ function revokeImageUrl() {
 function emptyTiming(): RenderTiming {
   return {
     fonts_ms: null,
+    images_ms: null,
     satori_ms: null,
     resvg_ms: null,
     total_ms: null,
     proxy_ms: null,
     network_ms: null,
     size_bytes: null,
+    image_total: null,
+    image_remote: null,
+    image_cache_hits: null,
+    image_cache_misses: null,
+    image_cache_errors: null,
   }
 }
 
 function formatMs(value: number | null) {
   return typeof value === 'number' ? `${value} ms` : '-'
+}
+
+function formatCacheHits() {
+  const total = timings.value.image_remote
+  if (typeof total !== 'number' || total <= 0) return '-'
+  return `${timings.value.image_cache_hits ?? 0}/${total}`
 }
 
 function formatBytes(value: number | null) {

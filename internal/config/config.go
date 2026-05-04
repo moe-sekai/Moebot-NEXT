@@ -110,7 +110,8 @@ type RendererConfig struct {
 	Cache     CacheConfig `yaml:"cache"`
 }
 
-// CacheConfig holds image cache settings.
+// CacheConfig holds image cache settings. Non-positive max size means unlimited;
+// non-positive TTL means cached assets never expire automatically.
 type CacheConfig struct {
 	Enabled   bool   `yaml:"enabled"`
 	Path      string `yaml:"path"`
@@ -187,8 +188,8 @@ func DefaultConfig() *Config {
 			Cache: CacheConfig{
 				Enabled:   true,
 				Path:      "./data/cache",
-				MaxSizeMB: 1024,
-				TTLHours:  24,
+				MaxSizeMB: 0,
+				TTLHours:  0,
 			},
 		},
 		Assets: AssetsConfig{

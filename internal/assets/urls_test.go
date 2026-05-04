@@ -3,6 +3,8 @@ package assets
 import (
 	"strings"
 	"testing"
+
+	"moebot-next/internal/config"
 )
 
 func TestImageAssetURLsUsePNG(t *testing.T) {
@@ -47,5 +49,45 @@ func TestResolverImageAssetURLsUsePNG(t *testing.T) {
 		if !strings.Contains(url, ".png") {
 			t.Fatalf("resolver image URL does not use png: %s", url)
 		}
+	}
+}
+
+func TestResolverCardThumbnailsUseJPAssetsAcrossRegions(t *testing.T) {
+	cases := []struct {
+		name   string
+		cfg    config.AssetsConfig
+		region string
+	}{
+		{
+			name:   "moesekai cn mirror",
+			cfg:    config.AssetsConfig{Source: config.AssetSourceMoeSekai, Region: config.RegionCN, Mirror: config.AssetMirrorMain},
+			region: config.RegionCN,
+		},
+		{
+			name:   "sekai best tw",
+			cfg:    config.AssetsConfig{Source: config.AssetSourceSekaiBest, Region: config.RegionTW},
+			region: config.RegionTW,
+		},
+		{
+			name:   "sekai best kr",
+			cfg:    config.AssetsConfig{Source: config.AssetSourceSekaiBest, Region: config.RegionKR},
+			region: config.RegionKR,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver, err := NewResolver(tc.cfg, tc.region)
+			if err != nil {
+				t.Fatalf("NewResolver failed: %v", err)
+			}
+			thumbnail := resolver.GetCardThumbnailURL("res001_no001", false)
+			if !strings.Contains(thumbnail, "/sekai-jp-assets/thumbnail/chara/") {
+				t.Fatalf("thumbnail did not use JP assets: %s", thumbnail)
+			}
+			full := resolver.GetCardFullURL("res001_no001", false)
+			if strings.Contains(full, "/sekai-jp-assets/") && tc.region != config.RegionJP {
+				t.Fatalf("non-thumbnail asset was unexpectedly normalized to JP: %s", full)
+			}
+		})
 	}
 }

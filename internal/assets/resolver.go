@@ -62,9 +62,11 @@ func (r *Resolver) base() string {
 	return baseURL
 }
 
-// GetCardThumbnailURL returns the thumbnail URL for a card.
+// GetCardThumbnailURL returns the thumbnail URL for a card. Thumbnails are
+// normalized to JP assets because the filenames are shared across regions and
+// JP is the fastest-updating superset for released cards.
 func (r *Resolver) GetCardThumbnailURL(assetBundleName string, trained bool) string {
-	return fmt.Sprintf("%s/thumbnail/chara/%s_%s.png", r.base(), assetBundleName, trainingSuffix(trained))
+	return fmt.Sprintf("%s/thumbnail/chara/%s_%s.png", cardThumbnailBase(r.base()), assetBundleName, trainingSuffix(trained))
 }
 
 // GetCardFullURL returns the full-size card illustration URL.

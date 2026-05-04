@@ -2,6 +2,7 @@ package assets
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -114,12 +115,36 @@ func trainingSuffix(trained bool) string {
 	return "normal"
 }
 
+// cardThumbnailBase normalizes card thumbnails to JP assets. Card thumbnail
+// filenames are shared across regions and JP is the fastest-updating superset,
+// so CN/TW/KR/EN commands can reuse one JP thumbnail cache.
+func cardThumbnailBase(baseURL string) string {
+	if baseURL == "" {
+		return baseURL
+	}
+	for _, regionAssetPath := range []string{
+		"sekai-cn-assets",
+		"sekai-sc-assets",
+		"sekai-tw-assets",
+		"sekai-tc-assets",
+		"sekai-kr-assets",
+		"sekai-en-assets",
+		"sekai-ww-assets",
+		"sekai-global-assets",
+	} {
+		if strings.Contains(baseURL, regionAssetPath) {
+			return strings.Replace(baseURL, regionAssetPath, "sekai-jp-assets", 1)
+		}
+	}
+	return baseURL
+}
+
 // GetCardThumbnailURL returns the thumbnail URL for a card.
 //
 //	thumbnail/chara/{name}_{normal|after_training}.png
 func GetCardThumbnailURL(assetBundleName string, trained bool) string {
 	return fmt.Sprintf("%s/thumbnail/chara/%s_%s.png",
-		cdnBase(), assetBundleName, trainingSuffix(trained))
+		cardThumbnailBase(cdnBase()), assetBundleName, trainingSuffix(trained))
 }
 
 // GetCardFullURL returns the full-size card illustration URL.

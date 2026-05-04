@@ -60,8 +60,10 @@ renderer:
   cache:
     enabled: true
     path: "./data/cache"
-    max_size_mb: 1024
-    ttl_hours: 24
+    # 0 表示不限制容量；卡牌缩略图等静态资源可以长期保存。
+    max_size_mb: 0
+    # 0 表示永久有效，不按时间过期。
+    ttl_hours: 0
 
 assets:
   # source: moesekai(jp/cn) / sekai_best(全服) / custom

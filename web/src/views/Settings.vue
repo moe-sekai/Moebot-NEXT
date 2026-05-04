@@ -270,6 +270,29 @@
               <strong>SVG 转 PNG 输出倍率，当前约 {{ rendererOutputScaleText }}；越高越清晰但图片体积和耗时越大。</strong>
             </div>
           </div>
+          <div class="renderer-cache-panel">
+            <div class="renderer-cache-panel__header">
+              <div>
+                <strong>卡牌缩略图预载</strong>
+                <span>{{ regionLabel(thumbnailCacheRegion) }} · 统一使用日服缩略图资源 · {{ thumbnailCacheSummary }}</span>
+              </div>
+              <UiBadge :variant="thumbnailCacheBadgeVariant">{{ thumbnailCacheStatusLabel }}</UiBadge>
+            </div>
+            <div class="renderer-cache-panel__meter" aria-hidden="true">
+              <span :style="{ width: `${thumbnailCacheProgress}%` }" />
+            </div>
+            <div class="renderer-cache-panel__meta">
+              <span>覆盖率 {{ thumbnailCacheProgress }}%</span>
+              <span>缓存目录：{{ thumbnailCache?.cache_dir || config?.renderer.cache.path || '-' }}</span>
+            </div>
+            <div v-if="thumbnailCache?.errors?.length" class="renderer-cache-panel__errors">
+              <span v-for="item in thumbnailCache.errors.slice(0, 3)" :key="item">{{ item }}</span>
+            </div>
+            <div class="settings-actions-row">
+              <UiButton variant="outline" size="sm" :loading="thumbnailCacheLoading" @click="() => refreshThumbnailCacheStatus()">刷新状态</UiButton>
+              <UiButton size="sm" :loading="thumbnailPreloadButtonLoading" :disabled="!config?.renderer.cache.enabled" @click="preloadCardThumbnails">预载卡牌缩略图</UiButton>
+            </div>
+          </div>
           <dl class="settings-list settings-list--compact">
             <div v-for="item in rendererItems" :key="item.label">
               <dt>{{ item.label }}</dt>
@@ -290,9 +313,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, ref } from "vue";
+import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref } from "vue";
 import {
 	getPublicConfig,
+	getRendererCardThumbnailCacheStatus,
+	preloadRendererCardThumbnails,
 	reloadMasterdata,
 	updatePublicConfig,
 } from "../api/client";
@@ -301,6 +326,7 @@ import type {
 	MasterdataCounts,
 	PublicConfig,
 	PublicServerProfile,
+	RendererCardThumbnailCacheStatus,
 	UpdatePublicConfigPayload,
 } from "../api/types";
 import SvgIcon, { type IconName } from "../components/icons/SvgIcon.vue";
@@ -311,11 +337,15 @@ import UiButton from "../components/ui/UiButton.vue";
 import UiCard from "../components/ui/UiCard.vue";
 import UiSkeleton from "../components/ui/UiSkeleton.vue";
 
+type BadgeVariant = "default" | "secondary" | "success" | "warning" | "destructive" | "outline";
+
 interface ConfigItem {
 	label: string;
-	value: string | number | boolean;
+	value: string | number | boolean | null | undefined;
+	type?: "text" | "boolean";
 	badge?: boolean;
 }
+
 
 interface MasterdataForm {
 	region: string;
@@ -405,6 +435,10 @@ const saving = ref(false);
 const reloading = ref("");
 const error = ref("");
 const success = ref("");
+const thumbnailCache = ref<RendererCardThumbnailCacheStatus | null>(null);
+const thumbnailCacheLoading = ref(false);
+const thumbnailCachePreloading = ref(false);
+let thumbnailCachePollTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 const regionOptions = computed(
 	() => config.value?.presets.regions ?? fallbackRegions,
@@ -439,6 +473,36 @@ const canSave = computed(
 const rendererOutputScaleText = computed(
 	() => `${formatNumber(form.value.renderer.precision)}x`,
 );
+const thumbnailCacheRegion = computed(
+	() => form.value.server.region || config.value?.server.region || "jp",
+);
+const thumbnailCacheProgress = computed(() =>
+	Math.round((thumbnailCache.value?.progress ?? 0) * 100),
+);
+const thumbnailCacheBadgeVariant = computed<BadgeVariant>(() => {
+	if (!thumbnailCache.value?.enabled) return "warning";
+	if (thumbnailCache.value.running) return "secondary";
+	if ((thumbnailCache.value.failed ?? 0) > 0) return "warning";
+	if ((thumbnailCache.value.missing ?? 0) === 0 && (thumbnailCache.value.total ?? 0) > 0) return "success";
+	return "outline";
+});
+const thumbnailCacheStatusLabel = computed(() => {
+	const status = thumbnailCache.value;
+	if (!status) return "未检查";
+	if (!status.enabled) return "缓存关闭";
+	if (status.running) return "预载中";
+	if (status.total === 0) return "无卡牌";
+	if (status.missing === 0) return "已完成";
+	return "待预载";
+});
+const thumbnailPreloadButtonLoading = computed(
+	() => thumbnailCachePreloading.value || Boolean(thumbnailCache.value?.running),
+);
+const thumbnailCacheSummary = computed(() => {
+	const status = thumbnailCache.value;
+	if (!status) return "点击刷新后查看当前区服缩略图缓存覆盖率。";
+	return `${status.cached}/${status.total} 已缓存 · 缺失 ${status.missing} · 失败 ${status.failed}`;
+});
 
 const webItems = computed<ConfigItem[]>(() => [
 	{ label: "Host", value: config.value?.web.host ?? "-" },
@@ -483,11 +547,11 @@ const rendererItems = computed<ConfigItem[]>(() => [
 	{ label: "缓存路径", value: config.value?.renderer.cache.path ?? "-" },
 	{
 		label: "缓存上限",
-		value: `${config.value?.renderer.cache.max_size_mb ?? "-"} MB`,
+		value: formatCacheMaxSize(config.value?.renderer.cache.max_size_mb),
 	},
 	{
-		label: "缓存 TTL",
-		value: `${config.value?.renderer.cache.ttl_hours ?? "-"} 小时`,
+		label: "缓存有效期",
+		value: formatCacheTTL(config.value?.renderer.cache.ttl_hours),
 	},
 ]);
 
@@ -616,6 +680,7 @@ const ConfigSection = defineComponent({
 });
 
 onMounted(loadConfig);
+onBeforeUnmount(clearThumbnailCachePoll);
 
 async function loadConfig() {
 	loading.value = true;
@@ -625,6 +690,7 @@ async function loadConfig() {
 		const data = await getPublicConfig();
 		config.value = data;
 		applyConfigToForm(data);
+		await refreshThumbnailCacheStatus(true);
 	} catch (err) {
 		error.value = getErrorMessage(err, "加载配置失败。");
 	} finally {
@@ -660,6 +726,54 @@ async function reloadMasterdataNow(region = form.value.server.region) {
 		error.value = getErrorMessage(err, "重载 Masterdata 失败。");
 	} finally {
 		reloading.value = "";
+	}
+}
+
+async function refreshThumbnailCacheStatus(silent = false) {
+	if (!config.value) return;
+	clearThumbnailCachePoll();
+	thumbnailCacheLoading.value = true;
+	try {
+		const status = await getRendererCardThumbnailCacheStatus(
+			thumbnailCacheRegion.value,
+		);
+		thumbnailCache.value = status;
+		if (status.running) scheduleThumbnailCachePoll();
+	} catch (err) {
+		if (!silent) error.value = getErrorMessage(err, "刷新缩略图缓存状态失败。");
+	} finally {
+		thumbnailCacheLoading.value = false;
+	}
+}
+
+async function preloadCardThumbnails() {
+	clearThumbnailCachePoll();
+	thumbnailCachePreloading.value = true;
+	error.value = "";
+	success.value = "";
+	try {
+		const status = await preloadRendererCardThumbnails(thumbnailCacheRegion.value);
+		thumbnailCache.value = status;
+		success.value = `${status.region_label} 卡牌缩略图预载已启动：${status.cached}/${status.total} 已缓存。`;
+		scheduleThumbnailCachePoll();
+	} catch (err) {
+		error.value = getErrorMessage(err, "启动卡牌缩略图预载失败。");
+	} finally {
+		thumbnailCachePreloading.value = false;
+	}
+}
+
+function scheduleThumbnailCachePoll() {
+	clearThumbnailCachePoll();
+	thumbnailCachePollTimer = window.setTimeout(async () => {
+		await refreshThumbnailCacheStatus(true);
+	}, 1800);
+}
+
+function clearThumbnailCachePoll() {
+	if (thumbnailCachePollTimer) {
+		window.clearTimeout(thumbnailCachePollTimer);
+		thumbnailCachePollTimer = null;
 	}
 }
 
@@ -739,6 +853,8 @@ function setDefaultRegion(region: string) {
 	const defaultProfile = ensureServerForm(region);
 	defaultProfile.enabled = true;
 	normalizeServerProfile(region);
+	thumbnailCache.value = null;
+	void refreshThumbnailCacheStatus(true);
 	success.value = "";
 }
 
@@ -915,6 +1031,16 @@ function formatNumber(value: number) {
 	return Number.isInteger(value)
 		? String(value)
 		: value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatCacheMaxSize(value?: number) {
+	if (typeof value !== "number") return "-";
+	return value <= 0 ? "不限制" : `${value} MB`;
+}
+
+function formatCacheTTL(value?: number) {
+	if (typeof value !== "number") return "-";
+	return value <= 0 ? "永久有效" : `${value} 小时`;
 }
 
 function masterdataPreview(entry: ServerEntry, kind: "primary" | "fallback") {
