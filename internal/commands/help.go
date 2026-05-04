@@ -6,10 +6,12 @@ import (
 )
 
 // RegisterHelp registers the /帮助 command.
-func RegisterHelp() {
-	zero.OnCommand("帮助").SetBlock(true).Handle(func(ctx *zero.Ctx) {
-		ctx.SendChain(message.Text(helpText()))
-	})
+func RegisterHelp(deps *Deps) {
+	for _, cmd := range parserCommands(deps, "帮助") {
+		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+			ctx.SendChain(message.Text(helpText()))
+		})
+	}
 }
 
 func helpText() string {

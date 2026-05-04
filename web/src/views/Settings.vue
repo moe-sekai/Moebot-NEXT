@@ -15,39 +15,13 @@
     </div>
     <template v-else>
       <div class="settings-function-stack">
-        <!-- 默认区服选择 -->
-        <UiCard className="settings-card settings-function-card">
-          <div class="settings-card__heading">
-            <div class="settings-card__icon"><SvgIcon name="web" :size="22" /></div>
-            <div>
-              <h2>全局：默认区服</h2>
-              <p>这里只决定“无前缀命令默认使用哪个区服”；JP 与默认区服会自动保持启用状态。各区服详细配置请在下方标签页中设置。</p>
-            </div>
-          </div>
-
-          <div class="settings-default-server">
-            <label class="settings-field">
-              <span>默认区服</span>
-              <select v-model="form.server.region" class="ui-select" @change="syncServerRegion">
-                <option v-for="option in regionOptions" :key="option.key" :value="option.key">
-                  {{ option.label }} · {{ option.key.toUpperCase() }}
-                </option>
-              </select>
-            </label>
-            <div class="settings-callout">
-              <strong>{{ regionLabel(form.server.region) }} · {{ form.server.region.toUpperCase() }}</strong>
-              <span>当前保存值：{{ config?.server.label ?? '-' }} / {{ config?.server.region?.toUpperCase() ?? '-' }}</span>
-            </div>
-          </div>
-        </UiCard>
-
         <!-- 区服详细配置 Tabs -->
         <UiCard className="settings-card settings-function-card">
           <div class="settings-card__heading">
             <div class="settings-card__icon"><SvgIcon name="masterdata" :size="22" /></div>
             <div>
               <h2>区服详细配置</h2>
-              <p>请选择一个区服标签页进行启用状态、Masterdata、Assets 及接口功能的详细配置。</p>
+              <p>请选择一个区服标签页进行启用状态、默认区服、Masterdata、Assets 及接口功能的详细配置。</p>
             </div>
           </div>
 
@@ -84,6 +58,14 @@
                       <UiBadge v-if="entry.option.key === form.server.region" variant="default">默认</UiBadge>
                       <UiBadge :variant="entry.form.enabled ? 'success' : 'outline'">{{ entry.form.enabled ? '启用' : '停用' }}</UiBadge>
                       <UiBadge :variant="entry.state?.loaded ? 'success' : 'warning'">{{ entry.state?.loaded ? '已加载' : '未加载' }}</UiBadge>
+                      <UiButton
+                        variant="outline"
+                        size="sm"
+                        :disabled="entry.option.key === form.server.region"
+                        @click="() => setDefaultRegion(entry.option.key)"
+                      >
+                        {{ entry.option.key === form.server.region ? '当前默认区服' : '设为默认区服' }}
+                      </UiButton>
                     </div>
                   </div>
                   <div class="settings-row-body settings-row-body--inline">
@@ -270,7 +252,34 @@
 
       <div class="settings-grid">
         <ConfigSection title="Bot" description="OneBot 驱动、命令前缀与昵称。" icon="bot" :items="botItems" />
-        <ConfigSection title="Renderer" description="Satori 渲染服务与缓存配置。" icon="renderer" :items="rendererItems" />
+        <UiCard className="settings-card">
+          <div class="settings-card__heading">
+            <div class="settings-card__icon"><SvgIcon name="renderer" :size="22" /></div>
+            <div>
+              <h2>Renderer</h2>
+              <p>Satori 渲染服务、SVG 转 PNG 精度与缓存配置。</p>
+            </div>
+          </div>
+          <div class="settings-form">
+            <label class="settings-field">
+              <span>渲染精度</span>
+              <input v-model.number="form.renderer.precision" class="ui-input" type="number" min="0.1" max="4" step="0.1" @input="normalizeRendererPrecision" />
+            </label>
+            <div class="settings-field settings-field--readonly">
+              <span>说明</span>
+              <strong>SVG 转 PNG 输出倍率，当前约 {{ rendererOutputScaleText }}；越高越清晰但图片体积和耗时越大。</strong>
+            </div>
+          </div>
+          <dl class="settings-list settings-list--compact">
+            <div v-for="item in rendererItems" :key="item.label">
+              <dt>{{ item.label }}</dt>
+              <dd>
+                <UiBadge v-if="item.badge" :variant="item.value ? 'success' : 'warning'">{{ item.value ? '是' : '否' }}</UiBadge>
+                <template v-else>{{ item.value }}</template>
+              </dd>
+            </div>
+          </dl>
+        </UiCard>
         <ConfigSection title="Web" description="Fiber 管理控制台监听配置。" icon="web" :items="webItems" />
         <ConfigSection title="默认区服数据状态" description="当前默认区服生效的数据来源、刷新与本地路径。" icon="masterdata" :items="masterdataItems" />
         <ConfigSection title="默认区服接口状态" description="默认区服玩家资料接口开关、地区与请求头配置状态。" icon="web" :items="sekaiApiItems" />
@@ -334,6 +343,7 @@ interface ServerProfileForm {
 
 interface SettingsForm {
   server: { region: string }
+  renderer: { precision: number }
   servers: Record<string, ServerProfileForm>
 }
 
@@ -389,7 +399,8 @@ const dirty = computed(() => {
 })
 const serverEntries = computed<ServerEntry[]>(() => regionOptions.value.map(region => ({ option: region, form: ensureServerForm(region.key), state: config.value?.servers?.[region.key] })))
 const serverProfilesSupported = computed(() => serverEntries.value.every(entry => serverProfileSupported(entry.form)))
-const canSave = computed(() => serverProfilesSupported.value)
+const canSave = computed(() => serverProfilesSupported.value && form.value.renderer.precision > 0)
+const rendererOutputScaleText = computed(() => `${formatNumber(form.value.renderer.precision)}x`)
 
 const webItems = computed<ConfigItem[]>(() => [
   { label: 'Host', value: config.value?.web.host ?? '-' },
@@ -400,6 +411,7 @@ const botItems = computed<ConfigItem[]>(() => [
   { label: '驱动类型', value: config.value?.bot.driver_type ?? '-' },
   { label: '监听地址', value: config.value?.bot.listen ?? '-' },
   { label: '命令前缀', value: config.value?.bot.command_prefix ?? '-' },
+  { label: '自定义关键词', value: aliasCount(config.value?.bot.command_aliases), badge: true },
   { label: '昵称', value: config.value?.bot.nickname?.join(' / ') || '-' },
   { label: 'URL 已配置', value: Boolean(config.value?.bot.url_configured), badge: true },
   { label: 'Token 已设置', value: Boolean(config.value?.bot.token_set), badge: true },
@@ -409,6 +421,7 @@ const rendererItems = computed<ConfigItem[]>(() => [
   { label: 'Base URL', value: config.value?.renderer.base_url ?? '-' },
   { label: 'Host', value: config.value?.renderer.host ?? '-' },
   { label: 'Port', value: config.value?.renderer.port ?? '-' },
+  { label: '当前精度', value: `${formatNumber(config.value?.renderer.precision ?? 1.5)}x` },
   { label: '缓存启用', value: Boolean(config.value?.renderer.cache.enabled), badge: true },
   { label: '缓存路径', value: config.value?.renderer.cache.path ?? '-' },
   { label: '缓存上限', value: `${config.value?.renderer.cache.max_size_mb ?? '-'} MB` },
@@ -432,6 +445,11 @@ const sekaiApiItems = computed<ConfigItem[]>(() => [
   { label: '请求头已配置', value: Boolean(config.value?.sekai_api.headers_configured), badge: true },
   { label: 'Ranking 区服', value: config.value?.ranking_api?.region ?? '-' },
 ])
+
+function aliasCount(aliases?: Record<string, string[]>) {
+  if (!aliases) return false
+  return Object.values(aliases).reduce((total, list) => total + (Array.isArray(list) ? list.length : 0), 0) > 0
+}
 
 const assetItems = computed<ConfigItem[]>(() => [
   { label: '区服', value: `${config.value?.assets.region_label ?? '-'} (${config.value?.assets.region ?? '-'})` },
@@ -518,6 +536,7 @@ async function reloadMasterdataNow(region = form.value.server.region) {
 function createEmptyForm(): SettingsForm {
   return {
     server: { region: 'jp' },
+    renderer: { precision: 1.5 },
     servers: {},
   }
 }
@@ -526,6 +545,7 @@ function applyConfigToForm(data: PublicConfig) {
   const defaultRegion = data.server.region || 'jp'
   form.value = {
     server: { region: defaultRegion },
+    renderer: { precision: data.renderer.precision || 1.5 },
     servers: {},
   }
   for (const option of regionOptions.value) {
@@ -546,6 +566,7 @@ function buildPayload(): UpdatePublicConfigPayload {
   const defaultProfile = ensureServerForm(form.value.server.region)
   return {
     server: { region: form.value.server.region },
+    renderer: { precision: Number(form.value.renderer.precision) || 1.5 },
     masterdata: buildMasterdataPayload(defaultProfile.masterdata),
     assets: buildAssetsPayload(defaultProfile.assets),
     servers: Object.fromEntries(regionOptions.value.map(option => [option.key, buildServerPayload(option.key)])),
@@ -574,11 +595,19 @@ function buildAssetsPayload(assets: AssetsForm) {
   }
 }
 
-function syncServerRegion() {
-  const defaultProfile = ensureServerForm(form.value.server.region)
+function setDefaultRegion(region: string) {
+  form.value.server.region = region
+  const defaultProfile = ensureServerForm(region)
   defaultProfile.enabled = true
-  normalizeServerProfile(form.value.server.region)
+  normalizeServerProfile(region)
   success.value = ''
+}
+
+function normalizeRendererPrecision() {
+  const precision = Number(form.value.renderer.precision)
+  if (!Number.isFinite(precision) || precision <= 0) {
+    form.value.renderer.precision = 1.5
+  }
 }
 
 function createServerForm(region: string, server?: Partial<PublicServerProfile>): ServerProfileForm {
@@ -708,6 +737,11 @@ function countsText(counts?: MasterdataCounts) {
 
 function formatTime(value?: string | null) {
   return value ? new Date(value).toLocaleString() : '-'
+}
+
+function formatNumber(value: number) {
+  if (!Number.isFinite(value)) return '-'
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
 }
 
 function masterdataPreview(entry: ServerEntry, kind: 'primary' | 'fallback') {

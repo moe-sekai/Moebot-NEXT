@@ -5,6 +5,11 @@ server:
 bot:
   nickname: ["moebot", "萌萌"]
   command_prefix: "/"
+  # 自定义指令关键词会影响聊天端触发；WebUI 保存后立即用于指令解析，聊天端通常需重启后生效。
+  # 只填写不带 / 的关键词；留空或 {} 即恢复默认预设关键词。
+  command_aliases:
+    查卡: []      # 例: ["查卡牌", "mycard"]
+    查曲: []      # 例: ["songinfo"]
   super_users: []
   driver:
     type: "ws-reverse"        # ws-reverse or ws
@@ -50,6 +55,8 @@ ranking_api:
 renderer:
   host: "127.0.0.1"
   port: 3001
+  # SVG 转 PNG 的渲染精度倍率；越高越清晰但耗时和体积越大。
+  precision: 1.5
   cache:
     enabled: true
     path: "./data/cache"

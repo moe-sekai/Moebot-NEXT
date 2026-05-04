@@ -7,6 +7,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const DefaultRendererPrecision = 1.5
+
 // Config is the root configuration for Moebot NEXT.
 type Config struct {
 	Server      ServerConfig                `yaml:"server"`
@@ -38,10 +40,11 @@ type GameServerConfig struct {
 
 // BotConfig holds ZeroBot-related settings.
 type BotConfig struct {
-	Nickname      []string     `yaml:"nickname"`
-	CommandPrefix string       `yaml:"command_prefix"`
-	SuperUsers    []int64      `yaml:"super_users"`
-	Driver        DriverConfig `yaml:"driver"`
+	Nickname       []string            `yaml:"nickname"`
+	CommandPrefix  string              `yaml:"command_prefix"`
+	CommandAliases map[string][]string `yaml:"command_aliases"`
+	SuperUsers     []int64             `yaml:"super_users"`
+	Driver         DriverConfig        `yaml:"driver"`
 }
 
 // DriverConfig specifies the OneBot WebSocket driver.
@@ -101,9 +104,10 @@ type RankingAPIConfig struct {
 
 // RendererConfig holds the Bun renderer service settings.
 type RendererConfig struct {
-	Host  string      `yaml:"host"` // renderer listen host
-	Port  int         `yaml:"port"` // renderer listen port
-	Cache CacheConfig `yaml:"cache"`
+	Host      string      `yaml:"host"`      // renderer listen host
+	Port      int         `yaml:"port"`      // renderer listen port
+	Precision float64     `yaml:"precision"` // SVG -> PNG render scale
+	Cache     CacheConfig `yaml:"cache"`
 }
 
 // CacheConfig holds image cache settings.
@@ -139,9 +143,10 @@ func DefaultConfig() *Config {
 			Region: RegionJP,
 		},
 		Bot: BotConfig{
-			Nickname:      []string{"moebot"},
-			CommandPrefix: "/",
-			SuperUsers:    []int64{},
+			Nickname:       []string{"moebot"},
+			CommandPrefix:  "/",
+			CommandAliases: map[string][]string{},
+			SuperUsers:     []int64{},
 			Driver: DriverConfig{
 				Type:   "ws-reverse",
 				Listen: "0.0.0.0:6700",
@@ -176,8 +181,9 @@ func DefaultConfig() *Config {
 			Timeout: 10,
 		},
 		Renderer: RendererConfig{
-			Host: "127.0.0.1",
-			Port: 3001,
+			Host:      "127.0.0.1",
+			Port:      3001,
+			Precision: DefaultRendererPrecision,
 			Cache: CacheConfig{
 				Enabled:   true,
 				Path:      "./data/cache",

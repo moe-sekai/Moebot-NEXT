@@ -1,15 +1,22 @@
-import { renderToImage } from './engine'
+import { renderWithTrace } from './engine'
 import { listRenderPreviews, renderPreviewTemplate } from './preview'
-import { CardDetail, ChartDetail, ChurnRankingList, EventInfo, GachaInfo, HelpCard, MusicDetail, ProfileCard, RankingList } from './templates'
+import { CardDetail, ChartDetail, ChurnRankingList, EventInfo, GachaInfo, GachaResult, HelpCard, MusicDetail, ProfileCard, RankingList } from './templates'
 
 interface RenderRequest {
   template: string
   data: any
   width?: number
   height?: number
+  precision?: number
 }
 
 const port = Number(process.env.PORT ?? 3001)
+const defaultPrecision = parsePositiveNumber(process.env.RENDER_PRECISION, 1.5)
+
+function parsePositiveNumber(value: unknown, fallback = 0): number {
+  const numberValue = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : fallback
+}
 
 function defaultHelpData() {
   return {
@@ -26,6 +33,25 @@ function defaultHelpData() {
   }
 }
 
+function toPngImageUrl(value: any): string | undefined {
+  if (typeof value !== 'string' || value.length === 0) return undefined
+  return value.replace(/\.webp(?=([?#]|$))/i, '.png')
+}
+
+function sanitizeImageUrls<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(item => sanitizeImageUrls(item)) as T
+  }
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+  const out: Record<string, any> = {}
+  for (const [key, item] of Object.entries(value as Record<string, any>)) {
+    out[key] = typeof item === 'string' && /url$/i.test(key) ? toPngImageUrl(item) : sanitizeImageUrls(item)
+  }
+  return out as T
+}
+
 function normalizeCard(data: any) {
   return {
     id: data.id ?? data.ID ?? 0,
@@ -33,11 +59,11 @@ function normalizeCard(data: any) {
     characterName: data.characterName ?? data.CharacterName ?? `角色 ${data.characterId ?? data.CharacterID ?? '?'}`,
     rarity: data.rarity ?? data.cardRarityType ?? data.CardRarityType ?? 'rarity_unknown',
     attr: data.attr ?? data.Attr ?? 'cute',
-    thumbnailUrl: data.thumbnailUrl ?? data.ThumbnailURL,
-    normalThumbnailUrl: data.normalThumbnailUrl ?? data.NormalThumbnailURL,
-    trainedThumbnailUrl: data.trainedThumbnailUrl ?? data.TrainedThumbnailURL ?? data.TrainedThumbnail,
-    normalFullUrl: data.normalFullUrl ?? data.NormalFullURL,
-    trainedFullUrl: data.trainedFullUrl ?? data.TrainedFullURL,
+    thumbnailUrl: toPngImageUrl(data.thumbnailUrl ?? data.ThumbnailURL),
+    normalThumbnailUrl: toPngImageUrl(data.normalThumbnailUrl ?? data.NormalThumbnailURL),
+    trainedThumbnailUrl: toPngImageUrl(data.trainedThumbnailUrl ?? data.TrainedThumbnailURL ?? data.TrainedThumbnail),
+    normalFullUrl: toPngImageUrl(data.normalFullUrl ?? data.NormalFullURL),
+    trainedFullUrl: toPngImageUrl(data.trainedFullUrl ?? data.TrainedFullURL),
     assetbundleName: data.assetbundleName ?? data.AssetbundleName,
     characterId: data.characterId ?? data.CharacterID,
     cardRarityType: data.cardRarityType ?? data.CardRarityType,
@@ -59,7 +85,7 @@ function normalizeMusic(data: any) {
     arranger: data.arranger ?? data.Arranger,
     categories: data.categories ?? data.Categories ?? [],
     assetbundleName: data.assetbundleName ?? data.AssetbundleName,
-    jacketUrl: data.jacketUrl ?? data.JacketURL,
+    jacketUrl: toPngImageUrl(data.jacketUrl ?? data.JacketURL),
     assetSource: data.assetSource ?? data.AssetSource,
     difficulties: data.difficulties ?? data.Difficulties ?? [],
     publishedAt: data.publishedAt ?? data.PublishedAt,
@@ -78,8 +104,8 @@ function normalizeEvent(data: any) {
     unit: data.unit ?? data.Unit,
     assetbundleName: data.assetbundleName ?? data.AssetbundleName,
     assetSource: data.assetSource ?? data.AssetSource,
-    bannerUrl: data.bannerUrl ?? data.BannerURL,
-    logoUrl: data.logoUrl ?? data.LogoURL,
+    bannerUrl: toPngImageUrl(data.bannerUrl ?? data.BannerURL),
+    logoUrl: toPngImageUrl(data.logoUrl ?? data.LogoURL),
     startAt: data.startAt ?? data.StartAt,
     aggregateAt: data.aggregateAt ?? data.AggregateAt,
     closedAt: data.closedAt ?? data.ClosedAt,
@@ -112,7 +138,7 @@ function normalizeProfile(data: any) {
     signature: data.signature ?? data.Signature,
     totalPower: data.totalPower ?? data.TotalPower,
     characterId: data.characterId ?? data.CharacterID,
-    avatarUrl: data.avatarUrl ?? data.AvatarURL,
+    avatarUrl: toPngImageUrl(data.avatarUrl ?? data.AvatarURL),
     assetSource: data.assetSource ?? data.AssetSource,
     stats: data.stats ?? data.Stats,
     musicClearCounts: data.musicClearCounts ?? data.MusicClearCounts,
@@ -133,9 +159,9 @@ function normalizeGacha(data: any) {
     gachaType: data.gachaType ?? data.GachaType,
     assetbundleName: data.assetbundleName ?? data.AssetbundleName,
     assetSource: data.assetSource ?? data.AssetSource,
-    logoUrl: data.logoUrl ?? data.LogoURL,
-    bannerUrl: data.bannerUrl ?? data.BannerURL,
-    screenUrl: data.screenUrl ?? data.ScreenURL,
+    logoUrl: toPngImageUrl(data.logoUrl ?? data.LogoURL),
+    bannerUrl: toPngImageUrl(data.bannerUrl ?? data.BannerURL),
+    screenUrl: toPngImageUrl(data.screenUrl ?? data.ScreenURL),
     startAt: data.startAt ?? data.StartAt,
     endAt: data.endAt ?? data.EndAt,
     isShowPeriod: data.isShowPeriod ?? data.IsShowPeriod,
@@ -183,42 +209,46 @@ function normalizeGachaPickupCard(card: any) {
     attr: card.attr ?? card.Attr ?? 'cute',
     assetbundleName: card.assetbundleName ?? card.AssetbundleName,
     characterId,
-    thumbnailUrl: card.thumbnailUrl ?? card.ThumbnailURL,
-    trainedThumbnailUrl: card.trainedThumbnailUrl ?? card.TrainedThumbnailURL,
+    thumbnailUrl: toPngImageUrl(card.thumbnailUrl ?? card.ThumbnailURL),
+    trainedThumbnailUrl: toPngImageUrl(card.trainedThumbnailUrl ?? card.TrainedThumbnailURL),
     isWish: card.isWish ?? card.IsWish ?? true,
     weight: card.weight ?? card.Weight,
   }
 }
 
 function createElement(req: RenderRequest) {
+  const data = sanitizeImageUrls(req.data)
   switch (req.template) {
     case 'help_card':
     case 'help':
-      return <HelpCard {...(req.data ?? defaultHelpData())} />
+      return <HelpCard {...(data ?? defaultHelpData())} />
     case 'card_detail':
     case 'card':
-      return <CardDetail card={normalizeCard(req.data)} />
+      return <CardDetail card={normalizeCard(data)} />
     case 'music_detail':
     case 'music':
-      return <MusicDetail music={normalizeMusic(req.data)} />
+      return <MusicDetail music={normalizeMusic(data)} />
     case 'chart_detail':
     case 'chart':
-      return <ChartDetail music={normalizeMusic(req.data)} />
+      return <ChartDetail music={normalizeMusic(data)} />
     case 'event_info':
     case 'event':
-      return <EventInfo event={normalizeEvent(req.data)} />
+      return <EventInfo event={normalizeEvent(data)} />
     case 'gacha_info':
     case 'gacha':
-      return <GachaInfo gacha={normalizeGacha(req.data)} />
+      return <GachaInfo gacha={normalizeGacha(data)} />
+    case 'gacha_result':
+    case 'gacha-result':
+      return <GachaResult {...(data ?? { pullType: 'multi', results: [] })} />
     case 'profile_card':
     case 'profile':
-      return <ProfileCard profile={normalizeProfile(req.data)} />
+      return <ProfileCard profile={normalizeProfile(data)} />
     case 'ranking_list':
     case 'ranking':
-      return <RankingList {...normalizeRankingList(req.data)} />
+      return <RankingList {...normalizeRankingList(data)} />
     case 'churn_ranking_list':
     case 'churn_ranking':
-      return <ChurnRankingList {...normalizeRankingList(req.data)} />
+      return <ChurnRankingList {...normalizeRankingList(data)} />
     default:
       return <HelpCard {...defaultHelpData()} />
   }
@@ -251,9 +281,11 @@ Bun.serve({
         const id = decodeURIComponent(url.pathname.replace('/preview/', '').replace(/\/$/, ''))
         const width = Number(url.searchParams.get('width') || 0)
         const height = Number(url.searchParams.get('height') || 0)
+        const precision = parsePositiveNumber(url.searchParams.get('precision'), defaultPrecision)
         const result = await renderPreviewTemplate(id, {
           ...(width > 0 ? { width } : {}),
           ...(height > 0 ? { height } : {}),
+          precision,
         })
         return new Response(new Uint8Array(result.trace.png), {
           headers: {
@@ -275,14 +307,20 @@ Bun.serve({
     if (url.pathname === '/render' && request.method === 'POST') {
       try {
         const body = await request.json() as RenderRequest
-        const png = await renderToImage(createElement(body), {
+        const trace = await renderWithTrace(createElement(body), {
           width: body.width ?? 800,
           height: body.height,
+          precision: parsePositiveNumber(body.precision, defaultPrecision),
         })
-        return new Response(new Uint8Array(png), {
+        return new Response(new Uint8Array(trace.png), {
           headers: {
             'content-type': 'image/png',
             'cache-control': 'no-store',
+            'x-render-total-ms': String(trace.timings.totalMs),
+            'x-render-fonts-ms': String(trace.timings.fontsMs),
+            'x-render-satori-ms': String(trace.timings.satoriMs),
+            'x-render-resvg-ms': String(trace.timings.resvgMs),
+            'x-render-size-bytes': String(trace.sizeBytes),
           },
         })
       } catch (error) {

@@ -1,5 +1,13 @@
 package masterdata
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+)
+
 // ---------------------------------------------------------------------------
 // types.go — PJSK masterdata type definitions
 // Migrated from Snowy Viewer TypeScript types to idiomatic Go structs.
@@ -46,6 +54,26 @@ type CardInfo struct {
 	CardSupplyID                    int             `json:"cardSupplyId"`
 }
 
+// UnmarshalJSON accepts both JP-style cardParameters arrays and CN/TW-style
+// objects like {"param1":[...],"param2":[...],"param3":[...]}.
+func (c *CardInfo) UnmarshalJSON(data []byte) error {
+	type alias CardInfo
+	var raw struct {
+		*alias
+		CardParameters json.RawMessage `json:"cardParameters"`
+	}
+	raw.alias = (*alias)(c)
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	params, err := parseCardParameters(raw.CardParameters, c.ID)
+	if err != nil {
+		return err
+	}
+	c.CardParameters = params
+	return nil
+}
+
 // RarityStars returns the numeric star count for display, e.g. 4 for "rarity_4".
 func (c *CardInfo) RarityStars() int {
 	switch c.CardRarityType {
@@ -82,21 +110,41 @@ type CardParameter struct {
 
 // MusicInfo represents a PJSK song.
 type MusicInfo struct {
-	ID                  int      `json:"id"`
-	Seq                 int      `json:"seq"`
-	Title               string   `json:"title"`
-	Pronunciation       string   `json:"pronunciation"`
-	Lyricist            string   `json:"lyricist"`
-	Composer            string   `json:"composer"`
-	Arranger            string   `json:"arranger"`
-	AssetbundleName     string   `json:"assetbundleName"`
-	Categories          []string `json:"categories"`
-	PublishedAt            int64    `json:"publishedAt"` // Unix ms
-	ReleasedAt             int64    `json:"releasedAt"`  // Unix ms
-	SecForMusicScoreMaker  int      `json:"secForMusicScoreMaker"`
-	FillerSec              float64  `json:"fillerSec"`
-	IsNewlyWrittenMusic    bool     `json:"isNewlyWrittenMusic"`
-	IsFullLength        bool     `json:"isFullLength"`
+	ID                    int      `json:"id"`
+	Seq                   int      `json:"seq"`
+	Title                 string   `json:"title"`
+	Pronunciation         string   `json:"pronunciation"`
+	Lyricist              string   `json:"lyricist"`
+	Composer              string   `json:"composer"`
+	Arranger              string   `json:"arranger"`
+	AssetbundleName       string   `json:"assetbundleName"`
+	Categories            []string `json:"categories"`
+	PublishedAt           int64    `json:"publishedAt"` // Unix ms
+	ReleasedAt            int64    `json:"releasedAt"`  // Unix ms
+	SecForMusicScoreMaker int      `json:"secForMusicScoreMaker"`
+	FillerSec             float64  `json:"fillerSec"`
+	IsNewlyWrittenMusic   bool     `json:"isNewlyWrittenMusic"`
+	IsFullLength          bool     `json:"isFullLength"`
+}
+
+// UnmarshalJSON accepts both string-array categories and object-array
+// categories like [{"musicCategoryName":"mv"}] used by some regions.
+func (m *MusicInfo) UnmarshalJSON(data []byte) error {
+	type alias MusicInfo
+	var raw struct {
+		*alias
+		Categories json.RawMessage `json:"categories"`
+	}
+	raw.alias = (*alias)(m)
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	categories, err := parseMusicCategories(raw.Categories)
+	if err != nil {
+		return err
+	}
+	m.Categories = categories
+	return nil
 }
 
 // MusicDifficulty holds note-chart info for one difficulty of a song.
@@ -114,6 +162,79 @@ type MusicVocal struct {
 	MusicID         int    `json:"musicId"`
 	Caption         string `json:"caption"`
 	AssetbundleName string `json:"assetbundleName"`
+}
+
+func parseCardParameters(raw json.RawMessage, cardID int) ([]CardParameter, error) {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, nil
+	}
+
+	var params []CardParameter
+	if err := json.Unmarshal(raw, &params); err == nil {
+		return params, nil
+	}
+
+	var grouped map[string][]int
+	if err := json.Unmarshal(raw, &grouped); err == nil {
+		keys := make([]string, 0, len(grouped))
+		for key := range grouped {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+
+		params = make([]CardParameter, 0)
+		for _, key := range keys {
+			for i, power := range grouped[key] {
+				params = append(params, CardParameter{
+					CardID:            cardID,
+					CardLevel:         i + 1,
+					CardParameterType: key,
+					Power:             power,
+				})
+			}
+		}
+		return params, nil
+	}
+
+	return nil, fmt.Errorf("unsupported cardParameters shape")
+}
+
+func parseMusicCategories(raw json.RawMessage) ([]string, error) {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, nil
+	}
+
+	var stringsOnly []string
+	if err := json.Unmarshal(raw, &stringsOnly); err == nil {
+		return compactStrings(stringsOnly), nil
+	}
+
+	var objects []map[string]any
+	if err := json.Unmarshal(raw, &objects); err != nil {
+		return nil, err
+	}
+
+	categories := make([]string, 0, len(objects))
+	for _, object := range objects {
+		for _, key := range []string{"musicCategoryName", "category", "name"} {
+			if value, ok := object[key].(string); ok && strings.TrimSpace(value) != "" {
+				categories = append(categories, value)
+				break
+			}
+		}
+	}
+	return compactStrings(categories), nil
+}
+
+func compactStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 // ----------------------------- Event types ---------------------------------

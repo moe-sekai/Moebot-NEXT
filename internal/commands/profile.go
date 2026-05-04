@@ -95,8 +95,12 @@ func registerUnbindCommands(deps *Deps) {
 }
 
 func registerProfileInfoCommands(deps *Deps) {
-	for _, cmd := range regionalCommands("个人信息") {
+	for _, cmd := range parserCommands(deps, "个人信息") {
 		forcedRegion := cmd.Region
+		recordCommand := cmd.Primary
+		if recordCommand == "" {
+			recordCommand = "个人信息"
+		}
 		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, inferredUser := runtimeForCommand(deps, ctx, forcedRegion)
@@ -127,19 +131,19 @@ func registerProfileInfoCommands(deps *Deps) {
 						png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "profile_card", Data: payload})
 						if err == nil {
 							ctx.SendChain(message.ImageBytes(png))
-							bot.RecordCommandRegion(deps.DB, "个人信息", runtime.Region, ctx, start)
+							bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 							return
 						}
 					}
 					ctx.SendChain(message.Text(formatProfileText(payload)))
-					bot.RecordCommandRegion(deps.DB, "个人信息", runtime.Region, ctx, start)
+					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 					return
 				}
 			}
 
 			ctx.SendChain(message.Text(fmt.Sprintf("👤 个人信息\n服务器: %s (%s)\n游戏 ID: %s\n绑定时间: %s",
 				runtime.Label, strings.ToUpper(runtime.Region), user.GameID, user.CreatedAt.Format("2006-01-02 15:04"))))
-			bot.RecordCommandRegion(deps.DB, "个人信息", runtime.Region, ctx, start)
+			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
 }

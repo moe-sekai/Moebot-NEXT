@@ -82,6 +82,22 @@
           <div><dt>来源</dt><dd>{{ selectedPreview.viewerSource }}</dd></div>
           <div><dt>图片大小</dt><dd>{{ formatBytes(timings.size_bytes) }}</dd></div>
         </dl>
+
+        <div v-if="selectedCommandDefinition" class="command-preview-info">
+          <div class="timing-panel__header">
+            <div>
+              <div class="timing-panel__title">指令解析</div>
+              <div class="timing-panel__subtitle">{{ selectedCommandDefinition.description }}</div>
+            </div>
+            <UiButton variant="outline" size="sm" @click="openCommandParser">去解析</UiButton>
+          </div>
+          <dl class="preview-meta command-parse-meta">
+            <div><dt>标准用法</dt><dd>{{ selectedCommandDefinition.usage }}</dd></div>
+            <div><dt>官方别名</dt><dd>{{ joinList(selectedCommandDefinition.preset_aliases) }}</dd></div>
+            <div><dt>自定义关键词</dt><dd>{{ joinList(selectedCommandDefinition.custom_aliases) }}</dd></div>
+            <div><dt>示例</dt><dd>{{ selectedCommandDefinition.examples?.[0] || '-' }}</dd></div>
+          </dl>
+        </div>
       </div>
     </div>
   </UiCard>
@@ -89,8 +105,9 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { getRendererPreviews, renderRendererPreview } from '../api/client'
-import type { RenderPreviewMeta, RenderTiming } from '../api/types'
+import { useRouter } from 'vue-router'
+import { getCommandDefinitions, getRendererPreviews, renderRendererPreview } from '../api/client'
+import type { CommandDefinition, RenderPreviewMeta, RenderTiming } from '../api/types'
 import SvgIcon from './icons/SvgIcon.vue'
 import UiAlert from './ui/UiAlert.vue'
 import UiBadge from './ui/UiBadge.vue'
@@ -98,6 +115,7 @@ import UiButton from './ui/UiButton.vue'
 import UiCard from './ui/UiCard.vue'
 import UiSkeleton from './ui/UiSkeleton.vue'
 
+const router = useRouter()
 const previews = ref<RenderPreviewMeta[]>([])
 const selectedId = ref('')
 const imageUrl = ref('')
@@ -107,8 +125,10 @@ const error = ref('')
 const imageError = ref('')
 const message = ref('')
 const timings = ref<RenderTiming>(emptyTiming())
+const commandDefinitions = ref<CommandDefinition[]>([])
 
 const selectedPreview = computed(() => previews.value.find(item => item.id === selectedId.value) ?? null)
+const selectedCommandDefinition = computed(() => commandDefinitions.value.find(item => item.preview_id === selectedId.value) ?? null)
 const timingItems = computed(() => [
   { key: 'fonts', label: '字体加载', value: formatMs(timings.value.fonts_ms) },
   { key: 'satori', label: 'Satori', value: formatMs(timings.value.satori_ms) },
@@ -124,8 +144,9 @@ async function loadPreviews() {
   loading.value = true
   error.value = ''
   try {
-    const result = await getRendererPreviews()
+    const [result, commands] = await Promise.all([getRendererPreviews(), getCommandDefinitions().catch(() => null)])
     previews.value = result.data ?? []
+    commandDefinitions.value = commands?.data ?? []
     message.value = result.message
     if (!selectedId.value && previews.value.length > 0) {
       selectedId.value = previews.value[0].id
@@ -194,5 +215,14 @@ function formatBytes(value: number | null) {
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
   return `${(value / 1024 / 1024).toFixed(2)} MB`
+}
+
+function joinList(values: string[]) {
+  return values?.length ? values.join(' / ') : '-'
+}
+
+function openCommandParser() {
+  const example = selectedCommandDefinition.value?.examples?.[0] || selectedCommandDefinition.value?.usage || ''
+  void router.push({ path: '/commands', query: example ? { q: example } : undefined })
 }
 </script>

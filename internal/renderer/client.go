@@ -22,14 +22,16 @@ type Client struct {
 	baseURL    string
 	httpClient *http.Client
 	process    *exec.Cmd
+	precision  float64
 }
 
 // RenderRequest is sent to the renderer service.
 type RenderRequest struct {
-	Template string      `json:"template"` // e.g. "card_detail", "music_detail"
-	Data     interface{} `json:"data"`
-	Width    int         `json:"width,omitempty"`
-	Height   int         `json:"height,omitempty"`
+	Template  string      `json:"template"` // e.g. "card_detail", "music_detail"
+	Data      interface{} `json:"data"`
+	Width     int         `json:"width,omitempty"`
+	Height    int         `json:"height,omitempty"`
+	Precision float64     `json:"precision,omitempty"`
 }
 
 // PreviewMeta describes a sample Satori template exposed by the renderer.
@@ -64,8 +66,13 @@ type PreviewRenderResult struct {
 
 // New creates a new renderer client.
 func New(cfg config.RendererConfig) *Client {
+	precision := cfg.Precision
+	if precision <= 0 {
+		precision = config.DefaultRendererPrecision
+	}
 	return &Client{
-		baseURL: fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port),
+		baseURL:   fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port),
+		precision: precision,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -83,7 +90,10 @@ func (c *Client) StartProcess(rendererDir string, port int) error {
 
 	cmd := exec.Command(bunPath, "run", "src/server.tsx")
 	cmd.Dir = rendererDir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("PORT=%d", port))
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("PORT=%d", port),
+		fmt.Sprintf("RENDER_PRECISION=%g", c.precision),
+	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -121,6 +131,18 @@ func (c *Client) waitForReady(timeout time.Duration) error {
 
 // Render sends a render request and returns PNG bytes.
 func (c *Client) Render(req RenderRequest) ([]byte, error) {
+	result, err := c.RenderWithTrace(req)
+	if err != nil {
+		return nil, err
+	}
+	return result.PNG, nil
+}
+
+// RenderWithTrace sends a render request and preserves renderer timing headers.
+func (c *Client) RenderWithTrace(req RenderRequest) (*PreviewRenderResult, error) {
+	if req.Precision <= 0 {
+		req.Precision = c.precision
+	}
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal render request: %w", err)
@@ -137,7 +159,20 @@ func (c *Client) Render(req RenderRequest) ([]byte, error) {
 		return nil, fmt.Errorf("renderer returned %d: %s", resp.StatusCode, string(errBody))
 	}
 
-	return io.ReadAll(resp.Body)
+	png, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read rendered image: %w", err)
+	}
+
+	return &PreviewRenderResult{
+		PNG:        png,
+		TotalMS:    resp.Header.Get("x-render-total-ms"),
+		FontsMS:    resp.Header.Get("x-render-fonts-ms"),
+		SatoriMS:   resp.Header.Get("x-render-satori-ms"),
+		ResvgMS:    resp.Header.Get("x-render-resvg-ms"),
+		SizeBytes:  resp.Header.Get("x-render-size-bytes"),
+		StatusCode: resp.StatusCode,
+	}, nil
 }
 
 // ListPreviews fetches Satori preview metadata from the renderer service.
@@ -179,6 +214,9 @@ func (c *Client) RenderPreviewWithTrace(id string, width int, height int) (*Prev
 	if height > 0 {
 		query.Set("height", strconv.Itoa(height))
 	}
+	if c.precision > 0 {
+		query.Set("precision", strconv.FormatFloat(c.precision, 'f', -1, 64))
+	}
 	if encoded := query.Encode(); encoded != "" {
 		previewURL += "?" + encoded
 	}
@@ -213,6 +251,22 @@ func (c *Client) RenderPreviewWithTrace(id string, width int, height int) (*Prev
 // BaseURL returns the renderer service base URL.
 func (c *Client) BaseURL() string {
 	return c.baseURL
+}
+
+// SetPrecision updates the SVG to PNG render scale used for future requests.
+func (c *Client) SetPrecision(precision float64) {
+	if precision <= 0 {
+		precision = config.DefaultRendererPrecision
+	}
+	c.precision = precision
+}
+
+// Precision returns the current SVG to PNG render scale.
+func (c *Client) Precision() float64 {
+	if c.precision <= 0 {
+		return config.DefaultRendererPrecision
+	}
+	return c.precision
 }
 
 // Health checks if the renderer service is alive.

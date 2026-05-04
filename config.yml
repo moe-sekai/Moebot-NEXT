@@ -5,6 +5,7 @@ bot:
         - moebot
         - 萌萌
     command_prefix: /
+    command_aliases: {}
     super_users: []
     driver:
         type: ws-reverse
@@ -43,6 +44,7 @@ ranking_api:
 renderer:
     host: 127.0.0.1
     port: 3001
+    precision: 2
     cache:
         enabled: true
         path: ./data/cache
@@ -54,7 +56,7 @@ assets:
     mirror: main
     cdn_source: cn_main
     base_url: https://storage.exmeaning.com/sekai-jp-assets
-    custom_base_url: ""
+    custom_base_url: https://storage.exmeaning.com/sekai-jp-assets
     music_alias_url: https://moe.exmeaning.com/data/music_alias/music_aliases.json
     sticker_path: ./assets/stickers
 game_servers:

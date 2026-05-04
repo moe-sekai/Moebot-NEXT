@@ -15,14 +15,17 @@ import (
 // RegisterMusic registers music-related query commands.
 func RegisterMusic(deps *Deps) {
 	registerMusicDetailCommand(deps, "查曲")
-	registerMusicDetailCommand(deps, "查歌")
 	registerChartCommand(deps)
 }
 
 func registerMusicDetailCommand(deps *Deps, command string) {
-	for _, cmd := range regionalCommands(command) {
+	for _, cmd := range parserCommands(deps, command) {
 		commandName := cmd.Name
 		forcedRegion := cmd.Region
+		recordCommand := cmd.Primary
+		if recordCommand == "" {
+			recordCommand = command
+		}
 		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			keyword := commandArgs(ctx)
@@ -53,21 +56,25 @@ func registerMusicDetailCommand(deps *Deps, command string) {
 				})
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))
-					bot.RecordCommandRegion(deps.DB, command, runtime.Region, ctx, start)
+					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 					return
 				}
 			}
 
 			ctx.SendChain(message.Text(formatMusicText(payload)))
-			bot.RecordCommandRegion(deps.DB, command, runtime.Region, ctx, start)
+			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
 }
 
 func registerChartCommand(deps *Deps) {
-	for _, cmd := range regionalCommands("查谱") {
+	for _, cmd := range parserCommands(deps, "查谱") {
 		commandName := cmd.Name
 		forcedRegion := cmd.Region
+		recordCommand := cmd.Primary
+		if recordCommand == "" {
+			recordCommand = "查谱"
+		}
 		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			keyword := commandArgs(ctx)
@@ -93,13 +100,13 @@ func registerChartCommand(deps *Deps) {
 				png, err := deps.Renderer.Render(buildChartRenderRequest(payload))
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))
-					bot.RecordCommandRegion(deps.DB, "查谱", runtime.Region, ctx, start)
+					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 					return
 				}
 			}
 
 			ctx.SendChain(message.Text(formatChartText(payload)))
-			bot.RecordCommandRegion(deps.DB, "查谱", runtime.Region, ctx, start)
+			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
 }

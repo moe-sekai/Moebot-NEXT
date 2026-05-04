@@ -64,47 +64,47 @@ func (r *Resolver) base() string {
 
 // GetCardThumbnailURL returns the thumbnail URL for a card.
 func (r *Resolver) GetCardThumbnailURL(assetBundleName string, trained bool) string {
-	return fmt.Sprintf("%s/thumbnail/chara/%s_%s.webp", r.base(), assetBundleName, trainingSuffix(trained))
+	return fmt.Sprintf("%s/thumbnail/chara/%s_%s.png", r.base(), assetBundleName, trainingSuffix(trained))
 }
 
 // GetCardFullURL returns the full-size card illustration URL.
 func (r *Resolver) GetCardFullURL(assetBundleName string, trained bool) string {
-	return fmt.Sprintf("%s/character/member/%s/card_%s.webp", r.base(), assetBundleName, trainingSuffix(trained))
+	return fmt.Sprintf("%s/character/member/%s/card_%s.png", r.base(), assetBundleName, trainingSuffix(trained))
 }
 
 // GetMusicJacketURL returns the jacket (cover art) URL for a music track.
 func (r *Resolver) GetMusicJacketURL(assetBundleName string) string {
-	return fmt.Sprintf("%s/music/jacket/%s/%s.webp", r.base(), assetBundleName, assetBundleName)
+	return fmt.Sprintf("%s/music/jacket/%s/%s.png", r.base(), assetBundleName, assetBundleName)
 }
 
 // GetEventBannerURL returns the event banner background URL.
 func (r *Resolver) GetEventBannerURL(assetBundleName string) string {
-	return fmt.Sprintf("%s/event/%s/screen/bg.webp", r.base(), assetBundleName)
+	return fmt.Sprintf("%s/event/%s/screen/bg.png", r.base(), assetBundleName)
 }
 
 // GetEventLogoURL returns the event logo URL.
 func (r *Resolver) GetEventLogoURL(assetBundleName string) string {
-	return fmt.Sprintf("%s/event/%s/logo/logo.webp", r.base(), assetBundleName)
+	return fmt.Sprintf("%s/event/%s/logo/logo.png", r.base(), assetBundleName)
 }
 
 // GetGachaLogoURL returns the gacha banner logo URL.
 func (r *Resolver) GetGachaLogoURL(assetBundleName string) string {
-	return fmt.Sprintf("%s/gacha/%s/logo/logo.webp", r.base(), assetBundleName)
+	return fmt.Sprintf("%s/gacha/%s/logo/logo.png", r.base(), assetBundleName)
 }
 
 // GetAttrIconURL returns the attribute icon URL.
 func (r *Resolver) GetAttrIconURL(attr Attribute) string {
-	return fmt.Sprintf("%s/thumbnail/common/attribute/%s.webp", r.base(), string(attr))
+	return fmt.Sprintf("%s/thumbnail/common/attribute/%s.png", r.base(), string(attr))
 }
 
 // GetUnitLogoURL returns the unit logo URL.
 func (r *Resolver) GetUnitLogoURL(unitID UnitID) string {
-	return fmt.Sprintf("%s/thumbnail/common/unit/%s.webp", r.base(), string(unitID))
+	return fmt.Sprintf("%s/thumbnail/common/unit/%s.png", r.base(), string(unitID))
 }
 
 // GetHonorBgURL returns the honor background URL.
 func (r *Resolver) GetHonorBgURL(assetBundleName string, mainOrSub string) string {
-	return fmt.Sprintf("%s/honor/%s/degree_%s.webp", r.base(), assetBundleName, mainOrSub)
+	return fmt.Sprintf("%s/honor/%s/degree_%s.png", r.base(), assetBundleName, mainOrSub)
 }
 
 // GetStampURL returns the stamp / sticker image URL.

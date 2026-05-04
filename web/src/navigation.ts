@@ -15,6 +15,7 @@ export const consoleNavItems: ConsoleNavItem[] = [
   { path: '/', name: 'dashboard', label: '概览', subtitle: 'Dashboard', icon: 'dashboard', section: 'main' },
   { path: '/status', name: 'status', label: '状态', subtitle: 'Runtime', icon: 'status', section: 'main' },
   { path: '/preview', name: 'preview', label: '渲染预览', subtitle: 'Renderer', icon: 'preview', section: 'main' },
+  { path: '/commands', name: 'commands', label: '指令解析', subtitle: 'Parser', icon: 'command', section: 'main' },
   { path: '/masterdata', name: 'masterdata', label: 'Masterdata', subtitle: 'Search', icon: 'masterdata', section: 'main' },
   { path: '/settings', name: 'settings', label: '设置', subtitle: 'Config', icon: 'settings', section: 'main' },
   { path: '/bot', name: 'bot', label: 'Bot', subtitle: 'OneBot', icon: 'bot', section: 'manage' },
@@ -46,6 +47,11 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     title: '渲染预览',
     subtitle: '查看 Satori 模板输出、渲染时间与各步骤耗时。',
     eyebrow: 'Renderer Preview',
+  },
+  commands: {
+    title: '指令解析',
+    subtitle: '测试聊天指令解析、别名触发与 Satori 渲染预览。',
+    eyebrow: 'Command Parser',
   },
   masterdata: {
     title: 'Masterdata',

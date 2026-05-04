@@ -14,9 +14,13 @@ import (
 
 // RegisterEvent registers the /查活动 command.
 func RegisterEvent(deps *Deps) {
-	for _, cmd := range regionalCommands("查活动") {
+	for _, cmd := range parserCommands(deps, "查活动") {
 		commandName := cmd.Name
 		forcedRegion := cmd.Region
+		recordCommand := cmd.Primary
+		if recordCommand == "" {
+			recordCommand = "查活动"
+		}
 		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			keyword := commandArgs(ctx)
@@ -47,13 +51,13 @@ func RegisterEvent(deps *Deps) {
 				})
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))
-					bot.RecordCommandRegion(deps.DB, "查活动", runtime.Region, ctx, start)
+					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 					return
 				}
 			}
 
 			ctx.SendChain(message.Text(formatEventText(payload)))
-			bot.RecordCommandRegion(deps.DB, "查活动", runtime.Region, ctx, start)
+			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
 }

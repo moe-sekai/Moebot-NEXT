@@ -5,6 +5,7 @@ import Users from '../views/Users.vue'
 import Stats from '../views/Stats.vue'
 import Settings from '../views/Settings.vue'
 import Preview from '../views/Preview.vue'
+import CommandParser from '../views/CommandParser.vue'
 import About from '../views/About.vue'
 import Status from '../views/Status.vue'
 import Masterdata from '../views/Masterdata.vue'
@@ -17,6 +18,7 @@ export default createRouter({
     { path: '/', name: 'dashboard', component: Dashboard },
     { path: '/status', name: 'status', component: Status },
     { path: '/preview', name: 'preview', component: Preview },
+    { path: '/commands', name: 'commands', component: CommandParser },
     { path: '/masterdata', name: 'masterdata', component: Masterdata },
     { path: '/settings', name: 'settings', component: Settings },
     { path: '/bot', name: 'bot', component: Bot },

@@ -2,6 +2,7 @@ import { getCardThumbnailUrl, getGachaLogoUrl, getMusicJacketUrl } from '../shar
 import { renderWithTrace, type RenderOptions, type RenderTrace } from './engine'
 import { CardDetail } from './templates/CardDetail'
 import { MusicDetail } from './templates/MusicDetail'
+import { ChartDetail } from './templates/ChartDetail'
 import { EventInfo } from './templates/EventInfo'
 import { RankingList } from './templates/RankingList'
 import { ProfileCard } from './templates/ProfileCard'
@@ -47,6 +48,17 @@ const PREVIEW_META: RenderPreviewMeta[] = [
     command: '/查曲 [关键词]',
     templatePath: 'packages/renderer/src/templates/MusicDetail.tsx',
     viewerSource: 'Snowy Viewer: components/music/MusicItem.tsx + lib/assets.ts',
+    status: 'ready',
+    width: 800,
+    height: 650,
+  },
+  {
+    id: 'chart-detail',
+    name: '查谱详情图',
+    description: '用于 /查谱 的谱面详情图片，展示曲绘、难度、等级、Notes 与歌曲长度。',
+    command: '/查谱 [关键词/ID]',
+    templatePath: 'packages/renderer/src/templates/ChartDetail.tsx',
+    viewerSource: 'Moebot Renderer: MusicDetail payload + ChartDetail.tsx',
     status: 'ready',
     width: 800,
     height: 650,
@@ -180,6 +192,27 @@ function createPreviewElement(id: string) {
             assetSource: 'main-jp',
             jacketUrl: getMusicJacketUrl('jacket_s_001', 'main-jp'),
             publishedAt: Date.UTC(2020, 8, 30, 6, 0, 0),
+            durationSec: 127,
+            difficulties: [
+              { musicDifficulty: 'easy', playLevel: 5, totalNoteCount: 158 },
+              { musicDifficulty: 'normal', playLevel: 10, totalNoteCount: 305 },
+              { musicDifficulty: 'hard', playLevel: 16, totalNoteCount: 719 },
+              { musicDifficulty: 'expert', playLevel: 22, totalNoteCount: 961 },
+              { musicDifficulty: 'master', playLevel: 26, totalNoteCount: 1147 },
+            ],
+          }}
+        />
+      )
+    case 'chart-detail':
+      return (
+        <ChartDetail
+          music={{
+            id: 1,
+            title: 'Tell Your World',
+            pronunciation: 'テル ユア ワールド',
+            assetbundleName: 'jacket_s_001',
+            assetSource: 'main-jp',
+            jacketUrl: getMusicJacketUrl('jacket_s_001', 'main-jp'),
             durationSec: 127,
             difficulties: [
               { musicDifficulty: 'easy', playLevel: 5, totalNoteCount: 158 },

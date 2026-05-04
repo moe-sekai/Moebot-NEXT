@@ -10,6 +10,7 @@ import (
 
 	"moebot-next/internal/assets"
 	"moebot-next/internal/bot"
+	"moebot-next/internal/commandparser"
 	"moebot-next/internal/commands"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
@@ -61,11 +62,13 @@ func main() {
 		defer rendererClient.StopProcess()
 	}
 
+	commandDefinitions := commandparser.Definitions(cfg.Bot.CommandAliases)
 	bot.RegisterMiddleware(db)
 	commands.RegisterAll(&commands.Deps{
-		DB:       db,
-		Renderer: rendererClient,
-		Servers:  serverManager,
+		DB:          db,
+		Renderer:    rendererClient,
+		Servers:     serverManager,
+		Definitions: commandDefinitions,
 	})
 
 	webServer := web.New(cfg, db, serverManager.Default().Store, rendererClient, cfgPath, serverManager.Default().Loader)

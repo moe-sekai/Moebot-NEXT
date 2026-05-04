@@ -15,13 +15,16 @@ import (
 // RegisterGacha registers gacha query commands.
 func RegisterGacha(deps *Deps) {
 	registerGachaCommand(deps, "查卡池")
-	registerGachaCommand(deps, "查扭蛋")
 }
 
 func registerGachaCommand(deps *Deps, command string) {
-	for _, cmd := range regionalCommands(command) {
+	for _, cmd := range parserCommands(deps, command) {
 		commandName := cmd.Name
 		forcedRegion := cmd.Region
+		recordCommand := cmd.Primary
+		if recordCommand == "" {
+			recordCommand = command
+		}
 		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			keyword := commandArgs(ctx)
@@ -52,13 +55,13 @@ func registerGachaCommand(deps *Deps, command string) {
 				})
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))
-					bot.RecordCommandRegion(deps.DB, command, runtime.Region, ctx, start)
+					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 					return
 				}
 			}
 
 			ctx.SendChain(message.Text(formatGachaText(payload)))
-			bot.RecordCommandRegion(deps.DB, command, runtime.Region, ctx, start)
+			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
 }

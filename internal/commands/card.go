@@ -14,9 +14,13 @@ import (
 
 // RegisterCard registers the /查卡 command.
 func RegisterCard(deps *Deps) {
-	for _, cmd := range regionalCommands("查卡") {
+	for _, cmd := range parserCommands(deps, "查卡") {
 		commandName := cmd.Name
 		forcedRegion := cmd.Region
+		recordCommand := cmd.Primary
+		if recordCommand == "" {
+			recordCommand = "查卡"
+		}
 		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			keyword := commandArgs(ctx)
@@ -50,7 +54,7 @@ func RegisterCard(deps *Deps) {
 				})
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))
-					bot.RecordCommandRegion(deps.DB, "查卡", runtime.Region, ctx, start)
+					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 					return
 				}
 				// Fallback to text if rendering fails
@@ -59,7 +63,7 @@ func RegisterCard(deps *Deps) {
 			// Text fallback.
 			text := formatCardText(payload)
 			ctx.SendChain(message.Text(text))
-			bot.RecordCommandRegion(deps.DB, "查卡", runtime.Region, ctx, start)
+			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
 }

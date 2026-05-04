@@ -88,6 +88,7 @@ func (s *Server) handleStatus(c *fiber.Ctx) error {
 			"latency_ms":     rendererLatency.Milliseconds(),
 			"service_port":   s.Config.Renderer.Port,
 			"dashboard_port": s.Config.Web.Port,
+			"precision":      s.Config.Renderer.Precision,
 		},
 		"masterdata": fiber.Map{
 			"status":    statusText(masterdataLoaded),
@@ -134,6 +135,7 @@ func (s *Server) handleRendererHealth(c *fiber.Ctx) error {
 		"latency_ms":     latency.Milliseconds(),
 		"renderer_port":  s.Config.Renderer.Port,
 		"dashboard_port": s.Config.Web.Port,
+		"precision":      s.Config.Renderer.Precision,
 		"note":           fmt.Sprintf("%d 是 Satori/Bun 图片渲染服务，%d 才是 Moebot NEXT 管理面板。", s.Config.Renderer.Port, s.Config.Web.Port),
 	})
 }
@@ -222,12 +224,17 @@ type updatePublicConfigRequest struct {
 	Servers           map[string]gameServerSettingsRequest `json:"servers"`
 	Masterdata        *masterdataSettingsRequest           `json:"masterdata"`
 	Assets            *assetsSettingsRequest               `json:"assets"`
+	Renderer          *rendererSettingsRequest             `json:"renderer"`
 	ReloadMasterdata  bool                                 `json:"reload_masterdata"`
 	SyncClientRegions bool                                 `json:"sync_client_regions"`
 }
 
 type serverSettingsRequest struct {
 	Region string `json:"region"`
+}
+
+type rendererSettingsRequest struct {
+	Precision float64 `json:"precision"`
 }
 
 type gameServerSettingsRequest struct {
@@ -407,10 +414,22 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 	next.Assets.BaseURL = assetResolved.BaseURL
 	next.Assets.CustomBaseURL = assetResolved.CustomBaseURL
 
+	if req.Renderer != nil {
+		if req.Renderer.Precision <= 0 {
+			return fiber.NewError(fiber.StatusBadRequest, "Renderer precision must be greater than 0")
+		}
+		next.Renderer.Precision = req.Renderer.Precision
+	}
+
+	config.NormalizeConfig(&next)
+
 	if err := config.Save(&next, s.ConfigPath); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 	*s.Config = next
+	if s.Renderer != nil {
+		s.Renderer.SetPrecision(s.Config.Renderer.Precision)
+	}
 	if s.Servers != nil {
 		s.Servers.ApplyConfig(s.Config)
 		if runtime := s.Servers.Default(); runtime != nil {
@@ -614,12 +633,13 @@ func (s *Server) publicConfigMap() fiber.Map {
 			"port": s.Config.Web.Port,
 		},
 		"bot": fiber.Map{
-			"nickname":       s.Config.Bot.Nickname,
-			"command_prefix": s.Config.Bot.CommandPrefix,
-			"driver_type":    s.Config.Bot.Driver.Type,
-			"listen":         s.Config.Bot.Driver.Listen,
-			"url_configured": s.Config.Bot.Driver.URL != "",
-			"token_set":      s.Config.Bot.Driver.Token != "",
+			"nickname":        s.Config.Bot.Nickname,
+			"command_prefix":  s.Config.Bot.CommandPrefix,
+			"command_aliases": s.Config.Bot.CommandAliases,
+			"driver_type":     s.Config.Bot.Driver.Type,
+			"listen":          s.Config.Bot.Driver.Listen,
+			"url_configured":  s.Config.Bot.Driver.URL != "",
+			"token_set":       s.Config.Bot.Driver.Token != "",
 		},
 		"masterdata": masterMap,
 		"sekai_api": fiber.Map{
@@ -634,9 +654,10 @@ func (s *Server) publicConfigMap() fiber.Map {
 			"timeout":             s.Config.RankingAPI.Timeout,
 		},
 		"renderer": fiber.Map{
-			"base_url": rendererBaseURL(s.Renderer),
-			"host":     s.Config.Renderer.Host,
-			"port":     s.Config.Renderer.Port,
+			"base_url":  rendererBaseURL(s.Renderer),
+			"host":      s.Config.Renderer.Host,
+			"port":      s.Config.Renderer.Port,
+			"precision": s.Config.Renderer.Precision,
 			"cache": fiber.Map{
 				"enabled":     s.Config.Renderer.Cache.Enabled,
 				"path":        s.Config.Renderer.Cache.Path,

@@ -15,8 +15,12 @@ import (
 )
 
 func RegisterRanking(deps *Deps) {
-	for _, cmd := range regionalCommands("榜线") {
+	for _, cmd := range parserCommands(deps, "榜线") {
 		forcedRegion := cmd.Region
+		recordCommand := cmd.Primary
+		if recordCommand == "" {
+			recordCommand = "榜线"
+		}
 		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)
@@ -35,11 +39,11 @@ func RegisterRanking(deps *Deps) {
 			view.Rankings = filtered
 			payload := renderer.BuildRankingListPayloadWithAssets("活动榜线", view, runtime.Assets)
 			if sendRankingImage(ctx, deps.Renderer, payload) {
-				bot.RecordCommandRegion(deps.DB, "榜线", runtime.Region, ctx, start)
+				bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 				return
 			}
 			ctx.SendChain(message.Text(formatRankingText(payload)))
-			bot.RecordCommandRegion(deps.DB, "榜线", runtime.Region, ctx, start)
+			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}
 

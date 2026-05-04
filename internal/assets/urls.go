@@ -116,49 +116,49 @@ func trainingSuffix(trained bool) string {
 
 // GetCardThumbnailURL returns the thumbnail URL for a card.
 //
-//	thumbnail/chara/{name}_{normal|after_training}.webp
+//	thumbnail/chara/{name}_{normal|after_training}.png
 func GetCardThumbnailURL(assetBundleName string, trained bool) string {
-	return fmt.Sprintf("%s/thumbnail/chara/%s_%s.webp",
+	return fmt.Sprintf("%s/thumbnail/chara/%s_%s.png",
 		cdnBase(), assetBundleName, trainingSuffix(trained))
 }
 
 // GetCardFullURL returns the full-size card illustration URL.
 //
-//	character/member/{name}/card_{normal|after_training}.webp
+//	character/member/{name}/card_{normal|after_training}.png
 func GetCardFullURL(assetBundleName string, trained bool) string {
-	return fmt.Sprintf("%s/character/member/%s/card_%s.webp",
+	return fmt.Sprintf("%s/character/member/%s/card_%s.png",
 		cdnBase(), assetBundleName, trainingSuffix(trained))
 }
 
 // GetMusicJacketURL returns the jacket (cover art) URL for a music track.
 //
-//	music/jacket/{name}/{name}.webp
+//	music/jacket/{name}/{name}.png
 func GetMusicJacketURL(assetBundleName string) string {
-	return fmt.Sprintf("%s/music/jacket/%s/%s.webp",
+	return fmt.Sprintf("%s/music/jacket/%s/%s.png",
 		cdnBase(), assetBundleName, assetBundleName)
 }
 
 // GetEventBannerURL returns the event banner background URL.
 //
-//	event/{name}/screen/bg.webp
+//	event/{name}/screen/bg.png
 func GetEventBannerURL(assetBundleName string) string {
-	return fmt.Sprintf("%s/event/%s/screen/bg.webp",
+	return fmt.Sprintf("%s/event/%s/screen/bg.png",
 		cdnBase(), assetBundleName)
 }
 
 // GetEventLogoURL returns the event logo URL.
 //
-//	event/{name}/logo/logo.webp
+//	event/{name}/logo/logo.png
 func GetEventLogoURL(assetBundleName string) string {
-	return fmt.Sprintf("%s/event/%s/logo/logo.webp",
+	return fmt.Sprintf("%s/event/%s/logo/logo.png",
 		cdnBase(), assetBundleName)
 }
 
 // GetGachaLogoURL returns the gacha banner logo URL.
 //
-//	gacha/{name}/logo/logo.webp
+//	gacha/{name}/logo/logo.png
 func GetGachaLogoURL(assetBundleName string) string {
-	return fmt.Sprintf("%s/gacha/%s/logo/logo.webp",
+	return fmt.Sprintf("%s/gacha/%s/logo/logo.png",
 		cdnBase(), assetBundleName)
 }
 
@@ -172,25 +172,25 @@ func GetCharacterIconURL(charID int) string {
 
 // GetAttrIconURL returns the attribute icon URL.
 //
-//	thumbnail/common/attribute/{attr}.webp
+//	thumbnail/common/attribute/{attr}.png
 func GetAttrIconURL(attr Attribute) string {
-	return fmt.Sprintf("%s/thumbnail/common/attribute/%s.webp",
+	return fmt.Sprintf("%s/thumbnail/common/attribute/%s.png",
 		cdnBase(), string(attr))
 }
 
 // GetUnitLogoURL returns the unit logo URL.
 //
-//	thumbnail/common/unit/{id}.webp
+//	thumbnail/common/unit/{id}.png
 func GetUnitLogoURL(unitID UnitID) string {
-	return fmt.Sprintf("%s/thumbnail/common/unit/%s.webp",
+	return fmt.Sprintf("%s/thumbnail/common/unit/%s.png",
 		cdnBase(), string(unitID))
 }
 
 // GetHonorBgURL returns the honor (title / degree) background URL.
 //
-//	honor/{name}/degree_{main|sub}.webp
+//	honor/{name}/degree_{main|sub}.png
 func GetHonorBgURL(assetBundleName string, mainOrSub string) string {
-	return fmt.Sprintf("%s/honor/%s/degree_%s.webp",
+	return fmt.Sprintf("%s/honor/%s/degree_%s.png",
 		cdnBase(), assetBundleName, mainOrSub)
 }
 

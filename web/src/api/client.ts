@@ -1,5 +1,10 @@
 import axios from 'axios'
 import type {
+  CommandAliasConfig,
+  CommandAliasPayload,
+  CommandAliasUpdateResponse,
+  CommandDefinitionsResponse,
+  CommandParseResponse,
   CommandStatsResponse,
   DashboardData,
   GroupRow,
@@ -57,6 +62,81 @@ export async function getRecentCommands(limit = 10) {
     params: { limit },
   })
   return data
+}
+
+export async function getCommandDefinitions() {
+  const { data } = await api.get<CommandDefinitionsResponse>('/commands/definitions')
+  return data
+}
+
+export async function parseCommand(input: string) {
+  const { data } = await api.get<CommandParseResponse>('/commands/parse', {
+    params: { q: input },
+  })
+  return data
+}
+
+export async function renderParsedCommand(input: string, width?: number, height?: number): Promise<RendererPreviewImageResult> {
+  const startedAt = performance.now()
+  const response = await api.get<Blob>('/commands/parse/image', {
+    params: {
+      q: input,
+      ...(width ? { width } : {}),
+      ...(height ? { height } : {}),
+      ts: Date.now(),
+    },
+    responseType: 'blob',
+  })
+  const networkMs = Math.round(performance.now() - startedAt)
+  const blob = response.data
+  return {
+    blob,
+    url: URL.createObjectURL(blob),
+    timings: {
+      fonts_ms: parseHeaderNumber(response.headers['x-render-fonts-ms']),
+      satori_ms: parseHeaderNumber(response.headers['x-render-satori-ms']),
+      resvg_ms: parseHeaderNumber(response.headers['x-render-resvg-ms']),
+      total_ms: parseHeaderNumber(response.headers['x-render-total-ms']),
+      proxy_ms: parseHeaderNumber(response.headers['x-render-proxy-ms']),
+      network_ms: networkMs,
+      size_bytes: parseHeaderNumber(response.headers['x-render-size-bytes']) ?? blob.size,
+    },
+  }
+}
+
+export async function getCommandAliases() {
+  const { data } = await api.get<CommandAliasConfig>('/commands/aliases')
+  return data
+}
+
+export async function updateCommandAliases(payload: CommandAliasPayload) {
+  const { data } = await api.put<CommandAliasUpdateResponse>('/commands/aliases', payload)
+  return data
+}
+
+export async function resetCommandAliases() {
+  const { data } = await api.post<CommandAliasUpdateResponse>('/commands/aliases/reset')
+  return data
+}
+
+export async function exportCommandAliases() {
+  const { data } = await api.get<CommandAliasPayload>('/commands/aliases/export')
+  return data
+}
+
+export async function importCommandAliases(payload: CommandAliasPayload) {
+  const { data } = await api.post<CommandAliasUpdateResponse>('/commands/aliases/import', payload)
+  return data
+}
+
+export function downloadCommandAliases(payload: CommandAliasPayload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'moebot-command-aliases.json'
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 export async function getPublicConfig() {

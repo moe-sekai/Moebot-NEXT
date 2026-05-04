@@ -5,6 +5,7 @@ import { loadFonts, type FontData } from './fonts'
 export interface RenderOptions {
   width?: number
   height?: number
+  precision?: number
   quality?: number
   debug?: boolean
 }
@@ -23,8 +24,11 @@ export interface RenderTrace {
   height?: number
 }
 
+const DEFAULT_RENDER_PRECISION = 1.5
+
 const DEFAULT_OPTIONS: RenderOptions = {
   width: 800,
+  precision: DEFAULT_RENDER_PRECISION,
   quality: 80,
 }
 
@@ -44,6 +48,10 @@ function toSatoriFonts(fonts: FontData[]) {
     weight: f.weight as any,
     style: f.style as any,
   }))
+}
+
+function normalizePrecision(value?: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : DEFAULT_RENDER_PRECISION
 }
 
 /**
@@ -71,8 +79,10 @@ export async function renderWithTrace(
   const satoriMs = Date.now() - satoriStart
 
   const resvgStart = Date.now()
+  const precision = normalizePrecision(opts.precision)
+  const outputWidth = Math.max(1, Math.round(opts.width! * precision))
   const resvg = new Resvg(svg, {
-    fitTo: { mode: 'width', value: opts.width! },
+    fitTo: { mode: 'width', value: outputWidth },
   })
   const pngData = resvg.render()
   const png = Buffer.from(pngData.asPng())

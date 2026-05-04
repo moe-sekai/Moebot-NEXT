@@ -54,7 +54,8 @@ export function getAssetBaseUrl(source: AssetSourceType | string = 'main-jp'): s
 }
 
 function buildImageAssetUrl(source: AssetSourceType | string, assetPath: string, format: 'png' | 'webp' = 'png'): string {
-  return `${getAssetBaseUrl(source)}/${assetPath}.${format}`
+  const safeFormat = format === 'webp' ? 'png' : format
+  return `${getAssetBaseUrl(source)}/${assetPath}.${safeFormat}`
 }
 
 function buildAudioAssetUrl(source: AssetSourceType | string, assetPath: string): string {
@@ -69,8 +70,8 @@ function buildPngImageAssetUrl(source: AssetSourceType | string, assetPath: stri
   return `${getAssetBaseUrl(source)}/${assetPath}.png`
 }
 
-function withImageExtension(url: string, format: 'webp' | 'png' = 'png'): string {
-  return format === 'png' ? url.replace(/\.webp$/, '.png') : url
+function withImageExtension(url: string, _format: 'webp' | 'png' = 'png'): string {
+  return url.replace(/\.webp(?=([?#]|$))/i, '.png')
 }
 
 function resolveCardAssetArgs(

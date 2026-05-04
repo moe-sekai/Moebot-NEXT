@@ -612,6 +612,9 @@ func NormalizeConfig(cfg *Config) {
 	if cfg.Server.Region == "" || !IsValidRegion(cfg.Server.Region) {
 		cfg.Server.Region = RegionJP
 	}
+	if cfg.Renderer.Precision <= 0 {
+		cfg.Renderer.Precision = DefaultRendererPrecision
+	}
 
 	defaults := DefaultGameServerProfiles()
 	if cfg.GameServers == nil {

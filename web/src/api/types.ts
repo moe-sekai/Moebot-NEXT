@@ -52,6 +52,7 @@ export interface RendererStatus extends StatusBlock {
   latency_ms: number
   service_port: number
   dashboard_port: number
+  precision: number
 }
 
 export interface MasterdataStatus extends StatusBlock {
@@ -84,6 +85,7 @@ export interface RendererHealth {
   latency_ms: number
   renderer_port: number
   dashboard_port: number
+  precision: number
   note: string
 }
 
@@ -203,6 +205,7 @@ export interface PublicConfig {
   bot: {
     nickname: string[]
     command_prefix: string
+    command_aliases?: Record<string, string[]>
     driver_type: string
     listen: string
     url_configured: boolean
@@ -215,6 +218,7 @@ export interface PublicConfig {
     base_url: string
     host: string
     port: number
+    precision: number
     cache: {
       enabled: boolean
       path: string
@@ -263,6 +267,10 @@ export interface UpdateServerProfilePayload {
   ranking_api: UpdateRankingAPIPayload
 }
 
+export interface UpdateRendererPayload {
+  precision: number
+}
+
 export interface UpdatePublicConfigPayload {
   server: {
     region: string
@@ -270,6 +278,7 @@ export interface UpdatePublicConfigPayload {
   servers?: Record<string, UpdateServerProfilePayload>
   masterdata?: UpdateMasterdataPayload
   assets?: UpdateAssetsPayload
+  renderer?: UpdateRendererPayload
   reload_masterdata?: boolean
   sync_client_regions?: boolean
 }
@@ -338,6 +347,98 @@ export interface RendererPreviewsResponse {
   total: number
   ok: boolean
   message: string
+}
+
+export type CommandMatchSource = 'primary' | 'preset_alias' | 'custom_alias' | string
+export type CommandRenderMode = 'search' | 'preview' | string
+export type CommandSearchType = 'card' | 'music' | 'event' | 'gacha' | '' | string
+
+export interface CommandDefinition {
+  id: string
+  name: string
+  description: string
+  primary_command: string
+  commands: string[]
+  usage: string
+  template: string
+  preview_id: string
+  preset_aliases: string[]
+  custom_aliases: string[]
+  examples: string[]
+  requires_argument: boolean
+  argument_hint: string
+  search_type: CommandSearchType
+  render_mode: CommandRenderMode
+}
+
+export interface CommandRegionInfo {
+  key: string
+  label: string
+}
+
+export interface CommandDefinitionsResponse {
+  data: CommandDefinition[]
+  total: number
+  command_prefix: string
+  regions: CommandRegionInfo[]
+  risk_message: string
+  restart_note: string
+}
+
+export interface ParsedCommandResult {
+  id: number
+  title: string
+  subtitle: string
+  type: string
+}
+
+export interface ParsedCommand {
+  raw_input: string
+  command_prefix: string
+  command_text: string
+  matched_command: string
+  matched_base: string
+  match_source: CommandMatchSource
+  region: string
+  region_label: string
+  argument: string
+  definition?: CommandDefinition
+  results: ParsedCommandResult[]
+  selected?: ParsedCommandResult
+  can_render: boolean
+  render_mode: CommandRenderMode
+  preview_fallback_available: boolean
+  message: string
+  warnings: string[]
+  suggestions: string[]
+}
+
+export interface CommandParseResponse {
+  ok: boolean
+  parsed: ParsedCommand
+  message: string
+}
+
+export interface CommandAliasConfig {
+  data: CommandDefinition[]
+  custom: Record<string, string[]>
+  preset: Record<string, string[]>
+  protected: string[]
+  risk_message: string
+  restart_note: string
+  warnings: string[]
+  command_names: string[]
+}
+
+export interface CommandAliasPayload {
+  aliases: Record<string, string[]>
+}
+
+export interface CommandAliasUpdateResponse {
+  ok: boolean
+  message: string
+  aliases: Record<string, string[]>
+  config: CommandAliasConfig
 }
 
 export interface PaginatedResponse<T> {

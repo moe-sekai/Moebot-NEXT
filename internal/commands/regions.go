@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"moebot-next/internal/commandparser"
 	"moebot-next/internal/config"
 	"moebot-next/internal/models"
 	"moebot-next/internal/servers"
@@ -13,18 +14,45 @@ import (
 )
 
 type regionalCommand struct {
-	Name   string
-	Region string
+	Name        string
+	Region      string
+	Base        string
+	Primary     string
+	MatchSource string
 }
 
 var regionalPrefixes = []string{config.RegionJP, config.RegionCN, config.RegionTW, config.RegionKR, config.RegionEN}
 
 func regionalCommands(command string) []regionalCommand {
-	commands := []regionalCommand{{Name: command}}
+	commands := []regionalCommand{{Name: command, Base: command, Primary: command}}
 	for _, region := range regionalPrefixes {
-		commands = append(commands, regionalCommand{Name: region + command, Region: region})
+		commands = append(commands, regionalCommand{Name: region + command, Region: region, Base: command, Primary: command})
 	}
 	return commands
+}
+
+func parserCommands(deps *Deps, primary string) []regionalCommand {
+	if deps == nil || len(deps.Definitions) == 0 {
+		return regionalCommands(primary)
+	}
+	for _, def := range deps.Definitions {
+		if def.PrimaryCommand != primary {
+			continue
+		}
+		botCommands := commandparser.BotCommandsFor(def)
+		out := make([]regionalCommand, 0, len(botCommands))
+		for _, cmd := range botCommands {
+			out = append(out, regionalCommand{
+				Name:        cmd.Name,
+				Region:      cmd.Region,
+				Base:        cmd.Base,
+				Primary:     cmd.Primary,
+				MatchSource: cmd.MatchSource,
+			})
+		}
+		return out
+	}
+	return regionalCommands(primary)
 }
 
 func parseRegionalCommandName(command string) (base string, region string) {
