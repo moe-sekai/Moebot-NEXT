@@ -22,6 +22,8 @@ import { GachaInfo } from "./templates/GachaInfo";
 import { GachaList } from "./templates/GachaList";
 import { GachaResult } from "./templates/GachaResult";
 import { VirtualLiveList } from "./templates/VirtualLiveList";
+import { SuitePanel } from "./templates/SuitePanel";
+import { SuiteCardBox } from "./templates/SuiteCardBox";
 
 export type RenderPreviewStatus = "ready" | "draft";
 
@@ -199,6 +201,28 @@ const PREVIEW_META: RenderPreviewMeta[] = [
 		status: "ready",
 		width: 800,
 		height: 650,
+	},
+	{
+		id: "suite-panel",
+		name: "Suite 数据面板",
+		description: "通用 Suite 状态面板，展示玩家资料、当前队伍、统计卡与分段数据。",
+		command: "/suite status",
+		templatePath: "packages/renderer/src/templates/SuitePanel.tsx",
+		viewerSource: "Moebot Renderer: Suite payload",
+		status: "ready",
+		width: 800,
+		height: 760,
+	},
+	{
+		id: "suite-card-box",
+		name: "Suite 卡牌一览",
+		description: "Suite 持有卡牌盒子，支持按角色分组、未持有遮罩与限定/生日标记。",
+		command: "/suite cards",
+		templatePath: "packages/renderer/src/templates/SuiteCardBox.tsx",
+		viewerSource: "Moebot Renderer: Suite card collection payload",
+		status: "ready",
+		width: 800,
+		height: 980,
 	},
 	{
 		id: "help-card",
@@ -633,6 +657,60 @@ function createPreviewElement(id: string) {
 					results={createGachaPreviewResults()}
 				/>
 			);
+		case "suite-panel":
+			return (
+				<SuitePanel
+					title="Suite 状态"
+					subtitle="自动同步 · 主线 JP"
+					assetSource="main-jp"
+					profile={{
+						name: "Moebot Tester",
+						rank: 398,
+						userId: "1234567890",
+						bio: "今天也要把缺的卡慢慢补齐。",
+						source: "Sekai Viewer",
+						updatedAt: "2026-05-05 12:30",
+					}}
+					stats={[
+						{ label: "总综合力", value: 352198, highlight: true },
+						{ label: "持有卡牌", value: "128/420" },
+						{ label: "四星", value: 56 },
+						{ label: "满破", value: 18 },
+					]}
+					deckCards={createDeckPreviewCards()}
+					sections={[
+						{
+							title: "资源概览",
+							items: [
+								{ label: "水晶", value: 45320 },
+								{ label: "想法碎片", value: 1288 },
+								{ label: "技能书", value: 42 },
+							],
+						},
+						{
+							title: "近期记录",
+							columns: ["时间", "类型", "内容", "变化"],
+							rows: [
+								["05-05", "抽卡", "Birthday Gift", "+1 NEW"],
+								["05-04", "升级", "初音未来", "CR 58"],
+								["05-03", "活动", "TOP 5000", "完成"],
+							],
+						},
+					]}
+				/>
+			);
+		case "suite-card-box":
+			return (
+				<SuiteCardBox
+					title="Suite 卡牌盒"
+					profile={{ name: "Moebot Tester", rank: 398, userId: "1234567890" }}
+					assetSource="main-jp"
+					total={12}
+					ownedTotal={8}
+					options={{ groupByCharacter: true, showId: true, showCreatedAt: true }}
+					cards={createSuiteCardBoxPreviewCards()}
+				/>
+			);
 		case "help-card":
 			return (
 				<HelpCard
@@ -783,6 +861,22 @@ function createDeckPreviewCards() {
 			level: 50,
 		},
 	];
+}
+
+function createSuiteCardBoxPreviewCards() {
+	return createGachaPreviewResults().slice(0, 12).map((card, index) => ({
+		...card,
+		id: card.cardId,
+		prefix: index % 2 === 0 ? "闪耀的舞台" : "与你相连的歌声",
+		owned: index % 4 !== 1,
+		level: index % 4 !== 1 ? (card.rarity === "rarity_4" ? 60 : 50) : undefined,
+		mastery: index % 4 !== 1 ? index % 6 : undefined,
+		skillLevel: index % 4 !== 1 ? 1 + (index % 4) : undefined,
+		createdAt: `2026-05-${String(5 - (index % 5)).padStart(2, "0")}`,
+		supplyType: index === 2 ? "CFES限定" : index === 6 ? "期间限定" : undefined,
+		isBirthday: index === 8,
+		characterName: ["初音未来", "初音未来", "镜音铃", "镜音铃", "镜音连", "巡音流歌", "MEIKO", "KAITO", "星乃一歌", "天马咲希", "望月穗波", "日野森志步"][index],
+	}));
 }
 
 function createGachaPreviewResults() {

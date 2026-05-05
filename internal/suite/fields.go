@@ -25,7 +25,29 @@ const (
 	FieldUserChallengeLiveSoloStages           = "userChallengeLiveSoloStages"
 	FieldUserChallengeLiveSoloResults          = "userChallengeLiveSoloResults"
 	FieldUserChallengeLiveSoloHighScoreRewards = "userChallengeLiveSoloHighScoreRewards"
+
+	FieldUserMysekaiFixtureGameCharacterPerformanceBonuses = "userMysekaiFixtureGameCharacterPerformanceBonuses"
+	FieldUserMysekaiGates                                  = "userMysekaiGates"
 )
+
+var defaultHarukiPublicFields = []string{
+	FieldUserGamedata,
+	FieldUserDecks,
+	FieldUserCharacters,
+	FieldUserChallengeLiveSoloStages,
+	FieldUserChallengeLiveSoloResults,
+	FieldUserChallengeLiveSoloHighScoreRewards,
+	FieldUserBonds,
+	FieldUserMaterials,
+	FieldUserAreas,
+	FieldUserMysekaiFixtureGameCharacterPerformanceBonuses,
+	FieldUserMysekaiGates,
+	FieldUploadTime,
+}
+
+func DefaultHarukiPublicFields() []string {
+	return append([]string(nil), defaultHarukiPublicFields...)
+}
 
 func Fields(extra ...string) []string {
 	fields := []string{

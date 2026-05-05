@@ -9,14 +9,14 @@ import (
 	"moebot-next/internal/suite"
 )
 
-func TestSuiteStatusTextShowsUploadSourceAndMode(t *testing.T) {
-	text := formatSuiteStatusText(config.RegionCN, config.SuiteModeMoeSekai, suite.Status{
+func TestSuiteStatusTextShowsUploadSourceAndInterface(t *testing.T) {
+	text := formatSuiteStatusText(config.RegionCN, suite.Status{
 		UserID:     "123456789012345678",
 		Name:       "测试玩家",
 		Source:     "moesekai",
 		UploadTime: 1700000000000,
 	})
-	for _, want := range []string{"CN", "123456789012345678", "测试玩家", "moesekai", "moesekai", "Suite数据", "更新时间"} {
+	for _, want := range []string{"CN", "123456789012345678", "测试玩家", "moesekai", "Suite数据", "更新时间", "Haruki 公开 API"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("status text missing %q in:\n%s", want, text)
 		}
@@ -24,7 +24,7 @@ func TestSuiteStatusTextShowsUploadSourceAndMode(t *testing.T) {
 }
 
 func TestSuiteStatusTextCanHideUID(t *testing.T) {
-	text := formatSuiteStatusText(config.RegionJP, config.SuiteModeLocal, suite.Status{
+	text := formatSuiteStatusText(config.RegionJP, suite.Status{
 		UserID:     "123456789012345678",
 		Name:       "测试玩家",
 		Source:     "local",

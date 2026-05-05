@@ -3,8 +3,10 @@ package suite
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -17,7 +19,7 @@ type Client struct {
 	urlPattern string
 	token      string
 	timeout    time.Duration
-	mode       string
+	region     string
 	httpClient *http.Client
 }
 
@@ -34,35 +36,38 @@ type statusResponse struct {
 	UserGamedata UserGamedata `json:"userGamedata"`
 }
 
-func NewClient(cfg config.SuiteAPIConfig) *Client {
+func NewClient(cfg config.SuiteAPIConfig, regions ...string) *Client {
 	timeout := time.Duration(cfg.Timeout) * time.Second
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
-	mode := config.NormalizeSuiteMode(cfg.DefaultMode)
+	region := ""
+	if len(regions) > 0 {
+		region = config.NormalizeRegion(regions[0])
+	}
 	return &Client{
 		enabled:    cfg.Enabled,
-		urlPattern: strings.TrimSpace(cfg.URL),
+		urlPattern: strings.TrimSpace(firstNonEmpty(cfg.URL, config.DefaultSuiteAPIURL)),
 		token:      cfg.Token,
 		timeout:    timeout,
-		mode:       mode,
+		region:     region,
 		httpClient: &http.Client{Timeout: timeout},
 	}
 }
 
 func (c *Client) Enabled() bool {
-	return c != nil && c.enabled && c.urlPattern != ""
+	return c != nil && c.enabled
 }
 
 func (c *Client) GetStatus(uid string, mode string) (Status, error) {
 	var profile statusResponse
-	if err := c.GetUserData(uid, mode, []string{FieldUploadTime, FieldUserGamedata}, &profile); err != nil {
+	if err := c.GetUserData(uid, mode, nil, &profile); err != nil {
 		return Status{}, err
 	}
 	return Status{
 		UserID:      profile.UserGamedata.UserID.String(),
 		Name:        profile.UserGamedata.Name,
-		Source:      profile.Source,
+		Source:      firstNonEmpty(profile.Source, PublicSource),
 		LocalSource: profile.LocalSource,
 		UploadTime:  profile.UploadTime,
 	}, nil
@@ -79,21 +84,10 @@ func (c *Client) GetUserData(uid string, mode string, filter []string, out any) 
 	if out == nil {
 		return fmt.Errorf("suite response output is nil")
 	}
-	mode = config.NormalizeSuiteMode(firstNonEmpty(mode, c.mode))
-	if !config.IsValidSuiteMode(mode) {
-		return fmt.Errorf("unsupported suite mode %q", mode)
-	}
-	endpoint := strings.ReplaceAll(c.urlPattern, "{uid}", url.PathEscape(uid))
-	parsed, err := url.Parse(endpoint)
+	parsed, err := c.buildURL(uid, filter)
 	if err != nil {
-		return fmt.Errorf("parse suite url: %w", err)
+		return err
 	}
-	query := parsed.Query()
-	query.Set("mode", mode)
-	if len(filter) > 0 {
-		query.Set("filter", strings.Join(filter, ","))
-	}
-	parsed.RawQuery = query.Encode()
 
 	req, err := http.NewRequest(http.MethodGet, parsed.String(), nil)
 	if err != nil {
@@ -112,10 +106,133 @@ func (c *Client) GetUserData(uid string, mode string, filter []string, out any) 
 		return fmt.Errorf("suite request returned %d", resp.StatusCode)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read suite response: %w", err)
+	}
+	if err := decodeUserDataResponse(body, out); err != nil {
 		return fmt.Errorf("decode suite response: %w", err)
 	}
 	return nil
+}
+
+func (c *Client) buildURL(uid string, filter []string) (*url.URL, error) {
+	endpoint := firstNonEmpty(c.urlPattern, config.DefaultSuiteAPIURL)
+	endpoint = strings.ReplaceAll(endpoint, "{uid}", url.PathEscape(uid))
+	region := c.region
+	if region == "" {
+		region = inferRegionFromSuiteURL(endpoint)
+	}
+	if region == "" {
+		region = config.RegionJP
+	}
+	endpoint = strings.ReplaceAll(endpoint, "{region}", url.PathEscape(region))
+	endpoint = strings.ReplaceAll(endpoint, "{regin}", url.PathEscape(region))
+
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("parse suite url: %w", err)
+	}
+	query := parsed.Query()
+	fields := normalizedFields(filter)
+	query.Set("key", strings.Join(fields, ","))
+	query.Del("filter")
+	query.Del("mode")
+	parsed.RawQuery = query.Encode()
+	return parsed, nil
+}
+
+func normalizedFields(fields []string) []string {
+	if len(fields) == 0 {
+		return DefaultHarukiPublicFields()
+	}
+	out := make([]string, 0, len(fields))
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		if _, ok := seen[field]; ok {
+			continue
+		}
+		seen[field] = struct{}{}
+		out = append(out, field)
+	}
+	if len(out) == 0 {
+		return DefaultHarukiPublicFields()
+	}
+	return out
+}
+
+func inferRegionFromSuiteURL(endpoint string) string {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(parsed.Path, "/")
+	for i, part := range parts {
+		if part == "public" && i+1 < len(parts) {
+			region := config.NormalizeRegion(parts[i+1])
+			if config.IsValidRegion(region) {
+				return region
+			}
+		}
+	}
+	return ""
+}
+
+func decodeUserDataResponse(data []byte, out any) error {
+	if err := json.Unmarshal(data, out); err == nil {
+		return nil
+	}
+	var wrapped struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(data, &wrapped); err != nil {
+		return err
+	}
+	if len(wrapped.Data) == 0 || string(wrapped.Data) == "null" {
+		return json.Unmarshal(data, out)
+	}
+	if err := json.Unmarshal(wrapped.Data, out); err != nil {
+		return err
+	}
+	mergeTopLevelBaseProfile(data, out)
+	return nil
+}
+
+func mergeTopLevelBaseProfile(data []byte, out any) {
+	var base BaseProfile
+	if err := json.Unmarshal(data, &base); err != nil {
+		return
+	}
+	if base.UploadTime == 0 && base.Source == "" && base.LocalSource == "" {
+		return
+	}
+	value := reflect.ValueOf(out)
+	if value.Kind() != reflect.Pointer || value.IsNil() {
+		return
+	}
+	value = value.Elem()
+	if value.Kind() != reflect.Struct {
+		return
+	}
+	field := value.FieldByName("BaseProfile")
+	if !field.IsValid() || !field.CanSet() || field.Type() != reflect.TypeOf(BaseProfile{}) {
+		return
+	}
+	current := field.Interface().(BaseProfile)
+	if current.UploadTime == 0 {
+		current.UploadTime = base.UploadTime
+	}
+	if current.Source == "" {
+		current.Source = base.Source
+	}
+	if current.LocalSource == "" {
+		current.LocalSource = base.LocalSource
+	}
+	field.Set(reflect.ValueOf(current))
 }
 
 func firstNonEmpty(values ...string) string {

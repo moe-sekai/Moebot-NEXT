@@ -41,6 +41,7 @@ func RegisterAll(deps *Deps) {
 	RegisterEventRecord(deps)
 	RegisterLeaderCount(deps)
 	RegisterMusicReward(deps)
+	RegisterSuiteCardBox(deps)
 	RegisterRanking(deps)
 	RegisterBirthday()
 	// RegisterSticker(deps)  // Phase 2

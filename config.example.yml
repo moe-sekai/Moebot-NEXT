@@ -48,13 +48,12 @@ sekai_api:
   rate_limit: 30
 
 suite_api:
-  enabled: false
-  # Suite 抓包数据接口，{uid} 会替换为绑定的游戏 ID。
-  url: "https://example.com/api/jp/user/{uid}/suite"
+  enabled: true
+  # Suite 公开数据接口，{uid} 会替换为绑定的游戏 ID，{region} 会替换为区服。
+  # 默认仅使用 Haruki 公开 API，并通过 key 参数请求公开字段。
+  url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
   token: ""
   timeout: 10
-  # 可选：latest / local / haruki / moesekai
-  default_mode: "latest"
 
 ranking_api:
   # 公开实时榜 API；普通榜/查房/WL 支持 cn / jp / tw / kr / en。
@@ -111,11 +110,10 @@ game_servers:
       timeout: 10
       rate_limit: 30
     suite_api:
-      enabled: false
-      url: "https://example.com/api/jp/user/{uid}/suite"
+      enabled: true
+      url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
       token: ""
       timeout: 10
-      default_mode: "latest"
     ranking_api:
       base_url: "https://rks.exmeaning.com"
       region: "jp"
@@ -141,11 +139,10 @@ game_servers:
       timeout: 10
       rate_limit: 30
     suite_api:
-      enabled: false
-      url: "https://example.com/api/cn/user/{uid}/suite"
+      enabled: true
+      url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
       token: ""
       timeout: 10
-      default_mode: "latest"
     ranking_api:
       base_url: "https://rks.exmeaning.com"
       region: "cn"

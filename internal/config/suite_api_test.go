@@ -33,8 +33,8 @@ game_servers:
 	if !cfg.SuiteAPI.Enabled {
 		t.Fatal("suite api should be enabled")
 	}
-	if cfg.SuiteAPI.DefaultMode != SuiteModeMoeSekai {
-		t.Fatalf("default mode = %q, want %q", cfg.SuiteAPI.DefaultMode, SuiteModeMoeSekai)
+	if cfg.SuiteAPI.DefaultMode != SuiteModeHaruki {
+		t.Fatalf("default mode = %q, want %q", cfg.SuiteAPI.DefaultMode, SuiteModeHaruki)
 	}
 
 	profile := ResolveGameServerProfile(cfg, RegionCN)
@@ -50,19 +50,19 @@ game_servers:
 	if profile.SuiteAPI.Timeout != 7 {
 		t.Fatalf("timeout = %d", profile.SuiteAPI.Timeout)
 	}
-	if profile.SuiteAPI.DefaultMode != SuiteModeMoeSekai {
+	if profile.SuiteAPI.DefaultMode != SuiteModeHaruki {
 		t.Fatalf("mode = %q", profile.SuiteAPI.DefaultMode)
 	}
 }
 
 func TestNormalizeSuiteMode(t *testing.T) {
 	cases := map[string]string{
-		"":          SuiteModeLatest,
-		"latest":    SuiteModeLatest,
-		"local":     SuiteModeLocal,
+		"":          SuiteModeHaruki,
+		"latest":    SuiteModeHaruki,
+		"local":     SuiteModeHaruki,
 		"haruki":    SuiteModeHaruki,
-		"moesekai":  SuiteModeMoeSekai,
-		"moe-sekai": SuiteModeMoeSekai,
+		"moesekai":  SuiteModeHaruki,
+		"moe-sekai": SuiteModeHaruki,
 	}
 	for input, want := range cases {
 		if got := NormalizeSuiteMode(input); got != want {

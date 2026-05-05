@@ -8,6 +8,7 @@ import (
 	"moebot-next/internal/bot"
 	"moebot-next/internal/config"
 	"moebot-next/internal/models"
+	"moebot-next/internal/renderer"
 	"moebot-next/internal/suite"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
@@ -17,7 +18,6 @@ import (
 
 func RegisterSuite(deps *Deps) {
 	registerSuiteStatusCommands(deps)
-	registerSuiteModeCommands(deps)
 	registerSuiteVisibilityCommands(deps)
 }
 
@@ -45,52 +45,39 @@ func registerSuiteStatusCommands(deps *Deps) {
 				return
 			}
 			if runtime.Suite == nil || !runtime.Suite.Enabled() {
-				ctx.SendChain(message.Text(fmt.Sprintf("暂不支持查询%s的抓包数据", runtime.Label)))
+				ctx.SendChain(message.Text(fmt.Sprintf("暂不支持查询%s的 Haruki Suite 公开数据", runtime.Label)))
 				return
 			}
 
-			setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region, runtime.Profile.SuiteAPI.DefaultMode)
+			setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region)
 			if setting.Hidden {
-				ctx.SendChain(message.Text(fmt.Sprintf("你已隐藏%s抓包信息，发送 /%s展示抓包 可重新展示", runtime.Label, runtime.Region)))
+				ctx.SendChain(message.Text(fmt.Sprintf("你已隐藏%s Suite 信息，发送 /%s展示抓包 可重新展示", runtime.Label, runtime.Region)))
 				return
 			}
-			status, err := runtime.Suite.GetStatus(user.GameID, setting.Mode)
-			if err != nil {
-				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%sSuite抓包数据失败，发送 /抓包 获取帮助\n%s", runtime.Label, err.Error())))
+			var profile suiteCommandProfile
+			if err := runtime.Suite.GetUserData(user.GameID, "", suite.Fields(), &profile); err != nil {
+				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%s Haruki Suite 公开数据失败\n%s", runtime.Label, err.Error())))
 				return
 			}
-			ctx.SendChain(message.Text(formatSuiteStatusText(runtime.Region, setting.Mode, status)))
+			status := suite.Status{
+				UserID:      profile.UserGamedata.UserID.String(),
+				Name:        profile.UserGamedata.Name,
+				Source:      profile.Source,
+				LocalSource: profile.LocalSource,
+				UploadTime:  profile.UploadTime,
+			}
+			payload := buildSuitePanel(runtime, suitePanelTitle(runtime, "Suite数据"), "", profile)
+			payload.Subtitle = suitePanelSubtitle(profile.BaseProfile)
+			payload.Stats = append(suiteBasicStats(profile), renderer.SuiteStatPayload{Label: "数据来源", Value: suiteSourceText(profile.BaseProfile)})
+			payload.Sections = []renderer.SuiteSectionPayload{{Title: "Suite 状态", Rows: []renderer.SuiteSectionRowPayload{
+				{Label: "玩家", Value: payload.Profile.Name},
+				{Label: "用户ID", Value: payload.Profile.UserID},
+				{Label: "更新时间", Value: suiteUpdateText(profile.UploadTime)},
+				{Label: "数据来源", Value: suiteSourceText(profile.BaseProfile)},
+				{Label: "接口", Value: "Haruki 公开 API"},
+			}}}
+			sendSuitePanelOrText(ctx, deps, payload, formatSuiteStatusText(runtime.Region, status))
 			bot.RecordCommandRegion(deps.DB, "抓包状态", runtime.Region, ctx, start)
-		})
-	}
-}
-
-func registerSuiteModeCommands(deps *Deps) {
-	for _, cmd := range regionalCommands("抓包模式") {
-		forcedRegion := cmd.Region
-		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
-			runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)
-			if runtime == nil || !runtime.Enabled {
-				ctx.SendChain(message.Text(runtimeUnavailableText(runtime)))
-				return
-			}
-			args := strings.TrimSpace(commandArgs(ctx))
-			current := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region, runtime.Profile.SuiteAPI.DefaultMode)
-			if args == "" {
-				ctx.SendChain(message.Text(fmt.Sprintf("你的%s抓包数据获取模式: %s\n可用模式: latest / local / haruki / moesekai", runtime.Label, current.Mode)))
-				return
-			}
-			mode := config.NormalizeSuiteMode(args)
-			if !config.IsValidSuiteMode(mode) {
-				ctx.SendChain(message.Text("错误的抓包数据获取模式，可用模式: latest / local / haruki / moesekai"))
-				return
-			}
-			current.Mode = mode
-			if err := deps.DB.UpsertSuiteSetting(current); err != nil {
-				ctx.SendChain(message.Text("保存抓包模式失败，请稍后重试"))
-				return
-			}
-			ctx.SendChain(message.Text(fmt.Sprintf("切换%s抓包数据获取模式: %s", runtime.Label, mode)))
 		})
 	}
 }
@@ -113,7 +100,7 @@ func registerSuiteVisibilityCommands(deps *Deps) {
 					ctx.SendChain(message.Text(runtimeUnavailableText(runtime)))
 					return
 				}
-				setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region, runtime.Profile.SuiteAPI.DefaultMode)
+				setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region)
 				setting.Hidden = action.Hidden
 				if err := deps.DB.UpsertSuiteSetting(setting); err != nil {
 					ctx.SendChain(message.Text("保存抓包隐私设置失败，请稍后重试"))
@@ -125,23 +112,21 @@ func registerSuiteVisibilityCommands(deps *Deps) {
 	}
 }
 
-func suiteSettingOrDefault(deps *Deps, platformID string, region string, defaultMode string) *models.SuiteSetting {
+func suiteSettingOrDefault(deps *Deps, platformID string, region string) *models.SuiteSetting {
 	setting, err := deps.DB.GetSuiteSetting("onebot", platformID, region)
 	if err == nil && setting != nil {
-		if setting.Mode == "" {
-			setting.Mode = config.NormalizeSuiteMode(defaultMode)
-		}
+		setting.Mode = config.SuiteModeHaruki
 		return setting
 	}
 	return &models.SuiteSetting{
 		Platform:     "onebot",
 		PlatformID:   platformID,
 		ServerRegion: region,
-		Mode:         config.NormalizeSuiteMode(defaultMode),
+		Mode:         config.SuiteModeHaruki,
 	}
 }
 
-func formatSuiteStatusText(region string, mode string, status suite.Status, masks ...func(string) string) string {
+func formatSuiteStatusText(region string, status suite.Status, masks ...func(string) string) string {
 	uid := status.UserID
 	if uid == "" {
 		uid = "未知"
@@ -152,11 +137,11 @@ func formatSuiteStatusText(region string, mode string, status suite.Status, mask
 		}
 	}
 	source := status.Source
+	if source == "" {
+		source = suite.PublicSource
+	}
 	if status.LocalSource != "" {
 		source += "(" + status.LocalSource + ")"
-	}
-	if source == "" {
-		source = "未知"
 	}
 	updateText := "未知"
 	if status.UploadTime > 0 {
@@ -172,7 +157,7 @@ func formatSuiteStatusText(region string, mode string, status suite.Status, mask
 		fmt.Sprintf("用户ID: %s", uid),
 		fmt.Sprintf("更新时间: %s", updateText),
 		fmt.Sprintf("数据来源: %s", source),
-		fmt.Sprintf("获取模式: %s", config.NormalizeSuiteMode(mode)),
+		"接口: Haruki 公开 API",
 	}, "\n")
 }
 

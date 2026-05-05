@@ -241,20 +241,11 @@
                     </label>
                     <label class="settings-field settings-field--full">
                       <span>Suite URL</span>
-                      <input v-model.trim="entry.form.suite_api.url" class="ui-input" placeholder="https://example.com/api/jp/user/{uid}/suite" />
+                      <input v-model.trim="entry.form.suite_api.url" class="ui-input" placeholder="https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}" />
                     </label>
                     <label class="settings-field">
                       <span>Suite Token</span>
                       <input v-model.trim="entry.form.suite_api.token" class="ui-input" type="password" placeholder="留空则保持现有 token" autocomplete="new-password" />
-                    </label>
-                    <label class="settings-field">
-                      <span>Suite 默认来源</span>
-                      <select v-model="entry.form.suite_api.default_mode" class="ui-select">
-                        <option value="latest">latest</option>
-                        <option value="local">local</option>
-                        <option value="haruki">haruki</option>
-                        <option value="moesekai">moesekai</option>
-                      </select>
                     </label>
                     <label class="settings-field">
                       <span>Ranking 区服</span>
@@ -405,7 +396,6 @@ interface ServerProfileForm {
 		url: string;
 		token: string;
 		timeout: number;
-		default_mode: string;
 	};
 	ranking_api: {
 		region: string;
@@ -640,7 +630,6 @@ const sekaiApiItems = computed<ConfigItem[]>(() => [
 		value: Boolean(config.value?.suite_api?.url_configured),
 		badge: true,
 	},
-	{ label: "Suite 默认来源", value: config.value?.suite_api?.default_mode ?? "-" },
 	{ label: "Ranking 区服", value: config.value?.ranking_api?.region ?? "-" },
 ]);
 
@@ -954,7 +943,6 @@ function createServerForm(
 			url: "",
 			token: "",
 			timeout: server?.suite_api?.timeout ?? 10,
-			default_mode: server?.suite_api?.default_mode || "latest",
 		},
 		ranking_api: {
 			region: server?.ranking_api?.region || region,
@@ -987,7 +975,6 @@ function buildServerPayload(region: string) {
 			url: profile.suite_api.url,
 			token: profile.suite_api.token,
 			timeout: Number(profile.suite_api.timeout) || 10,
-			default_mode: profile.suite_api.default_mode || "latest",
 		},
 		ranking_api: {
 			region: profile.ranking_api.region,

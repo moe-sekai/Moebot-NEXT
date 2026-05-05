@@ -23,7 +23,7 @@ func (s *Server) handleCommandDefinitions(c *fiber.Ctx) error {
 
 func (s *Server) handleParseCommand(c *fiber.Ctx) error {
 	q := strings.TrimSpace(c.Query("q"))
-	parsed := s.commandParserService().Parse(q)
+	parsed := s.commandParserService().ParseWithOptions(q, commandparser.ParseOptions{DebugBinding: commandDebugBinding(c)})
 	return c.JSON(commandparser.ParseResponse{
 		OK:      parsed.Definition != nil,
 		Parsed:  parsed,
@@ -36,7 +36,7 @@ func (s *Server) handleParseCommandImage(c *fiber.Ctx) error {
 	width, _ := strconv.Atoi(c.Query("width"))
 	height, _ := strconv.Atoi(c.Query("height"))
 	started := time.Now()
-	result, _, err := s.commandParserService().Render(q, width, height)
+	result, _, err := s.commandParserService().RenderWithOptions(q, width, height, commandparser.RenderOptions{DebugBinding: commandDebugBinding(c)})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadGateway, err.Error())
 	}
@@ -56,6 +56,13 @@ func (s *Server) handleParseCommandImage(c *fiber.Ctx) error {
 	setOptionalHeader(c, "x-render-image-cache-errors", result.ImageCacheErrors)
 	c.Set("x-render-proxy-ms", strconv.FormatInt(time.Since(started).Milliseconds(), 10))
 	return c.Send(result.PNG)
+}
+
+func commandDebugBinding(c *fiber.Ctx) commandparser.DebugBinding {
+	return commandparser.DebugBinding{
+		Region: strings.TrimSpace(c.Query("debug_region")),
+		GameID: strings.TrimSpace(c.Query("debug_game_id")),
+	}
 }
 
 func (s *Server) handleGetCommandAliases(c *fiber.Ctx) error {

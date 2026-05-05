@@ -8,11 +8,11 @@ import (
 
 func suiteSourceText(profile suite.BaseProfile) string {
 	source := profile.Source
+	if source == "" {
+		source = suite.PublicSource
+	}
 	if profile.LocalSource != "" {
 		source += "(" + profile.LocalSource + ")"
-	}
-	if source == "" {
-		return "未知"
 	}
 	return source
 }

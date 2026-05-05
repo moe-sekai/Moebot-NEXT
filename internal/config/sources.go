@@ -14,10 +14,13 @@ const (
 	RegionKR = "kr"
 	RegionEN = "en"
 
-	SuiteModeLatest   = "latest"
-	SuiteModeLocal    = "local"
+	// Suite 抓包数据固定使用 Haruki 公开 API；保留旧模式常量仅用于兼容历史配置/数据库。
 	SuiteModeHaruki   = "haruki"
-	SuiteModeMoeSekai = "moesekai"
+	SuiteModeLatest   = SuiteModeHaruki
+	SuiteModeLocal    = SuiteModeHaruki
+	SuiteModeMoeSekai = SuiteModeHaruki
+
+	DefaultSuiteAPIURL = "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
 
 	MasterdataSourceMoeSekai = "moesekai"
 	MasterdataSourceHaruki   = "haruki"
@@ -230,27 +233,12 @@ func NormalizeAssetSource(source string) string {
 }
 
 func NormalizeSuiteMode(mode string) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "", "latest", "最新":
-		return SuiteModeLatest
-	case "local", "本地":
-		return SuiteModeLocal
-	case "haruki":
-		return SuiteModeHaruki
-	case "moesekai", "moe-sekai", "moe_sekai", "moe":
-		return SuiteModeMoeSekai
-	default:
-		return strings.ToLower(strings.TrimSpace(mode))
-	}
+	// Haruki 公开 API 是唯一 Suite 数据来源；任何历史/未知模式都统一兼容到 haruki。
+	return SuiteModeHaruki
 }
 
 func IsValidSuiteMode(mode string) bool {
-	switch NormalizeSuiteMode(mode) {
-	case SuiteModeLatest, SuiteModeLocal, SuiteModeHaruki, SuiteModeMoeSekai:
-		return true
-	default:
-		return false
-	}
+	return NormalizeSuiteMode(mode) == SuiteModeHaruki
 }
 
 func NormalizeAssetMirror(mirror string) string {
@@ -644,6 +632,13 @@ func NormalizeConfig(cfg *Config) {
 	if cfg.Renderer.Precision <= 0 {
 		cfg.Renderer.Precision = DefaultRendererPrecision
 	}
+	if cfg.SuiteAPI.URL == "" {
+		cfg.SuiteAPI.URL = DefaultSuiteAPIURL
+	}
+	if cfg.SuiteAPI.Timeout <= 0 {
+		cfg.SuiteAPI.Timeout = 10
+	}
+	cfg.SuiteAPI.DefaultMode = SuiteModeHaruki
 
 	defaults := DefaultGameServerProfiles()
 	if cfg.GameServers == nil {
@@ -734,9 +729,10 @@ func defaultGameServerProfile(region string, enabled bool) GameServerConfig {
 			RateLimit: 30,
 		},
 		SuiteAPI: SuiteAPIConfig{
-			Enabled:     false,
+			Enabled:     true,
+			URL:         DefaultSuiteAPIURL,
 			Timeout:     10,
-			DefaultMode: SuiteModeLatest,
+			DefaultMode: SuiteModeHaruki,
 		},
 		RankingAPI: RankingAPIConfig{
 			BaseURL: "https://rks.exmeaning.com",
@@ -896,11 +892,15 @@ func mergeSuiteAPIProfile(base SuiteAPIConfig, override SuiteAPIConfig) SuiteAPI
 	if override.DefaultMode != "" {
 		base.DefaultMode = NormalizeSuiteMode(override.DefaultMode)
 	}
+	if base.URL == "" {
+		base.URL = DefaultSuiteAPIURL
+	}
 	if base.Timeout <= 0 {
 		base.Timeout = 10
 	}
-	if base.DefaultMode == "" {
-		base.DefaultMode = SuiteModeLatest
+	base.DefaultMode = NormalizeSuiteMode(base.DefaultMode)
+	if base.DefaultMode == "" || !IsValidSuiteMode(base.DefaultMode) {
+		base.DefaultMode = SuiteModeHaruki
 	}
 	return base
 }

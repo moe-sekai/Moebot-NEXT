@@ -17,6 +17,8 @@ import {
 	MusicList,
 	ProfileCard,
 	RankingList,
+	SuiteCardBox,
+	SuitePanel,
 	VirtualLiveList,
 	WaterTable,
 } from "./templates";
@@ -346,6 +348,84 @@ function normalizeGachaList(data: any) {
 	};
 }
 
+function normalizeSuitePanel(data: any) {
+	return {
+		title: data.title ?? data.Title ?? "Suite 数据面板",
+		subtitle: data.subtitle ?? data.Subtitle,
+		profile: normalizeSuiteProfile(data.profile ?? data.Profile),
+		stats: data.stats ?? data.Stats ?? [],
+		sections: data.sections ?? data.Sections ?? [],
+		deckCards: (data.deckCards ?? data.DeckCards ?? []).map(normalizeSuiteCard),
+		assetSource: data.assetSource ?? data.AssetSource,
+	};
+}
+
+function normalizeSuiteCardBox(data: any) {
+	return {
+		title: data.title ?? data.Title ?? "卡牌一览",
+		subtitle: data.subtitle ?? data.Subtitle,
+		profile: normalizeSuiteProfile(data.profile ?? data.Profile),
+		groups: (data.groups ?? data.Groups)?.map((group: any) => ({
+			title: group.title ?? group.Title,
+			name: group.name ?? group.Name,
+			characterName: group.characterName ?? group.CharacterName,
+			cards: (group.cards ?? group.Cards ?? []).map(normalizeSuiteCard),
+		})),
+		cards: (data.cards ?? data.Cards ?? []).map(normalizeSuiteCard),
+		options: data.options ?? data.Options,
+		assetSource: data.assetSource ?? data.AssetSource,
+		total: data.total ?? data.Total,
+		ownedTotal: data.ownedTotal ?? data.OwnedTotal,
+	};
+}
+
+function normalizeSuiteProfile(profile: any) {
+	if (!profile) return undefined;
+	return {
+		name: profile.name ?? profile.Name,
+		displayName: profile.displayName ?? profile.DisplayName,
+		rank: profile.rank ?? profile.Rank,
+		userId: profile.userId ?? profile.UserID ?? profile.userID ?? profile.ID ?? profile.id,
+		uid: profile.uid ?? profile.UID,
+		bio: profile.bio ?? profile.Bio,
+		signature: profile.signature ?? profile.Signature,
+		source: profile.source ?? profile.Source,
+		updatedAt: profile.updatedAt ?? profile.UpdatedAt,
+		avatarUrl: toPngImageUrl(profile.avatarUrl ?? profile.AvatarURL),
+	};
+}
+
+function normalizeSuiteCard(card: any) {
+	card = card ?? {};
+	return {
+		id: card.id ?? card.ID,
+		cardId: card.cardId ?? card.CardID,
+		prefix: card.prefix ?? card.Prefix,
+		characterName: card.characterName ?? card.CharacterName,
+		rarity: card.rarity ?? card.Rarity,
+		cardRarityType: card.cardRarityType ?? card.CardRarityType,
+		attr: card.attr ?? card.Attr,
+		assetbundleName: card.assetbundleName ?? card.AssetbundleName,
+		thumbnailUrl: toPngImageUrl(card.thumbnailUrl ?? card.ThumbnailURL),
+		trainedThumbnailUrl: toPngImageUrl(card.trainedThumbnailUrl ?? card.TrainedThumbnailURL),
+		isTrained: card.isTrained ?? card.IsTrained,
+		defaultImage: card.defaultImage ?? card.DefaultImage,
+		mastery: card.mastery ?? card.Mastery,
+		masterRank: card.masterRank ?? card.MasterRank,
+		skillLevel: card.skillLevel ?? card.SkillLevel,
+		level: card.level ?? card.Level,
+		createdAt: card.createdAt ?? card.CreatedAt,
+		obtainedAt: card.obtainedAt ?? card.ObtainedAt,
+		acquiredAt: card.acquiredAt ?? card.AcquiredAt,
+		owned: card.owned ?? card.Owned,
+		isOwned: card.isOwned ?? card.IsOwned,
+		supplyType: card.supplyType ?? card.SupplyType,
+		limitedType: card.limitedType ?? card.LimitedType,
+		isLimited: card.isLimited ?? card.IsLimited,
+		isBirthday: card.isBirthday ?? card.IsBirthday,
+	};
+}
+
 function normalizeVirtualLiveList(data: any) {
 	return {
 		title: data.title ?? data.Title ?? "虚拟 Live",
@@ -473,6 +553,12 @@ function createElement(req: RenderRequest) {
 		case "profile_card":
 		case "profile":
 			return <ProfileCard profile={normalizeProfile(data)} />;
+		case "suite_panel":
+		case "suite_status":
+			return <SuitePanel {...normalizeSuitePanel(data ?? {})} />;
+		case "suite_card_box":
+		case "suite_cards":
+			return <SuiteCardBox {...normalizeSuiteCardBox(data ?? {})} />;
 		case "ranking_list":
 		case "ranking":
 			return <RankingList {...normalizeRankingList(data)} />;

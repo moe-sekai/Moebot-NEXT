@@ -9,6 +9,7 @@ import (
 	"moebot-next/internal/bot"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/renderer"
 	"moebot-next/internal/suite"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
@@ -61,18 +62,24 @@ func RegisterGachaHistory(deps *Deps) {
 				return
 			}
 
-			setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region, runtime.Profile.SuiteAPI.DefaultMode)
+			setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region)
 			if setting.Hidden {
 				ctx.SendChain(message.Text(fmt.Sprintf("你已隐藏%s抓包信息，发送 /%s展示抓包 可重新展示", runtime.Label, runtime.Region)))
 				return
 			}
 
 			var profile gachaHistoryProfile
-			if err := runtime.Suite.GetUserData(user.GameID, setting.Mode, gachaHistoryFields(), &profile); err != nil {
-				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%sSuite抓包数据失败，发送 /抓包 获取帮助\n%s", runtime.Label, err.Error())))
+			if err := runtime.Suite.GetUserData(user.GameID, "", gachaHistoryFields(), &profile); err != nil {
+				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%s Haruki Suite 公开数据失败\n%s", runtime.Label, err.Error())))
 				return
 			}
-			ctx.SendChain(message.Text(formatGachaHistoryText(runtime.Region, profile, runtime.Store, gachaHistoryDefaultLimit)))
+			common := suiteCommandProfile{BaseProfile: profile.BaseProfile, UserGamedata: profile.UserGamedata}
+			payload := buildSuitePanel(runtime, suitePanelTitle(runtime, "抽卡记录"), "", common)
+			payload.Subtitle = suitePanelSubtitle(profile.BaseProfile)
+			rows, stats := rowsFromGachaHistory(profile, runtime.Store, gachaHistoryDefaultLimit)
+			payload.Stats = append(suiteBasicStats(common), stats...)
+			payload.Sections = []renderer.SuiteSectionPayload{{Title: "卡池抽卡记录", Rows: rows}}
+			sendSuitePanelOrText(ctx, deps, payload, formatGachaHistoryText(runtime.Region, profile, runtime.Store, gachaHistoryDefaultLimit))
 			bot.RecordCommandRegion(deps.DB, "抽卡记录", runtime.Region, ctx, start)
 		})
 	}

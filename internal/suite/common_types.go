@@ -1,5 +1,7 @@
 package suite
 
+const PublicSource = "Haruki 公开 API"
+
 type BaseProfile struct {
 	UploadTime  int64  `json:"upload_time"`
 	Source      string `json:"source"`
@@ -7,19 +9,25 @@ type BaseProfile struct {
 }
 
 type UserGamedata struct {
-	UserID jsonID `json:"userId"`
-	Name   string `json:"name"`
-	Deck   int    `json:"deck"`
-	Coin   int64  `json:"coin"`
+	UserID   jsonID `json:"userId"`
+	Name     string `json:"name"`
+	Deck     int    `json:"deck"`
+	Rank     int    `json:"rank"`
+	Exp      int64  `json:"exp"`
+	TotalExp int64  `json:"totalExp"`
+	Coin     int64  `json:"coin"`
 }
 
 type UserDeck struct {
-	DeckID  int `json:"deckId"`
-	Member1 int `json:"member1"`
-	Member2 int `json:"member2"`
-	Member3 int `json:"member3"`
-	Member4 int `json:"member4"`
-	Member5 int `json:"member5"`
+	DeckID    int    `json:"deckId"`
+	Name      string `json:"name"`
+	Leader    int    `json:"leader"`
+	SubLeader int    `json:"subLeader"`
+	Member1   int    `json:"member1"`
+	Member2   int    `json:"member2"`
+	Member3   int    `json:"member3"`
+	Member4   int    `json:"member4"`
+	Member5   int    `json:"member5"`
 }
 
 type UserCard struct {

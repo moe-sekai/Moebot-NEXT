@@ -44,6 +44,9 @@ type ParseResult struct {
 	CanRender                bool           `json:"can_render"`
 	RenderMode               string         `json:"render_mode"`
 	PreviewFallbackAvailable bool           `json:"preview_fallback_available"`
+	RequiresBinding          bool           `json:"requires_binding"`
+	BindingKind              string         `json:"binding_kind,omitempty"`
+	DebugBindingUsed         bool           `json:"debug_binding_used"`
 	Message                  string         `json:"message"`
 	Warnings                 []string       `json:"warnings"`
 	Suggestions              []string       `json:"suggestions"`
@@ -70,6 +73,22 @@ type ParseResponse struct {
 	OK      bool        `json:"ok"`
 	Parsed  ParseResult `json:"parsed"`
 	Message string      `json:"message"`
+}
+
+// DebugBinding supplies temporary account context for WebUI-only command debugging.
+type DebugBinding struct {
+	Region string `json:"region"`
+	GameID string `json:"game_id"`
+}
+
+// ParseOptions controls optional WebUI parsing behavior.
+type ParseOptions struct {
+	DebugBinding DebugBinding
+}
+
+// RenderOptions controls optional WebUI rendering behavior.
+type RenderOptions struct {
+	DebugBinding DebugBinding
 }
 
 // Service parses command text and builds renderer requests.
@@ -113,6 +132,11 @@ func (s *Service) DefinitionsPayload() DefinitionsResponse {
 
 // Parse maps a raw text command to a definition and optional search result.
 func (s *Service) Parse(input string) ParseResult {
+	return s.ParseWithOptions(input, ParseOptions{})
+}
+
+// ParseWithOptions maps a raw text command to a definition with optional WebUI debug context.
+func (s *Service) ParseWithOptions(input string, options ParseOptions) ParseResult {
 	result := ParseResult{
 		RawInput:      input,
 		CommandPrefix: s.CommandPrefix,
@@ -164,6 +188,14 @@ func (s *Service) Parse(input string) ParseResult {
 	result.Definition = &def
 	result.RenderMode = def.RenderMode
 	result.PreviewFallbackAvailable = def.PreviewID != ""
+	result.RequiresBinding = def.RequiresBinding
+	result.BindingKind = def.BindingKind
+	if result.RequiresBinding {
+		result.DebugBindingUsed = strings.TrimSpace(options.DebugBinding.GameID) != ""
+		if match.Region != "" {
+			options.DebugBinding.Region = match.Region
+		}
+	}
 
 	if def.RequiresArgument && argument == "" {
 		result.Message = def.ArgumentHint
@@ -181,9 +213,24 @@ func (s *Service) Parse(input string) ParseResult {
 		return result
 	}
 
+	if debugResult, ok := s.buildDebugBindingPayload(def, result.Region, argument, options.DebugBinding); ok {
+		result.Region = debugResult.Region
+		result.RegionLabel = config.RegionLabel(debugResult.Region)
+		result.Results = debugResult.Results
+		result.Selected = debugResult.Selected
+		result.CanRender = (debugResult.Selected != nil && debugResult.Selected.Payload != nil) || def.PreviewID != ""
+		result.Message = debugResult.Message
+		result.Warnings = append(result.Warnings, debugResult.Warnings...)
+		result.DebugBindingUsed = debugResult.Used
+		return result
+	}
+
 	if def.RenderMode == RenderModePreview || def.SearchType == SearchTypeNone {
 		result.CanRender = def.PreviewID != ""
 		result.Message = "该功能暂未接入实时解析数据，将使用 Satori 静态样例预览；聊天端会按真实上下文执行。"
+		if def.RequiresBinding {
+			result.Message = "该功能需要账号绑定上下文；可在 WebUI 输入临时区服与游戏 UID 调试真实预览，否则使用 Satori 静态样例。"
+		}
 		return result
 	}
 
@@ -216,7 +263,12 @@ func (s *Service) Parse(input string) ParseResult {
 
 // Render renders the parsed command. It uses real search data when available and falls back to preview images.
 func (s *Service) Render(input string, width int, height int) (*renderer.PreviewRenderResult, ParseResult, error) {
-	parsed := s.Parse(input)
+	return s.RenderWithOptions(input, width, height, RenderOptions{})
+}
+
+// RenderWithOptions renders the parsed command with optional WebUI debug context.
+func (s *Service) RenderWithOptions(input string, width int, height int, options RenderOptions) (*renderer.PreviewRenderResult, ParseResult, error) {
+	parsed := s.ParseWithOptions(input, ParseOptions{DebugBinding: options.DebugBinding})
 	if s.Renderer == nil {
 		return nil, parsed, fmt.Errorf("renderer client is not configured")
 	}

@@ -88,7 +88,7 @@ func (m *Manager) ApplyConfig(cfg *config.Config) {
 				runtime.MusicAliases = previous.MusicAliases
 			}
 			runtime.Sekai = sekai.NewClient(profile.SekaiAPI)
-			runtime.Suite = suite.NewClient(profile.SuiteAPI)
+			runtime.Suite = suite.NewClient(profile.SuiteAPI, region)
 			runtime.Ranking = ranking.NewClient(ranking.Config{
 				BaseURL: profile.RankingAPI.BaseURL,
 				Region:  profile.RankingAPI.Region,

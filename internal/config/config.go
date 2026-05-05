@@ -187,8 +187,10 @@ func DefaultConfig() *Config {
 			RateLimit: 30,
 		},
 		SuiteAPI: SuiteAPIConfig{
+			Enabled:     true,
+			URL:         DefaultSuiteAPIURL,
 			Timeout:     10,
-			DefaultMode: SuiteModeLatest,
+			DefaultMode: SuiteModeHaruki,
 		},
 		RankingAPI: RankingAPIConfig{
 			BaseURL: "https://rks.exmeaning.com",

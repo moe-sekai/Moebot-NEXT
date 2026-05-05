@@ -4,18 +4,21 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"moebot-next/internal/config"
 )
 
-func TestClientGetStatusUsesModeFilterAndBearerToken(t *testing.T) {
+func TestClientGetStatusUsesHarukiKeyAndBearerToken(t *testing.T) {
 	var gotPath string
+	var gotKey string
 	var gotMode string
 	var gotFilter string
 	var gotAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
+		gotKey = r.URL.Query().Get("key")
 		gotMode = r.URL.Query().Get("mode")
 		gotFilter = r.URL.Query().Get("filter")
 		gotAuth = r.Header.Get("Authorization")
@@ -45,11 +48,11 @@ func TestClientGetStatusUsesModeFilterAndBearerToken(t *testing.T) {
 	if gotPath != "/api/cn/user/123456789012345678/suite" {
 		t.Fatalf("path = %q", gotPath)
 	}
-	if gotMode != config.SuiteModeMoeSekai {
-		t.Fatalf("mode = %q", gotMode)
+	if gotKey != strings.Join(DefaultHarukiPublicFields(), ",") {
+		t.Fatalf("key = %q", gotKey)
 	}
-	if gotFilter != "upload_time,userGamedata" {
-		t.Fatalf("filter = %q", gotFilter)
+	if gotMode != "" || gotFilter != "" {
+		t.Fatalf("unexpected mode/filter: mode=%q filter=%q", gotMode, gotFilter)
 	}
 	if gotAuth != "Bearer secret-token" {
 		t.Fatalf("authorization = %q", gotAuth)
@@ -59,10 +62,80 @@ func TestClientGetStatusUsesModeFilterAndBearerToken(t *testing.T) {
 	}
 }
 
-func TestClientRejectsUnsupportedMode(t *testing.T) {
-	client := NewClient(config.SuiteAPIConfig{Enabled: true, URL: "https://example.test/{uid}"})
-	if _, err := client.GetStatus("1", "default"); err == nil {
-		t.Fatal("expected unsupported mode error")
+func TestClientUsesHarukiPublicKeyParamAndRegionPlaceholder(t *testing.T) {
+	var gotPath string
+	var gotKey string
+	var gotMode string
+	var gotFilter string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotKey = r.URL.Query().Get("key")
+		gotMode = r.URL.Query().Get("mode")
+		gotFilter = r.URL.Query().Get("filter")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"upload_time": int64(1700000000000),
+			"userGamedata": map[string]any{
+				"userId": 123456789012345678,
+				"name":   "Haruki玩家",
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(config.SuiteAPIConfig{
+		Enabled: true,
+		URL:     server.URL + "/public/{region}/suite/{uid}?key=stale",
+	}, config.RegionCN)
+
+	status, err := client.GetStatus("123456789012345678", config.SuiteModeHaruki)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/public/cn/suite/123456789012345678" {
+		t.Fatalf("path = %q", gotPath)
+	}
+	if gotKey != strings.Join(DefaultHarukiPublicFields(), ",") {
+		t.Fatalf("key = %q", gotKey)
+	}
+	if gotMode != "" || gotFilter != "" {
+		t.Fatalf("unexpected mode/filter: mode=%q filter=%q", gotMode, gotFilter)
+	}
+	if status.UserID != "123456789012345678" || status.Name != "Haruki玩家" {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestClientSupportsReginPlaceholderTypo(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(map[string]any{"userGamedata": map[string]any{"userId": "1"}})
+	}))
+	defer server.Close()
+
+	client := NewClient(config.SuiteAPIConfig{Enabled: true, URL: server.URL + "/public/{regin}/suite/{uid}"}, config.RegionJP)
+	if _, err := client.GetStatus("1", config.SuiteModeLatest); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/public/jp/suite/1" {
+		t.Fatalf("path = %q", gotPath)
+	}
+}
+
+func TestClientIgnoresUnsupportedMode(t *testing.T) {
+	var gotMode string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMode = r.URL.Query().Get("mode")
+		_ = json.NewEncoder(w).Encode(map[string]any{"userGamedata": map[string]any{"userId": "1"}})
+	}))
+	defer server.Close()
+
+	client := NewClient(config.SuiteAPIConfig{Enabled: true, URL: server.URL + "/public/jp/suite/{uid}"})
+	if _, err := client.GetStatus("1", "default"); err != nil {
+		t.Fatal(err)
+	}
+	if gotMode != "" {
+		t.Fatalf("mode = %q", gotMode)
 	}
 }
 
@@ -80,9 +153,13 @@ func TestFieldsAddsCommonProfileFieldsBeforeFeatureFields(t *testing.T) {
 }
 
 func TestClientGetUserDataDecodesIntoFeatureProfile(t *testing.T) {
+	var gotKey string
 	var gotFilter string
+	var gotMode string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.URL.Query().Get("key")
 		gotFilter = r.URL.Query().Get("filter")
+		gotMode = r.URL.Query().Get("mode")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"upload_time": int64(1700000000000),
 			"source":      "moesekai",
@@ -129,8 +206,11 @@ func TestClientGetUserDataDecodesIntoFeatureProfile(t *testing.T) {
 	if err := client.GetUserData("123456789012345678", config.SuiteModeMoeSekai, Fields("userGachas"), &profile); err != nil {
 		t.Fatal(err)
 	}
-	if gotFilter != "upload_time,userGamedata,userDecks,userCards,userGachas" {
-		t.Fatalf("filter = %q", gotFilter)
+	if gotKey != "upload_time,userGamedata,userDecks,userCards,userGachas" {
+		t.Fatalf("key = %q", gotKey)
+	}
+	if gotMode != "" || gotFilter != "" {
+		t.Fatalf("unexpected mode/filter: mode=%q filter=%q", gotMode, gotFilter)
 	}
 	if profile.UserGamedata.UserID.String() != "123456789012345678" || profile.UserGamedata.Name != "测试玩家" || profile.UserGamedata.Coin != 12345 {
 		t.Fatalf("userGamedata = %+v", profile.UserGamedata)

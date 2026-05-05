@@ -28,6 +28,29 @@
           <UiButton variant="secondary" :loading="rendering" :disabled="!parsed?.definition" @click="runRender">渲染</UiButton>
         </div>
 
+        <div v-if="showDebugBindingPanel" class="debug-binding-panel">
+          <div class="debug-binding-panel__header">
+            <div>
+              <strong>临时绑定信息</strong>
+              <span>{{ parsed?.definition?.binding_hint || '仅用于本次 WebUI 调试，不会写入数据库或影响聊天端绑定。' }}</span>
+            </div>
+            <UiBadge :variant="parsed?.debug_binding_used ? 'success' : 'warning'">{{ parsed?.debug_binding_used ? 'debug active' : 'debug optional' }}</UiBadge>
+          </div>
+          <div class="debug-binding-form">
+            <label class="settings-field">
+              区服
+              <select v-model="debugBinding.region" class="ui-select">
+                <option v-for="region in regionOptions" :key="region.key" :value="region.key">{{ region.label }} ({{ region.key.toUpperCase() }})</option>
+              </select>
+            </label>
+            <label class="settings-field">
+              游戏 UID
+              <input v-model.trim="debugBinding.gameId" class="ui-input" placeholder="例如 123456789012345678" @keyup.enter="runParse" />
+            </label>
+          </div>
+          <p class="debug-binding-hint">{{ debugBindingHint }}</p>
+        </div>
+
         <div v-if="exampleCommands.length" class="command-examples">
           <button v-for="example in exampleCommands" :key="example" class="alias-chip" type="button" @click="useExample(example)">{{ example }}</button>
         </div>
@@ -52,6 +75,7 @@
             <div><dt>命令</dt><dd>{{ parsed.matched_command || parsed.command_text || '-' }}</dd></div>
             <div><dt>来源</dt><dd>{{ matchSourceLabel(parsed.match_source) }}</dd></div>
             <div><dt>区服</dt><dd>{{ parsed.region_label }} ({{ parsed.region?.toUpperCase() }})</dd></div>
+            <div v-if="parsed.requires_binding"><dt>绑定调试</dt><dd>{{ parsed.debug_binding_used ? '已使用临时绑定' : '未使用临时绑定' }}</dd></div>
             <div><dt>参数</dt><dd>{{ parsed.argument || '-' }}</dd></div>
             <div><dt>模板</dt><dd>{{ parsed.selected?.type?.endsWith('_list') ? parsed.selected.type : (parsed.definition?.template || '-') }}</dd></div>
           </dl>
@@ -226,9 +250,18 @@ const aliasDraft = reactive<Record<string, string[]>>({})
 const aliasInputs = reactive<Record<string, string>>({})
 const importInput = ref<HTMLInputElement | null>(null)
 const timings = ref<RenderTiming>(emptyTiming())
+const debugBinding = reactive({ region: '', gameId: '' })
 
 const commandDefinitions = computed<CommandDefinition[]>(() => aliasConfig.value?.data ?? definitions.value?.data ?? [])
 const exampleCommands = computed(() => commandDefinitions.value.flatMap(definition => definition.examples ?? []).slice(0, 12))
+const regionOptions = computed(() => definitions.value?.regions ?? [])
+const showDebugBindingPanel = computed(() => Boolean(parsed.value?.definition?.requires_binding))
+const debugBindingHint = computed(() => {
+  if (!parsed.value?.definition?.requires_binding) return ''
+  if (!debugBinding.gameId) return '填写 UID 后再次解析或渲染，就会尝试拉取真实数据；留空时仍使用静态样例。'
+  const regionLabel = regionOptions.value.find(region => region.key === debugBinding.region)?.label ?? debugBinding.region.toUpperCase()
+  return `本次调试：${regionLabel} · UID ${debugBinding.gameId}`
+})
 const timingItems = computed(() => [
   { key: 'fonts', label: '字体加载', value: formatMs(timings.value.fonts_ms) },
   { key: 'images', label: '图片缓存', value: formatMs(timings.value.images_ms) },
@@ -251,6 +284,7 @@ async function loadAll() {
     const [defs, aliases] = await Promise.all([getCommandDefinitions(), getCommandAliases()])
     definitions.value = defs
     aliasConfig.value = aliases
+    if (!debugBinding.region) debugBinding.region = defs.regions?.[0]?.key || 'jp'
     applyAliasDraft(aliases)
   } catch (err) {
     parseError.value = err instanceof Error ? err.message : '加载指令定义失败。'
@@ -264,8 +298,9 @@ async function runParse() {
   parseError.value = ''
   parsed.value = null
   try {
-    const response = await parseCommand(input.value)
+    const response = await parseCommand(input.value, currentDebugBindingPayload())
     parsed.value = response.parsed
+    syncDebugRegionFromParsed(response.parsed)
     void router.replace({ query: { ...route.query, q: input.value } })
   } catch (err) {
     parseError.value = err instanceof Error ? err.message : '解析失败。'
@@ -281,7 +316,7 @@ async function runRender() {
     if (!parsed.value || parsed.value.raw_input !== input.value) {
       await runParse()
     }
-    const result = await renderParsedCommand(input.value, parsed.value?.definition ? 800 : undefined)
+    const result = await renderParsedCommand(input.value, parsed.value?.definition ? 800 : undefined, undefined, currentDebugBindingPayload())
     revokeImageUrl()
     imageUrl.value = result.url
     timings.value = result.timings
@@ -296,6 +331,19 @@ async function runRender() {
 function useExample(example: string) {
   input.value = example
   void runParse()
+}
+
+function currentDebugBindingPayload() {
+  if (!showDebugBindingPanel.value && !debugBinding.gameId) return undefined
+  return {
+    region: debugBinding.region || parsed.value?.region || definitions.value?.regions?.[0]?.key || 'jp',
+    game_id: debugBinding.gameId.trim(),
+  }
+}
+
+function syncDebugRegionFromParsed(nextParsed: ParsedCommand) {
+  if (!nextParsed?.definition?.requires_binding) return
+  if (nextParsed.region) debugBinding.region = nextParsed.region
 }
 
 function applyAliasDraft(config: CommandAliasConfig) {

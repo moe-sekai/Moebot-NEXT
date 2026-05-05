@@ -314,6 +314,13 @@ button, input, select { font: inherit; }
 .command-parser-layout { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr); gap: 16px; align-items: start; }
 .command-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; margin-bottom: 12px; }
 .command-input { width: 100%; }
+.debug-binding-panel { display: grid; gap: 12px; margin: 0 0 13px; padding: 14px; border: 1px solid rgba(255, 120, 183, .24); border-radius: 20px; background: linear-gradient(135deg, rgba(255,244,250,.78), rgba(238,248,255,.72)); }
+.debug-binding-panel__header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.debug-binding-panel__header strong { display: block; font-size: 15px; font-weight: 950; }
+.debug-binding-panel__header span, .debug-binding-hint { display: block; margin-top: 4px; color: var(--muted-foreground); font-size: 12px; line-height: 1.45; }
+.debug-binding-form { display: grid; grid-template-columns: minmax(130px, .55fr) minmax(210px, 1fr) minmax(150px, .7fr); gap: 10px; align-items: end; }
+.debug-binding-form .settings-field { min-width: 0; }
+.debug-binding-hint { margin: 0; }
 .command-examples, .alias-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .alias-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(165,180,252,.3); border-radius: 999px; background: rgba(255,255,255,.78); color: #52617e; padding: 5px 10px; font-size: 12px; font-weight: 850; cursor: pointer; }
 .alias-chip--preset { background: #eef8ff; color: #276b86; }
@@ -395,6 +402,7 @@ button, input, select { font: inherit; }
   .app-shell { grid-template-columns: 248px minmax(0, 1fr); }
   .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-grid--main, .dashboard-grid--bottom, .preview-layout, .command-parser-layout { grid-template-columns: 1fr; }
+  .debug-binding-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-form--region { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-row-body--inline, .settings-row-meta { grid-template-columns: 1fr; }
   .hero-panel { flex-direction: column; }
@@ -416,8 +424,8 @@ button, input, select { font: inherit; }
   .page-header__actions { justify-content: flex-start; }
   .hero-panel { padding: 22px; }
   .hero-panel__aside, .status-grid, .summary-grid, .settings-region-list--compact, .settings-form, .settings-form--region, .settings-region-list--compact .settings-row-meta { grid-template-columns: 1fr; }
-  .search-row, .command-input-row, .alias-add-row { grid-template-columns: 1fr; }
-  .card-heading, .preview-toolbar, .timing-panel__header, .settings-row-header, .parse-result-header, .alias-editor-item__header { flex-direction: column; }
+  .search-row, .command-input-row, .debug-binding-form, .alias-add-row { grid-template-columns: 1fr; }
+  .card-heading, .preview-toolbar, .timing-panel__header, .settings-row-header, .parse-result-header, .debug-binding-panel__header, .alias-editor-item__header { flex-direction: column; }
   .settings-row-badges { justify-content: flex-start; }
   .info-list div, .preview-meta div, .settings-list div, .settings-preview div { grid-template-columns: 1fr; gap: 4px; }
   .about-hero { align-items: flex-start; flex-direction: column; }

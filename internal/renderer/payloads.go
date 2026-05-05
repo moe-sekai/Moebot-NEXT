@@ -2,12 +2,16 @@ package renderer
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"moebot-next/internal/assets"
+	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/ranking"
 	"moebot-next/internal/sekai"
+	"moebot-next/internal/suite"
 )
 
 func defaultAssetResolver() *assets.Resolver {
@@ -161,6 +165,106 @@ type CardListPayload struct {
 	TotalPages  int                 `json:"totalPages,omitempty"`
 	Total       int                 `json:"total,omitempty"`
 	AssetSource string              `json:"assetSource,omitempty"`
+}
+
+type SuitePanelPayload struct {
+	Title       string                 `json:"title"`
+	Subtitle    string                 `json:"subtitle,omitempty"`
+	Profile     SuiteProfilePayload    `json:"profile"`
+	Stats       []SuiteStatPayload     `json:"stats,omitempty"`
+	Sections    []SuiteSectionPayload  `json:"sections,omitempty"`
+	DeckCards   []SuiteUserCardPayload `json:"deckCards,omitempty"`
+	AssetSource string                 `json:"assetSource,omitempty"`
+}
+
+type SuiteProfilePayload struct {
+	UserID      string `json:"userId,omitempty"`
+	Name        string `json:"name"`
+	Rank        int    `json:"rank,omitempty"`
+	Region      string `json:"region,omitempty"`
+	RegionLabel string `json:"regionLabel,omitempty"`
+	Mode        string `json:"mode,omitempty"`
+	Source      string `json:"source,omitempty"`
+	LocalSource string `json:"localSource,omitempty"`
+	UploadTime  int64  `json:"uploadTime,omitempty"`
+	UpdateText  string `json:"updateText,omitempty"`
+	Coin        int64  `json:"coin,omitempty"`
+}
+
+type SuiteStatPayload struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+	Hint  string `json:"hint,omitempty"`
+	Color string `json:"color,omitempty"`
+}
+
+type SuiteSectionPayload struct {
+	Title    string                   `json:"title"`
+	Subtitle string                   `json:"subtitle,omitempty"`
+	Kind     string                   `json:"kind,omitempty"`
+	Rows     []SuiteSectionRowPayload `json:"rows"`
+}
+
+type SuiteSectionRowPayload struct {
+	Rank  int                   `json:"rank,omitempty"`
+	Label string                `json:"label"`
+	Value string                `json:"value,omitempty"`
+	Meta  string                `json:"meta,omitempty"`
+	Color string                `json:"color,omitempty"`
+	Card  *SuiteUserCardPayload `json:"card,omitempty"`
+}
+
+type SuiteCardBoxPayload struct {
+	Title       string                  `json:"title"`
+	Subtitle    string                  `json:"subtitle,omitempty"`
+	Profile     SuiteProfilePayload     `json:"profile"`
+	Groups      []SuiteCardGroupPayload `json:"groups"`
+	Options     SuiteCardBoxOptions     `json:"options"`
+	Total       int                     `json:"total,omitempty"`
+	OwnedTotal  int                     `json:"ownedTotal,omitempty"`
+	AssetSource string                  `json:"assetSource,omitempty"`
+}
+
+type SuiteCardGroupPayload struct {
+	CharacterID   int                    `json:"characterId,omitempty"`
+	CharacterName string                 `json:"characterName"`
+	Color         string                 `json:"color,omitempty"`
+	Cards         []SuiteUserCardPayload `json:"cards"`
+}
+
+type SuiteCardBoxOptions struct {
+	ShowID            bool   `json:"showId,omitempty"`
+	OwnedOnly         bool   `json:"ownedOnly,omitempty"`
+	UseBeforeTraining bool   `json:"useBeforeTraining,omitempty"`
+	ShowCreatedAt     bool   `json:"showCreatedAt,omitempty"`
+	SortBy            string `json:"sortBy,omitempty"`
+}
+
+type SuiteUserCardPayload struct {
+	CardID                int    `json:"cardId,omitempty"`
+	ID                    int    `json:"id,omitempty"`
+	Prefix                string `json:"prefix,omitempty"`
+	CharacterID           int    `json:"characterId,omitempty"`
+	CharacterName         string `json:"characterName,omitempty"`
+	Rarity                string `json:"rarity,omitempty"`
+	CardRarityType        string `json:"cardRarityType,omitempty"`
+	Attr                  string `json:"attr,omitempty"`
+	AssetbundleName       string `json:"assetbundleName,omitempty"`
+	ThumbnailURL          string `json:"thumbnailUrl,omitempty"`
+	TrainedThumbnailURL   string `json:"trainedThumbnailUrl,omitempty"`
+	SupplyType            string `json:"supplyType,omitempty"`
+	SupplyDisplayName     string `json:"supplyDisplayName,omitempty"`
+	Level                 int    `json:"level,omitempty"`
+	MasterRank            int    `json:"masterRank,omitempty"`
+	Mastery               int    `json:"mastery,omitempty"`
+	SkillLevel            int    `json:"skillLevel,omitempty"`
+	DefaultImage          string `json:"defaultImage,omitempty"`
+	SpecialTrainingStatus string `json:"specialTrainingStatus,omitempty"`
+	CreatedAt             int64  `json:"createdAt,omitempty"`
+	CreatedAtText         string `json:"createdAtText,omitempty"`
+	Owned                 bool   `json:"owned"`
+	InDeck                bool   `json:"inDeck,omitempty"`
+	IsTrained             bool   `json:"isTrained,omitempty"`
 }
 
 type MusicListPayload struct {
@@ -547,6 +651,7 @@ type ProfileDeckCardPayload struct {
 	AssetbundleName     string `json:"assetbundleName,omitempty"`
 	ThumbnailURL        string `json:"thumbnailUrl,omitempty"`
 	TrainedThumbnailURL string `json:"trainedThumbnailUrl,omitempty"`
+	SupplyType          string `json:"supplyType,omitempty"`
 	Level               int    `json:"level,omitempty"`
 	Mastery             int    `json:"mastery,omitempty"`
 	IsTrained           bool   `json:"isTrained,omitempty"`
@@ -587,6 +692,335 @@ type ForecastRankingEntryPayload struct {
 	HasPrediction bool  `json:"hasPrediction,omitempty"`
 	CollectTime   int64 `json:"collectTime,omitempty"`
 	IsFinal       bool  `json:"isFinal,omitempty"`
+}
+
+type SuiteCommonProfile struct {
+	suite.BaseProfile
+	UserGamedata suite.UserGamedata `json:"userGamedata"`
+	UserDecks    []suite.UserDeck   `json:"userDecks"`
+	UserCards    []suite.UserCard   `json:"userCards"`
+}
+
+func NewSuitePanelPayload(title string, subtitle string, region string, mode string, profile SuiteCommonProfile, resolver *assets.Resolver) SuitePanelPayload {
+	assetResolver := resolverOrDefault(resolver)
+	name := strings.TrimSpace(profile.UserGamedata.Name)
+	if name == "" {
+		name = "未知玩家"
+	}
+	return SuitePanelPayload{
+		Title:       title,
+		Subtitle:    subtitle,
+		Profile:     BuildSuiteProfilePayload(region, mode, profile.BaseProfile, profile.UserGamedata),
+		DeckCards:   BuildSuiteDeckCards(profile.UserDecks, profile.UserCards, profile.UserGamedata.Deck, nil, assetResolver),
+		AssetSource: assetSourceForResolver(assetResolver),
+	}
+}
+
+func BuildSuiteProfilePayload(region string, mode string, base suite.BaseProfile, game suite.UserGamedata) SuiteProfilePayload {
+	name := strings.TrimSpace(game.Name)
+	if name == "" {
+		name = "未知玩家"
+	}
+	source := strings.TrimSpace(base.Source)
+	if source == "" {
+		source = suite.PublicSource
+	}
+	return SuiteProfilePayload{
+		UserID:      game.UserID.String(),
+		Name:        name,
+		Rank:        game.Rank,
+		Region:      config.NormalizeRegion(region),
+		RegionLabel: config.RegionLabel(region),
+		Mode:        strings.TrimSpace(mode),
+		Source:      source,
+		LocalSource: base.LocalSource,
+		UploadTime:  normalizeSuiteTimestamp(base.UploadTime),
+		UpdateText:  formatSuiteTimestamp(base.UploadTime),
+		Coin:        game.Coin,
+	}
+}
+
+func BuildSuiteDeckCards(decks []suite.UserDeck, userCards []suite.UserCard, deckID int, store *masterdata.Store, resolver *assets.Resolver) []SuiteUserCardPayload {
+	deck := selectSuiteDeck(decks, deckID)
+	if deck == nil {
+		return nil
+	}
+	memberIDs := suiteDeckMemberIDs(deck)
+	owned := SuiteUserCardMap(userCards)
+	out := make([]SuiteUserCardPayload, 0, len(memberIDs))
+	for _, cardID := range memberIDs {
+		if cardID <= 0 {
+			continue
+		}
+		card, ok := owned[cardID]
+		if !ok {
+			card = suite.UserCard{CardID: cardID}
+		}
+		payload := BuildSuiteUserCardPayload(store, card, resolver, ok)
+		payload.InDeck = true
+		out = append(out, payload)
+	}
+	return out
+}
+
+func suiteDeckMemberIDs(deck *suite.UserDeck) []int {
+	if deck == nil {
+		return nil
+	}
+	candidates := []int{firstNonZero(deck.Member1, deck.Leader), deck.Member2, deck.Member3, deck.Member4, deck.Member5, deck.Leader, deck.SubLeader}
+	ids := make([]int, 0, 5)
+	seen := make(map[int]struct{}, len(candidates))
+	for _, id := range candidates {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+		if len(ids) >= 5 {
+			break
+		}
+	}
+	return ids
+}
+
+func selectSuiteDeck(decks []suite.UserDeck, deckID int) *suite.UserDeck {
+	if len(decks) == 0 {
+		return nil
+	}
+	if deckID > 0 {
+		for i := range decks {
+			if decks[i].DeckID == deckID {
+				return &decks[i]
+			}
+		}
+	}
+	return &decks[0]
+}
+
+func SuiteUserCardMap(cards []suite.UserCard) map[int]suite.UserCard {
+	out := make(map[int]suite.UserCard, len(cards))
+	for _, card := range cards {
+		if card.CardID <= 0 {
+			continue
+		}
+		if existing, ok := out[card.CardID]; !ok || card.CreatedAt > existing.CreatedAt || card.Level > existing.Level {
+			out[card.CardID] = card
+		}
+	}
+	return out
+}
+
+func BuildSuiteUserCardPayload(store *masterdata.Store, card suite.UserCard, resolver *assets.Resolver, owned bool) SuiteUserCardPayload {
+	assetResolver := resolverOrDefault(resolver)
+	payload := SuiteUserCardPayload{
+		CardID:                card.CardID,
+		ID:                    card.CardID,
+		Level:                 card.Level,
+		MasterRank:            card.MasterRank,
+		Mastery:               card.MasterRank,
+		SkillLevel:            card.SkillLevel,
+		DefaultImage:          card.DefaultImage,
+		SpecialTrainingStatus: card.SpecialTrainingStatus,
+		CreatedAt:             normalizeSuiteTimestamp(card.CreatedAt),
+		CreatedAtText:         formatSuiteDate(card.CreatedAt),
+		Owned:                 owned,
+		IsTrained:             suiteCardUsesTrainedArt(card),
+	}
+	if store != nil {
+		if masterCard := store.GetCard(card.CardID); masterCard != nil {
+			EnrichSuiteUserCardPayload(&payload, store, *masterCard, assetResolver)
+		}
+	}
+	return payload
+}
+
+func EnrichSuiteUserCardPayload(payload *SuiteUserCardPayload, store *masterdata.Store, card masterdata.CardInfo, resolver *assets.Resolver) {
+	if payload == nil {
+		return
+	}
+	assetResolver := resolverOrDefault(resolver)
+	payload.CardID = firstNonZero(payload.CardID, card.ID)
+	payload.ID = firstNonZero(payload.ID, card.ID)
+	payload.Prefix = card.Prefix
+	payload.CharacterID = card.CharacterID
+	payload.CharacterName = characterName(card.CharacterID)
+	payload.Rarity = card.CardRarityType
+	payload.CardRarityType = card.CardRarityType
+	payload.Attr = card.Attr
+	payload.AssetbundleName = card.AssetbundleName
+	payload.SupplyType = CardSupplyDisplayName(store, card)
+	payload.SupplyDisplayName = payload.SupplyType
+	if shouldHideNormalSupply(payload.SupplyType) {
+		payload.SupplyType = ""
+	}
+	if card.AssetbundleName != "" {
+		payload.ThumbnailURL = assetResolver.GetCardThumbnailURL(card.AssetbundleName, false)
+		if cardCanUseTrainedThumbnail(card.CardRarityType) {
+			payload.TrainedThumbnailURL = assetResolver.GetCardThumbnailURL(card.AssetbundleName, true)
+		}
+	}
+}
+
+func BuildSuiteCardBoxPayload(title string, subtitle string, region string, mode string, base suite.BaseProfile, game suite.UserGamedata, cards []masterdata.CardInfo, ownedCards map[int]suite.UserCard, deckCards map[int]struct{}, store *masterdata.Store, resolver *assets.Resolver, options SuiteCardBoxOptions) SuiteCardBoxPayload {
+	assetResolver := resolverOrDefault(resolver)
+	groupsByCharacter := map[int]*SuiteCardGroupPayload{}
+	characterOrder := make([]int, 0)
+	ownedTotal := len(ownedCards)
+	shownOwned := 0
+	for _, masterCard := range cards {
+		userCard, owned := ownedCards[masterCard.ID]
+		if options.OwnedOnly && !owned {
+			continue
+		}
+		if owned {
+			shownOwned++
+		} else {
+			userCard = suite.UserCard{CardID: masterCard.ID}
+		}
+		payload := BuildSuiteUserCardPayload(store, userCard, assetResolver, owned)
+		EnrichSuiteUserCardPayload(&payload, store, masterCard, assetResolver)
+		if _, ok := deckCards[masterCard.ID]; ok {
+			payload.InDeck = true
+		}
+		group := groupsByCharacter[masterCard.CharacterID]
+		if group == nil {
+			group = &SuiteCardGroupPayload{CharacterID: masterCard.CharacterID, CharacterName: characterName(masterCard.CharacterID), Color: characterColor(masterCard.CharacterID)}
+			groupsByCharacter[masterCard.CharacterID] = group
+			characterOrder = append(characterOrder, masterCard.CharacterID)
+		}
+		group.Cards = append(group.Cards, payload)
+	}
+	sort.Ints(characterOrder)
+	groups := make([]SuiteCardGroupPayload, 0, len(characterOrder))
+	for _, characterID := range characterOrder {
+		group := groupsByCharacter[characterID]
+		if group == nil {
+			continue
+		}
+		sort.SliceStable(group.Cards, func(i, j int) bool {
+			return suiteCardLess(group.Cards[i], group.Cards[j], options.SortBy)
+		})
+		groups = append(groups, *group)
+	}
+	if options.OwnedOnly {
+		ownedTotal = shownOwned
+	}
+	return SuiteCardBoxPayload{
+		Title:       title,
+		Subtitle:    subtitle,
+		Profile:     BuildSuiteProfilePayload(region, mode, base, game),
+		Groups:      groups,
+		Options:     options,
+		Total:       len(cards),
+		OwnedTotal:  ownedTotal,
+		AssetSource: assetSourceForResolver(assetResolver),
+	}
+}
+
+func suiteCardLess(a SuiteUserCardPayload, b SuiteUserCardPayload, sortBy string) bool {
+	switch sortBy {
+	case "mr":
+		if a.MasterRank != b.MasterRank {
+			return a.MasterRank > b.MasterRank
+		}
+		if rarityWeight(a.CardRarityType) != rarityWeight(b.CardRarityType) {
+			return rarityWeight(a.CardRarityType) > rarityWeight(b.CardRarityType)
+		}
+		if a.CreatedAt != b.CreatedAt {
+			return a.CreatedAt > b.CreatedAt
+		}
+	case "sl":
+		if a.SkillLevel != b.SkillLevel {
+			return a.SkillLevel > b.SkillLevel
+		}
+		if rarityWeight(a.CardRarityType) != rarityWeight(b.CardRarityType) {
+			return rarityWeight(a.CardRarityType) > rarityWeight(b.CardRarityType)
+		}
+		if a.CreatedAt != b.CreatedAt {
+			return a.CreatedAt > b.CreatedAt
+		}
+	case "time":
+		if a.CreatedAt != b.CreatedAt {
+			return a.CreatedAt > b.CreatedAt
+		}
+		if rarityWeight(a.CardRarityType) != rarityWeight(b.CardRarityType) {
+			return rarityWeight(a.CardRarityType) > rarityWeight(b.CardRarityType)
+		}
+	default:
+		if a.Owned != b.Owned {
+			return a.Owned && !b.Owned
+		}
+	}
+	return a.ID < b.ID
+}
+
+func suiteCardUsesTrainedArt(card suite.UserCard) bool {
+	return card.DefaultImage == "special_training" || card.SpecialTrainingStatus == "done"
+}
+
+func normalizeSuiteTimestamp(value int64) int64 {
+	if value > 0 && value < 100000000000 {
+		return value * 1000
+	}
+	return value
+}
+
+func formatSuiteTimestamp(value int64) string {
+	value = normalizeSuiteTimestamp(value)
+	if value <= 0 {
+		return "未知"
+	}
+	return time.UnixMilli(value).Format("2006-01-02 15:04:05")
+}
+
+func formatSuiteDate(value int64) string {
+	value = normalizeSuiteTimestamp(value)
+	if value <= 0 {
+		return ""
+	}
+	return time.UnixMilli(value).Format("2006-01-02")
+}
+
+func cardCanUseTrainedThumbnail(rarity string) bool {
+	return rarity == "rarity_3" || rarity == "rarity_4"
+}
+
+func shouldHideNormalSupply(label string) bool {
+	return label == "" || label == "常驻" || strings.EqualFold(label, "normal")
+}
+
+func rarityWeight(rarity string) int {
+	switch rarity {
+	case "rarity_birthday":
+		return 5
+	case "rarity_4":
+		return 4
+	case "rarity_3":
+		return 3
+	case "rarity_2":
+		return 2
+	case "rarity_1":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func characterColor(characterID int) string {
+	colors := []string{
+		"#33ccbb", "#4455dd", "#66ccff", "#ee6666", "#bb88ee", "#ffdd44",
+		"#88dd44", "#ffccaa", "#99eedd", "#ff6699", "#ffbbcc",
+		"#ee1166", "#00bbdd", "#ff7722", "#0077dd", "#884499",
+		"#ff9900", "#ffbb00", "#ff66bb", "#33dd99", "#bb88ff",
+		"#884499", "#8899cc", "#ccaa88", "#bb6688", "#6699cc",
+	}
+	if characterID <= 0 {
+		return "#33ccbb"
+	}
+	return colors[(characterID-1)%len(colors)]
 }
 
 // BuildProfileCardPayload adapts an API profile into ProfileCard renderer props.
@@ -678,6 +1112,7 @@ func buildProfileDeckCardPayload(store *masterdata.Store, card sekai.ProfileDeck
 			payload.CardRarityType = masterCard.CardRarityType
 			payload.Attr = masterCard.Attr
 			payload.AssetbundleName = masterCard.AssetbundleName
+			payload.SupplyType = CardSupplyDisplayName(store, *masterCard)
 			assetResolver := resolverOrDefault(resolver)
 			payload.ThumbnailURL = assetResolver.GetCardThumbnailURL(masterCard.AssetbundleName, false)
 			payload.TrainedThumbnailURL = assetResolver.GetCardThumbnailURL(masterCard.AssetbundleName, true)

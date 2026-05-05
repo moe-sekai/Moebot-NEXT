@@ -171,7 +171,6 @@ export interface PublicSuiteAPIConfig {
 	url_configured: boolean;
 	token_set: boolean;
 	timeout: number;
-	default_mode: string;
 }
 
 export interface PublicRankingAPIConfig {
@@ -270,7 +269,6 @@ export interface UpdateSuiteAPIPayload {
 	url: string;
 	token: string;
 	timeout: number;
-	default_mode: string;
 }
 
 export interface UpdateRankingAPIPayload {
@@ -412,6 +410,9 @@ export interface CommandDefinition {
 	examples: string[];
 	requires_argument: boolean;
 	argument_hint: string;
+	requires_binding: boolean;
+	binding_kind?: string;
+	binding_hint?: string;
 	search_type: CommandSearchType;
 	render_mode: CommandRenderMode;
 }
@@ -453,9 +454,17 @@ export interface ParsedCommand {
 	can_render: boolean;
 	render_mode: CommandRenderMode;
 	preview_fallback_available: boolean;
+	requires_binding: boolean;
+	binding_kind?: string;
+	debug_binding_used: boolean;
 	message: string;
 	warnings: string[];
 	suggestions: string[];
+}
+
+export interface CommandDebugBindingPayload {
+	region?: string;
+	game_id?: string;
 }
 
 export interface CommandParseResponse {

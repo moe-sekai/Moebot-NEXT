@@ -21,6 +21,8 @@ const eventRecordDefaultLimit = 10
 type eventRecordProfile struct {
 	suite.BaseProfile
 	UserGamedata    suite.UserGamedata     `json:"userGamedata"`
+	UserDecks       []suite.UserDeck       `json:"userDecks"`
+	UserCards       []suite.UserCard       `json:"userCards"`
 	UserEvents      []userEventRecord      `json:"userEvents"`
 	UserWorldBlooms []userWorldBloomRecord `json:"userWorldBlooms"`
 }
@@ -71,17 +73,22 @@ func RegisterEventRecord(deps *Deps) {
 				ctx.SendChain(message.Text(fmt.Sprintf("暂不支持查询%s的抓包数据", runtime.Label)))
 				return
 			}
-			setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region, runtime.Profile.SuiteAPI.DefaultMode)
+			setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region)
 			if setting.Hidden {
 				ctx.SendChain(message.Text(fmt.Sprintf("你已隐藏%s抓包信息，发送 /%s展示抓包 可重新展示", runtime.Label, runtime.Region)))
 				return
 			}
 			var profile eventRecordProfile
-			if err := runtime.Suite.GetUserData(user.GameID, setting.Mode, eventRecordFields(), &profile); err != nil {
-				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%sSuite抓包数据失败，发送 /抓包 获取帮助\n%s", runtime.Label, err.Error())))
+			if err := runtime.Suite.GetUserData(user.GameID, "", eventRecordFields(), &profile); err != nil {
+				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%s Haruki Suite 公开数据失败\n%s", runtime.Label, err.Error())))
 				return
 			}
-			ctx.SendChain(message.Text(formatEventRecordText(runtime.Region, profile, runtime.Store, eventRecordDefaultLimit)))
+			payload := buildSuitePanel(runtime, suitePanelTitle(runtime, "活动记录"), "", profile)
+			payload.Subtitle = suitePanelSubtitle(profile.BaseProfile)
+			sections, stats := rowsFromEventRecord(profile, runtime.Store, eventRecordDefaultLimit)
+			payload.Stats = append(suiteBasicStats(profile.commonSuiteProfile()), stats...)
+			payload.Sections = sections
+			sendSuitePanelOrText(ctx, deps, payload, formatEventRecordText(runtime.Region, profile, runtime.Store, eventRecordDefaultLimit))
 			bot.RecordCommandRegion(deps.DB, "活动记录", runtime.Region, ctx, start)
 		})
 	}

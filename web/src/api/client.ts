@@ -4,6 +4,7 @@ import type {
 	CommandAliasPayload,
 	CommandAliasUpdateResponse,
 	CommandDefinitionsResponse,
+	CommandDebugBindingPayload,
 	CommandParseResponse,
 	CommandStatsResponse,
 	DashboardData,
@@ -88,9 +89,12 @@ export async function getCommandDefinitions() {
 	return data;
 }
 
-export async function parseCommand(input: string) {
+export async function parseCommand(
+	input: string,
+	debugBinding?: CommandDebugBindingPayload,
+) {
 	const { data } = await api.get<CommandParseResponse>("/commands/parse", {
-		params: { q: input },
+		params: { q: input, ...debugBindingParams(debugBinding) },
 	});
 	return data;
 }
@@ -99,6 +103,7 @@ export async function renderParsedCommand(
 	input: string,
 	width?: number,
 	height?: number,
+	debugBinding?: CommandDebugBindingPayload,
 ): Promise<RendererPreviewImageResult> {
 	const startedAt = performance.now();
 	const response = await api.get<Blob>("/commands/parse/image", {
@@ -106,6 +111,7 @@ export async function renderParsedCommand(
 			q: input,
 			...(width ? { width } : {}),
 			...(height ? { height } : {}),
+			...debugBindingParams(debugBinding),
 			ts: Date.now(),
 		},
 		responseType: "blob",
@@ -233,6 +239,14 @@ export async function getCommandStats(days = 7) {
 		params: { days },
 	});
 	return data;
+}
+
+function debugBindingParams(binding?: CommandDebugBindingPayload) {
+	if (!binding) return {};
+	return {
+		...(binding.region ? { debug_region: binding.region } : {}),
+		...(binding.game_id ? { debug_game_id: binding.game_id } : {}),
+	};
 }
 
 function parseHeaderNumber(value: unknown) {

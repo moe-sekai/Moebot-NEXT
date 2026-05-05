@@ -7,6 +7,7 @@ import (
 
 	"moebot-next/internal/bot"
 	"moebot-next/internal/config"
+	"moebot-next/internal/renderer"
 	"moebot-next/internal/suite"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
@@ -17,6 +18,8 @@ import (
 type musicProgressProfile struct {
 	suite.BaseProfile
 	UserGamedata     suite.UserGamedata `json:"userGamedata"`
+	UserDecks        []suite.UserDeck   `json:"userDecks"`
+	UserCards        []suite.UserCard   `json:"userCards"`
 	UserMusicResults []userMusicResult  `json:"userMusicResults"`
 }
 
@@ -67,17 +70,22 @@ func RegisterMusicProgress(deps *Deps) {
 				ctx.SendChain(message.Text(fmt.Sprintf("暂不支持查询%s的抓包数据", runtime.Label)))
 				return
 			}
-			setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region, runtime.Profile.SuiteAPI.DefaultMode)
+			setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region)
 			if setting.Hidden {
 				ctx.SendChain(message.Text(fmt.Sprintf("你已隐藏%s抓包信息，发送 /%s展示抓包 可重新展示", runtime.Label, runtime.Region)))
 				return
 			}
 			var profile musicProgressProfile
-			if err := runtime.Suite.GetUserData(user.GameID, setting.Mode, musicProgressFields(), &profile); err != nil {
-				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%sSuite抓包数据失败，发送 /抓包 获取帮助\n%s", runtime.Label, err.Error())))
+			if err := runtime.Suite.GetUserData(user.GameID, "", musicProgressFields(), &profile); err != nil {
+				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%s Haruki Suite 公开数据失败\n%s", runtime.Label, err.Error())))
 				return
 			}
-			ctx.SendChain(message.Text(formatMusicProgressText(runtime.Region, profile)))
+			payload := buildSuitePanel(runtime, suitePanelTitle(runtime, "打歌进度"), "", profile)
+			payload.Subtitle = suitePanelSubtitle(profile.BaseProfile)
+			rows, stats := rowsFromMusicProgress(profile)
+			payload.Stats = append(suiteBasicStats(profile.commonSuiteProfile()), stats...)
+			payload.Sections = []renderer.SuiteSectionPayload{{Title: "难度进度", Rows: rows}}
+			sendSuitePanelOrText(ctx, deps, payload, formatMusicProgressText(runtime.Region, profile))
 			bot.RecordCommandRegion(deps.DB, "打歌进度", runtime.Region, ctx, start)
 		})
 	}

@@ -18,6 +18,10 @@ export type { GachaInfoProps } from "./GachaInfo";
 export { GachaList } from "./GachaList";
 export { GachaResult } from "./GachaResult";
 export { VirtualLiveList } from "./VirtualLiveList";
+export { SuitePanel } from "./SuitePanel";
+export type { SuitePanelProps } from "./SuitePanel";
+export { SuiteCardBox } from "./SuiteCardBox";
+export type { SuiteCardBoxProps } from "./SuiteCardBox";
 export {
 	SekaiCardThumbnail,
 	canUseTrainedArt,
