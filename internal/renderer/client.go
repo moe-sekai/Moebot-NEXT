@@ -18,6 +18,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const defaultRendererRequestTimeout = 2 * time.Minute
+
 // Client communicates with the Bun renderer microservice.
 type Client struct {
 	baseURL    string
@@ -74,27 +76,45 @@ type PreviewRenderResult struct {
 
 // AssetPreloadStatus mirrors the renderer-side card thumbnail cache status payload.
 type AssetPreloadStatus struct {
-	OK          bool     `json:"ok"`
-	Enabled     bool     `json:"enabled"`
-	Running     bool     `json:"running"`
-	Message     string   `json:"message"`
-	CacheDir    string   `json:"cache_dir"`
-	Total       int      `json:"total"`
-	Cached      int      `json:"cached"`
-	Missing     int      `json:"missing"`
-	Failed      int      `json:"failed"`
-	Downloaded  int      `json:"downloaded"`
-	Skipped     int      `json:"skipped"`
-	Progress    float64  `json:"progress"`
-	StartedAt   *string  `json:"started_at"`
-	CompletedAt *string  `json:"completed_at"`
-	Errors      []string `json:"errors"`
+	OK                        bool     `json:"ok"`
+	Enabled                   bool     `json:"enabled"`
+	Running                   bool     `json:"running"`
+	Message                   string   `json:"message"`
+	CacheDir                  string   `json:"cache_dir"`
+	Total                     int      `json:"total"`
+	Cached                    int      `json:"cached"`
+	Missing                   int      `json:"missing"`
+	Failed                    int      `json:"failed"`
+	Downloaded                int      `json:"downloaded"`
+	Skipped                   int      `json:"skipped"`
+	Progress                  float64  `json:"progress"`
+	StartedAt                 *string  `json:"started_at"`
+	CompletedAt               *string  `json:"completed_at"`
+	Errors                    []string `json:"errors"`
+	CompositeTotal            int      `json:"composite_total"`
+	CompositeCached           int      `json:"composite_cached"`
+	CompositeMissing          int      `json:"composite_missing"`
+	CompositeFailed           int      `json:"composite_failed"`
+	CompositeGenerated        int      `json:"composite_generated"`
+	CompositeProgress         float64  `json:"composite_progress"`
+	CompositeSourceDownloaded int      `json:"composite_source_downloaded"`
+	CompositeSourceFailed     int      `json:"composite_source_failed"`
+	CompositeRenderMS         int      `json:"composite_render_ms"`
+}
+
+type CardThumbnailPreloadCard struct {
+	ImageURL string `json:"imageUrl,omitempty"`
+	Rarity   string `json:"rarity,omitempty"`
+	Attr     string `json:"attr,omitempty"`
+	Trained  bool   `json:"trained,omitempty"`
+	Size     int    `json:"size,omitempty"`
 }
 
 type assetPreloadRequest struct {
-	URLs        []string `json:"urls"`
-	Force       bool     `json:"force,omitempty"`
-	Concurrency int      `json:"concurrency,omitempty"`
+	URLs        []string                   `json:"urls"`
+	Cards       []CardThumbnailPreloadCard `json:"cards,omitempty"`
+	Force       bool                       `json:"force,omitempty"`
+	Concurrency int                        `json:"concurrency,omitempty"`
 }
 
 // New creates a new renderer client.
@@ -108,7 +128,7 @@ func New(cfg config.RendererConfig) *Client {
 		precision: precision,
 		cache:     cfg.Cache,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: defaultRendererRequestTimeout,
 		},
 	}
 }
@@ -218,15 +238,25 @@ func (c *Client) RenderWithTrace(req RenderRequest) (*PreviewRenderResult, error
 
 // StartCardThumbnailPreload asks the renderer service to preload card thumbnail URLs in the background.
 func (c *Client) StartCardThumbnailPreload(urls []string) (*AssetPreloadStatus, error) {
+	return c.StartCardThumbnailPreloadWithCards(urls, nil)
+}
+
+// StartCardThumbnailPreloadWithCards preloads source images and renderer-side precomposited card tiles.
+func (c *Client) StartCardThumbnailPreloadWithCards(urls []string, cards []CardThumbnailPreloadCard) (*AssetPreloadStatus, error) {
 	var result AssetPreloadStatus
-	err := c.postJSON("/cache/card-thumbnails/preload", assetPreloadRequest{URLs: urls}, &result)
+	err := c.postJSON("/cache/card-thumbnails/preload", assetPreloadRequest{URLs: urls, Cards: cards}, &result)
 	return &result, err
 }
 
 // CardThumbnailPreloadStatus returns cache coverage for the given card thumbnail URLs.
 func (c *Client) CardThumbnailPreloadStatus(urls []string) (*AssetPreloadStatus, error) {
+	return c.CardThumbnailPreloadStatusWithCards(urls, nil)
+}
+
+// CardThumbnailPreloadStatusWithCards returns source image and precomposited tile cache coverage.
+func (c *Client) CardThumbnailPreloadStatusWithCards(urls []string, cards []CardThumbnailPreloadCard) (*AssetPreloadStatus, error) {
 	var result AssetPreloadStatus
-	err := c.postJSON("/cache/card-thumbnails/status", assetPreloadRequest{URLs: urls}, &result)
+	err := c.postJSON("/cache/card-thumbnails/status", assetPreloadRequest{URLs: urls, Cards: cards}, &result)
 	return &result, err
 }
 

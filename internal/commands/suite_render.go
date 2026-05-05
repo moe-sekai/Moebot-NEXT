@@ -35,7 +35,7 @@ func sendSuitePanelOrText(ctx *zero.Ctx, deps *Deps, payload renderer.SuitePanel
 
 func sendSuiteCardBoxOrText(ctx *zero.Ctx, deps *Deps, payload renderer.SuiteCardBoxPayload, fallback string) {
 	if deps != nil && deps.Renderer != nil && deps.Renderer.Health() {
-		png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "suite_card_box", Data: payload})
+		png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "suite_card_box", Data: payload, Precision: 1})
 		if err == nil {
 			ctx.SendChain(message.ImageBytes(png))
 			return

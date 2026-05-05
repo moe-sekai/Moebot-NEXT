@@ -36,6 +36,7 @@ export interface RankingListProps {
       assetbundleName?: string
       thumbnailUrl?: string
       trainedThumbnailUrl?: string
+      compositeLayers?: import('../card-thumbnail-composites').CardThumbnailCompositeLayer[]
       isTrained?: boolean
       defaultImage?: string
       mastery?: number
@@ -195,6 +196,7 @@ function RankingAvatar({ entry, size, assetSource }: { entry: RankingListProps['
     return (
       <SekaiCardThumbnail
         imageUrl={isTrained ? trainedThumbnailUrl ?? thumbnailUrl : thumbnailUrl}
+        compositeLayers={card.compositeLayers}
         rarity={rarity}
         attr={attr}
         isTrained={isTrained}

@@ -77,6 +77,7 @@ interface ProfileDeckCard {
   assetbundleName?: string
   thumbnailUrl?: string
   trainedThumbnailUrl?: string
+  compositeLayers?: import('../card-thumbnail-composites').CardThumbnailCompositeLayer[]
   isTrained?: boolean
   defaultImage?: string
   mastery?: number
@@ -379,6 +380,7 @@ function DeckCard({ card, source, leader }: { card: ProfileDeckCard; source: Ass
       <div style={{ display: 'flex', position: 'relative' }}>
         <SekaiCardThumbnail
           imageUrl={isTrained ? trainedThumbnailUrl ?? thumbnailUrl : thumbnailUrl}
+          compositeLayers={card.compositeLayers}
           rarity={rarity}
           attr={attr}
           isTrained={isTrained}

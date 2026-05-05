@@ -45,6 +45,13 @@ export interface AssetPreloadStatus {
   started_at: string | null
   completed_at: string | null
   errors: string[]
+  composite_total?: number
+  composite_cached?: number
+  composite_missing?: number
+  composite_failed?: number
+  composite_generated?: number
+  composite_running?: boolean
+  composite_errors?: string[]
 }
 
 type PreloadOutcomeStatus = 'cached' | 'downloaded' | 'failed' | 'skipped' | 'disabled'
@@ -61,7 +68,9 @@ interface PreloadJob {
   startedAt: string
   completedAt: string | null
   downloaded: number
+  failed: number
   skipped: number
+  processed: number
 }
 
 interface StartPreloadOptions {
@@ -148,7 +157,9 @@ export class RendererAssetCache {
       startedAt: new Date().toISOString(),
       completedAt: null,
       downloaded: 0,
+      failed: 0,
       skipped: 0,
+      processed: 0,
     }
     this.currentJob = job
     this.lastJob = job
@@ -180,20 +191,22 @@ export class RendererAssetCache {
     const total = uniqueUrls.length
     const cached = cachedUrls.size
     const failed = failedUrls.length
+    const running = Boolean(this.currentJob?.running)
+    const displayCached = running ? Math.max(cached, job?.processed ?? 0) : cached
 
     return {
       ok: this.options.enabled,
       enabled: this.options.enabled,
-      running: Boolean(this.currentJob?.running),
+      running,
       message,
       cache_dir: this.options.cacheDir,
       total,
-      cached,
-      missing: Math.max(0, total - cached),
+      cached: displayCached,
+      missing: Math.max(0, total - displayCached),
       failed,
       downloaded: job?.downloaded ?? 0,
       skipped: job?.skipped ?? 0,
-      progress: total === 0 ? 1 : cached / total,
+      progress: job?.running && total > 0 ? Math.min(0.999, job.processed / total) : total === 0 ? 1 : cached / total,
       started_at: job?.startedAt ?? null,
       completed_at: job?.completedAt ?? null,
       errors: failedUrls.slice(0, 8).map((url) => `${url}: ${this.failedUrls.get(url)}`),
@@ -226,11 +239,15 @@ export class RendererAssetCache {
         case 'downloaded':
           job.downloaded += 1
           break
+        case 'failed':
+          job.failed += 1
+          break
         case 'skipped':
         case 'disabled':
           job.skipped += 1
           break
       }
+      job.processed += 1
     })
     job.running = false
     job.completedAt = new Date().toISOString()

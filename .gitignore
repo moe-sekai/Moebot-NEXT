@@ -8,7 +8,7 @@
 /moebot
 /moebot.exe
 /bin/
-
+renderer/data
 # Node/Bun
 node_modules/
 renderer/node_modules/

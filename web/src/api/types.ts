@@ -366,6 +366,7 @@ export interface RendererCardThumbnailCacheStatus {
 	region_label: string;
 	total_cards: number;
 	total_urls: number;
+	total_composite_images?: number;
 	enabled: boolean;
 	running: boolean;
 	cache_dir: string;
@@ -379,6 +380,15 @@ export interface RendererCardThumbnailCacheStatus {
 	started_at: string | null;
 	completed_at: string | null;
 	errors: string[];
+	composite_total?: number;
+	composite_cached?: number;
+	composite_missing?: number;
+	composite_failed?: number;
+	composite_generated?: number;
+	composite_progress?: number;
+	composite_source_downloaded?: number;
+	composite_source_failed?: number;
+	composite_render_ms?: number;
 	renderer_message?: string;
 }
 

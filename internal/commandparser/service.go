@@ -278,7 +278,7 @@ func (s *Service) RenderWithOptions(input string, width int, height int, options
 	def := *parsed.Definition
 	if parsed.Selected != nil && parsed.Selected.Payload != nil && def.Template != "" {
 		template := templateForPayload(def.Template, parsed.Selected.Payload)
-		request := renderer.RenderRequest{Template: template, Data: parsed.Selected.Payload, Width: width, Height: height}
+		request := renderer.RenderRequest{Template: template, Data: parsed.Selected.Payload, Width: width, Height: height, Precision: precisionForCommandTemplate(template)}
 		result, err := s.Renderer.RenderWithTrace(request)
 		if err == nil {
 			return result, parsed, nil
@@ -728,6 +728,13 @@ func templateForPayload(fallback string, payload any) string {
 	default:
 		return fallback
 	}
+}
+
+func precisionForCommandTemplate(template string) float64 {
+	if template == "suite_card_box" || template == "suite_cards" {
+		return 1
+	}
+	return 0
 }
 
 func defaultRankingTiersForParser() []int {

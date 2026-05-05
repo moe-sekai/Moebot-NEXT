@@ -101,6 +101,7 @@ function RankingAvatar({ entry, size, assetSource }: { entry: RankingListProps['
     return (
       <SekaiCardThumbnail
         imageUrl={isTrained ? trainedThumbnailUrl ?? thumbnailUrl : thumbnailUrl}
+        compositeLayers={card.compositeLayers}
         rarity={rarity}
         attr={attr}
         isTrained={isTrained}

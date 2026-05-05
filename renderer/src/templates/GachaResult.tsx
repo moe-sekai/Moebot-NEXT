@@ -15,6 +15,7 @@ interface GachaResultProps {
     assetbundleName?: string
     assetSource?: AssetSourceType | string
     isTrained?: boolean
+    compositeLayers?: import('../card-thumbnail-composites').CardThumbnailCompositeLayer[]
   }>
   pullType: string // 'single' | 'multi'
   assetSource?: AssetSourceType | string
@@ -83,6 +84,7 @@ export function GachaResult({ results, pullType, assetSource = 'main-jp' }: Gach
                 <div style={{ display: 'flex', position: 'relative' }}>
                   <SekaiCardThumbnail
                     imageUrl={isTrained ? trainedThumbnailUrl ?? thumbnailUrl : thumbnailUrl}
+                    compositeLayers={card.compositeLayers}
                     rarity={card.rarity}
                     attr={card.attr}
                     isTrained={isTrained}

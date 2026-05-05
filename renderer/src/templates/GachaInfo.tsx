@@ -30,6 +30,7 @@ export interface GachaInfoProps {
       assetbundleName?: string
       thumbnailUrl?: string
       trainedThumbnailUrl?: string
+      compositeLayers?: import('../card-thumbnail-composites').CardThumbnailCompositeLayer[]
       isWish?: boolean
       weight?: number
     }>
@@ -112,6 +113,7 @@ export function GachaInfo({ gacha }: GachaInfoProps) {
                     <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
                       <SekaiCardThumbnail
                         imageUrl={isTrained ? trainedThumbnailUrl ?? thumbnailUrl : thumbnailUrl}
+                        compositeLayers={card.compositeLayers}
                         rarity={card.rarity}
                         attr={card.attr}
                         isTrained={isTrained}

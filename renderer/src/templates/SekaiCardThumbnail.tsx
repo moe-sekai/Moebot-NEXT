@@ -1,8 +1,11 @@
+import type { CardThumbnailCompositeLayer } from '../card-thumbnail-composites'
 import { getSekaiCardUiAssetDataUri } from '../styles/assets'
 import { theme } from '../styles/theme'
 
 export interface SekaiCardThumbnailProps {
   imageUrl?: string
+  compositeImageUrl?: string
+  compositeLayers?: CardThumbnailCompositeLayer[]
   rarity: string
   attr: string
   label?: string
@@ -40,6 +43,8 @@ export function getAttributeLabel(attr: string): string {
 
 export function SekaiCardThumbnail({
   imageUrl,
+  compositeImageUrl,
+  compositeLayers,
   rarity,
   attr,
   label,
@@ -59,6 +64,8 @@ export function SekaiCardThumbnail({
   const masteryUrl = mastery > 0 ? getSekaiCardUiAssetDataUri(`train_rank_${mastery}.png`) : undefined
   const scale = size / 156
   const supplyBadge = supplyType ? getSupplyBadgeStyle(supplyType) : undefined
+  const baseImageUrl = compositeImageUrl ?? imageUrl ?? placeholderCardImage(characterName ?? 'CARD', attrColor)
+  const useComposite = Boolean(compositeImageUrl || compositeLayers?.length)
 
   return (
     <div
@@ -72,14 +79,49 @@ export function SekaiCardThumbnail({
         backgroundColor: theme.colors.surface,
       }}
     >
-      <img
-        src={imageUrl ?? placeholderCardImage(characterName ?? 'CARD', attrColor)}
-        width={size}
-        height={size}
-        style={{ position: 'absolute', left: 2 * scale, top: 2 * scale, width: 152 * scale, height: 152 * scale, objectFit: 'cover' }}
-      />
+      {compositeLayers?.length ? (
+        <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: size, height: size }}>
+          {compositeLayers.map((layer, index) => layer.type === 'rect' ? (
+            <div
+              key={index}
+              style={{
+                display: 'flex',
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: layer.width,
+                height: layer.height,
+                borderRadius: layer.rx,
+                backgroundColor: layer.fill ?? 'transparent',
+              }}
+            />
+          ) : (
+            <img
+              key={index}
+              src={layer.href}
+              width={layer.width}
+              height={layer.height}
+              style={{
+                position: 'absolute',
+                left: layer.x,
+                top: layer.y,
+                width: layer.width,
+                height: layer.height,
+                objectFit: preserveAspectRatioToObjectFit(layer.preserveAspectRatio),
+              }}
+            />
+          ))}
+        </div>
+      ) : (
+        <img
+          src={baseImageUrl}
+          width={size}
+          height={size}
+          style={useComposite ? { position: 'absolute', left: 0, top: 0, width: size, height: size, objectFit: 'fill' } : { position: 'absolute', left: 2 * scale, top: 2 * scale, width: 152 * scale, height: 152 * scale, objectFit: 'cover' }}
+        />
+      )}
 
-      {frameUrl && (
+      {!useComposite && frameUrl && (
         <img
           src={frameUrl}
           width={size}
@@ -88,7 +130,7 @@ export function SekaiCardThumbnail({
         />
       )}
 
-      {attrUrl && (
+      {!useComposite && attrUrl && (
         <img
           src={attrUrl}
           width={35 * scale}
@@ -97,7 +139,7 @@ export function SekaiCardThumbnail({
         />
       )}
 
-      {starUrl && Array.from({ length: starCount }).map((_, index) => (
+      {!useComposite && starUrl && Array.from({ length: starCount }).map((_, index) => (
         <img
           key={index}
           src={starUrl}
@@ -175,6 +217,11 @@ export function SekaiCardThumbnail({
 
     </div>
   )
+}
+
+function preserveAspectRatioToObjectFit(value?: string): 'fill' | 'contain' | 'cover' {
+  if (!value || value === 'none') return 'fill'
+  return value.includes('slice') ? 'cover' : 'contain'
 }
 
 interface SupplyBadgeStyle {

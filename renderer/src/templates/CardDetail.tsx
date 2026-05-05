@@ -24,6 +24,9 @@ interface CardDetailProps {
     gachaPhrase?: string
     supplyType?: string
     trained?: boolean
+    compositeLayers?: import('../card-thumbnail-composites').CardThumbnailCompositeLayer[]
+    normalCompositeLayers?: import('../card-thumbnail-composites').CardThumbnailCompositeLayer[]
+    trainedCompositeLayers?: import('../card-thumbnail-composites').CardThumbnailCompositeLayer[]
   }
 }
 
@@ -66,6 +69,7 @@ export function CardDetail({ card }: CardDetailProps) {
           <div style={{ display: 'flex', gap: theme.spacing.sm, flexShrink: 0 }}>
             <SekaiCardThumbnail
               imageUrl={normalThumbnailUrl}
+              compositeLayers={card.normalCompositeLayers ?? card.compositeLayers}
               rarity={rarity}
               attr={card.attr}
               isTrained={false}
@@ -76,6 +80,7 @@ export function CardDetail({ card }: CardDetailProps) {
             {showTrained && (
               <SekaiCardThumbnail
                 imageUrl={trainedThumbnailUrl}
+                compositeLayers={card.trainedCompositeLayers}
                 rarity={rarity}
                 attr={card.attr}
                 isTrained

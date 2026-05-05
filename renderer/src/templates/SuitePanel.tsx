@@ -52,6 +52,7 @@ interface SuiteDeckCard {
 	assetbundleName?: string;
 	thumbnailUrl?: string;
 	trainedThumbnailUrl?: string;
+	compositeLayers?: import("../card-thumbnail-composites").CardThumbnailCompositeLayer[];
 	isTrained?: boolean;
 	defaultImage?: string;
 	mastery?: number;
@@ -183,7 +184,7 @@ function DeckThumb({ card, source, leader }: { card: SuiteDeckCard; source: Asse
 	return (
 		<div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 128, gap: 5 }}>
 			<div style={{ display: "flex", position: "relative" }}>
-				<SekaiCardThumbnail imageUrl={trained ? trainedUrl ?? normalUrl : normalUrl} rarity={rarity} attr={card.attr ?? "cute"} isTrained={trained} mastery={card.mastery} characterName={card.characterName} size={112} />
+				<SekaiCardThumbnail imageUrl={trained ? trainedUrl ?? normalUrl : normalUrl} compositeLayers={card.compositeLayers} rarity={rarity} attr={card.attr ?? "cute"} isTrained={trained} mastery={card.mastery} characterName={card.characterName} size={112} />
 				{leader && <span style={{ display: "flex", position: "absolute", right: -6, top: -6, padding: "3px 7px", borderRadius: theme.borderRadius.round, backgroundColor: theme.colors.accent, color: "#fff", fontSize: 10, fontWeight: 900 }}>LEADER</span>}
 			</div>
 			<span style={{ display: "flex", color: theme.colors.textMuted, fontSize: theme.fontSize.xs, fontWeight: 800 }}>{card.level ? `Lv.${card.level}` : `#${card.cardId ?? card.id ?? "-"}`}</span>

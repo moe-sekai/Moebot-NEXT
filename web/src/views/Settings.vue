@@ -299,6 +299,7 @@
             </div>
             <div class="renderer-cache-panel__meta">
               <span>覆盖率 {{ thumbnailCacheProgress }}%</span>
+              <span v-if="thumbnailCache?.composite_total">合成 SVG {{ thumbnailCache.composite_cached }}/{{ thumbnailCache.composite_total }}</span>
               <span>缓存目录：{{ thumbnailCache?.cache_dir || config?.renderer.cache.path || '-' }}</span>
             </div>
             <div v-if="thumbnailCache?.errors?.length" class="renderer-cache-panel__errors">
@@ -498,14 +499,26 @@ const rendererOutputScaleText = computed(
 const thumbnailCacheRegion = computed(
 	() => form.value.server.region || config.value?.server.region || "jp",
 );
-const thumbnailCacheProgress = computed(() =>
-	Math.round((thumbnailCache.value?.progress ?? 0) * 100),
-);
+const thumbnailCacheProgress = computed(() => {
+	const status = thumbnailCache.value;
+	if (!status) return 0;
+	const sourceTotal = status.total ?? 0;
+	const sourceProgress = status.running
+		? Math.max(status.progress ?? 0, sourceTotal ? (status.cached ?? 0) / sourceTotal : 1)
+		: sourceTotal ? (status.cached ?? 0) / sourceTotal : 1;
+	const compositeTotal = status.composite_total ?? 0;
+	const compositeProgress = status.running
+		? Math.max(status.composite_progress ?? 0, compositeTotal ? (status.composite_cached ?? 0) / compositeTotal : 1)
+		: compositeTotal ? (status.composite_cached ?? 0) / compositeTotal : 1;
+	const total = sourceTotal + compositeTotal;
+	if (total <= 0) return 0;
+	return Math.round(((sourceProgress * sourceTotal + compositeProgress * compositeTotal) / total) * 100);
+});
 const thumbnailCacheBadgeVariant = computed<BadgeVariant>(() => {
 	if (!thumbnailCache.value?.enabled) return "warning";
 	if (thumbnailCache.value.running) return "secondary";
-	if ((thumbnailCache.value.failed ?? 0) > 0) return "warning";
-	if ((thumbnailCache.value.missing ?? 0) === 0 && (thumbnailCache.value.total ?? 0) > 0) return "success";
+	if ((thumbnailCache.value.failed ?? 0) > 0 || (thumbnailCache.value.composite_failed ?? 0) > 0) return "warning";
+	if ((thumbnailCache.value.missing ?? 0) === 0 && (thumbnailCache.value.composite_missing ?? 0) === 0 && ((thumbnailCache.value.total ?? 0) > 0 || (thumbnailCache.value.composite_total ?? 0) > 0)) return "success";
 	return "outline";
 });
 const thumbnailCacheStatusLabel = computed(() => {
@@ -513,8 +526,8 @@ const thumbnailCacheStatusLabel = computed(() => {
 	if (!status) return "未检查";
 	if (!status.enabled) return "缓存关闭";
 	if (status.running) return "预载中";
-	if (status.total === 0) return "无卡牌";
-	if (status.missing === 0) return "已完成";
+	if (status.total === 0 && !status.composite_total) return "无卡牌";
+	if (status.missing === 0 && (status.composite_missing ?? 0) === 0) return "已完成";
 	return "待预载";
 });
 const thumbnailPreloadButtonLoading = computed(
@@ -523,7 +536,12 @@ const thumbnailPreloadButtonLoading = computed(
 const thumbnailCacheSummary = computed(() => {
 	const status = thumbnailCache.value;
 	if (!status) return "点击刷新后查看当前区服缩略图缓存覆盖率。";
-	return `${status.cached}/${status.total} 已缓存 · 缺失 ${status.missing} · 失败 ${status.failed}`;
+	const sourceTotal = status.total_urls ?? status.total;
+	const sourceCached = sourceTotal && status.composite_total ? Math.max(0, status.cached - (status.composite_cached ?? 0)) : status.cached;
+	const sourceMissing = Math.max(0, sourceTotal - sourceCached);
+	const composite = status.composite_total ? ` · 合成 SVG ${status.composite_cached ?? 0}/${status.composite_total}` : "";
+	const render = status.composite_render_ms ? ` · SVG 生成 ${status.composite_render_ms}ms` : "";
+	return `原图 ${sourceCached}/${sourceTotal} · 缺失 ${sourceMissing} · 失败 ${status.failed}${composite}${render}`;
 });
 
 const webItems = computed<ConfigItem[]>(() => [
@@ -799,6 +817,7 @@ function scheduleThumbnailCachePoll() {
 	clearThumbnailCachePoll();
 	thumbnailCachePollTimer = window.setTimeout(async () => {
 		await refreshThumbnailCacheStatus(true);
+		if (thumbnailCache.value?.running) scheduleThumbnailCachePoll();
 	}, 1800);
 }
 

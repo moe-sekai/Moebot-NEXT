@@ -1,4 +1,6 @@
+import { getAssetBaseUrl } from "../shared";
 import { rendererAssetCache } from "./asset-cache";
+import { getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, startCardThumbnailCompositePreload, statusForCardThumbnailComposites, type CardThumbnailCompositeLayer, type CardThumbnailCompositeRequest } from "./card-thumbnail-composites";
 import { renderWithTrace } from "./engine";
 import { listRenderPreviews, renderPreviewTemplate } from "./preview";
 import {
@@ -33,6 +35,7 @@ interface RenderRequest {
 
 interface CachePreloadRequest {
 	urls?: string[];
+	cards?: CardThumbnailCompositeRequest[];
 	force?: boolean;
 	concurrency?: number;
 }
@@ -112,10 +115,7 @@ function normalizeCard(data: any) {
 	return {
 		id: data.id ?? data.ID ?? 0,
 		prefix: data.prefix ?? data.Prefix ?? "未知卡牌",
-		characterName:
-			data.characterName ??
-			data.CharacterName ??
-			`角色 ${data.characterId ?? data.CharacterID ?? "?"}`,
+		characterName: data.characterName ?? data.CharacterName ?? "未知角色",
 		rarity:
 			data.rarity ??
 			data.cardRarityType ??
@@ -138,15 +138,16 @@ function normalizeCard(data: any) {
 		cardRarityType: data.cardRarityType ?? data.CardRarityType,
 		assetSource: data.assetSource ?? data.AssetSource,
 		power: data.power ?? data.Power,
-		skillName:
-			data.skillName ??
-			data.SkillName ??
-			data.cardSkillName ??
-			data.CardSkillName,
+		skillName: data.skillName ?? data.SkillName,
 		gachaPhrase: data.gachaPhrase ?? data.GachaPhrase,
 		supplyType: data.supplyType ?? data.SupplyType,
+		compositeThumbnailUrl: data.compositeThumbnailUrl ?? data.CompositeThumbnailURL,
+		compositeLayers: data.compositeLayers ?? data.CompositeLayers,
+		normalCompositeLayers: data.normalCompositeLayers ?? data.NormalCompositeLayers,
+		trainedCompositeLayers: data.trainedCompositeLayers ?? data.TrainedCompositeLayers,
 	};
 }
+
 
 function normalizeMusic(data: any) {
 	return {
@@ -201,7 +202,7 @@ function normalizeRankingList(data: any) {
 	return {
 		title: data.title ?? data.Title ?? "活动榜线",
 		subtitle: data.subtitle ?? data.Subtitle,
-		rankings: data.rankings ?? data.Rankings ?? [],
+		rankings: (data.rankings ?? data.Rankings ?? []).map(normalizeRankingEntry),
 		eventId: data.eventId ?? data.EventID,
 		eventName: data.eventName ?? data.EventName,
 		updatedAt: data.updatedAt ?? data.UpdatedAt,
@@ -210,6 +211,13 @@ function normalizeRankingList(data: any) {
 		regionLabel: data.regionLabel ?? data.RegionLabel,
 		boardType: data.boardType ?? data.BoardType,
 		targetId: data.targetId ?? data.TargetID,
+	};
+}
+
+function normalizeRankingEntry(entry: any) {
+	return {
+		...entry,
+		leaderCard: entry?.leaderCard ? normalizeSuiteCard(entry.leaderCard) : entry?.LeaderCard ? normalizeSuiteCard(entry.LeaderCard) : undefined,
 	};
 }
 
@@ -260,8 +268,8 @@ function normalizeProfile(data: any) {
 		characterRanks: data.characterRanks ?? data.CharacterRanks,
 		challengeLive: data.challengeLive ?? data.ChallengeLive,
 		profileHonors: data.profileHonors ?? data.ProfileHonors,
-		leaderCard: data.leaderCard ?? data.LeaderCard,
-		deckCards: data.deckCards ?? data.DeckCards,
+		leaderCard: data.leaderCard ? normalizeSuiteCard(data.leaderCard) : data.LeaderCard ? normalizeSuiteCard(data.LeaderCard) : undefined,
+		deckCards: (data.deckCards ?? data.DeckCards ?? []).map(normalizeSuiteCard),
 		honors: data.honors ?? data.Honors,
 	};
 }
@@ -408,6 +416,7 @@ function normalizeSuiteCard(card: any) {
 		assetbundleName: card.assetbundleName ?? card.AssetbundleName,
 		thumbnailUrl: toPngImageUrl(card.thumbnailUrl ?? card.ThumbnailURL),
 		trainedThumbnailUrl: toPngImageUrl(card.trainedThumbnailUrl ?? card.TrainedThumbnailURL),
+		compositeThumbnailUrl: card.compositeThumbnailUrl ?? card.CompositeThumbnailURL,
 		isTrained: card.isTrained ?? card.IsTrained,
 		defaultImage: card.defaultImage ?? card.DefaultImage,
 		mastery: card.mastery ?? card.Mastery,
@@ -424,6 +433,163 @@ function normalizeSuiteCard(card: any) {
 		isLimited: card.isLimited ?? card.IsLimited,
 		isBirthday: card.isBirthday ?? card.IsBirthday,
 	};
+}
+
+async function prepareCardDetail(data: ReturnType<typeof normalizeCard>) {
+	await hydrateCardCompositeLayers(data, {
+		assetSource: data.assetSource,
+		sizes: [128],
+		allowDownload: true,
+		bothTrainingStates: true,
+	});
+	return data;
+}
+
+async function prepareCardList(data: ReturnType<typeof normalizeCardList>) {
+	await hydrateCardCompositeLayersForCards(data.cards ?? [], {
+		assetSource: data.assetSource,
+		sizes: [112],
+		allowDownload: true,
+	});
+	return data;
+}
+
+async function prepareProfileCard(data: ReturnType<typeof normalizeProfile>) {
+	await hydrateCardCompositeLayersForCards([data.leaderCard, ...(data.deckCards ?? [])], {
+		assetSource: data.assetSource,
+		sizes: [112],
+		allowDownload: true,
+	});
+	return data;
+}
+
+async function prepareSuitePanel(data: ReturnType<typeof normalizeSuitePanel>) {
+	await hydrateCardCompositeLayersForCards(data.deckCards ?? [], {
+		assetSource: data.assetSource,
+		sizes: [112],
+		allowDownload: true,
+	});
+	return data;
+}
+
+async function prepareSuiteCardBox(data: ReturnType<typeof normalizeSuiteCardBox>) {
+	const options = data.options ?? {};
+	const allCards = [
+		...(data.cards ?? []),
+		...(data.groups ?? []).flatMap((group: any) => group.cards ?? []),
+	];
+	options.totalCardsForLayout = allCards.length;
+	await hydrateCardCompositeLayersForCards(allCards, {
+		assetSource: data.assetSource,
+		sizes: [allCards.length >= 80 ? 88 : 112],
+		allowDownload: true,
+		useBeforeTraining: Boolean(options.useBeforeTraining),
+	});
+	return data;
+}
+
+async function prepareGachaInfo(data: ReturnType<typeof normalizeGacha>) {
+	await hydrateCardCompositeLayersForCards(data.pickupCards ?? [], {
+		assetSource: data.assetSource,
+		sizes: [112],
+		allowDownload: true,
+	});
+	return data;
+}
+
+async function prepareGachaResult(data: any) {
+	const payload = data ?? { pullType: "multi", results: [] };
+	await hydrateCardCompositeLayersForCards(payload.results ?? payload.Results ?? [], {
+		assetSource: payload.assetSource ?? payload.AssetSource,
+		sizes: [112],
+		allowDownload: true,
+	});
+	return payload;
+}
+
+async function prepareRankingList(data: ReturnType<typeof normalizeRankingList>) {
+	await hydrateCardCompositeLayersForCards((data.rankings ?? []).map((entry: any) => entry.leaderCard), {
+		assetSource: data.assetSource,
+		sizes: [46, 64, 88],
+		allowDownload: true,
+	});
+	return data;
+}
+
+async function prepareChurnRankingList(data: ReturnType<typeof normalizeRankingList>) {
+	await hydrateCardCompositeLayersForCards((data.rankings ?? []).map((entry: any) => entry.leaderCard), {
+		assetSource: data.assetSource,
+		sizes: [58],
+		allowDownload: true,
+	});
+	return data;
+}
+
+async function hydrateCardCompositeLayersForCards(cards: any[], options: { assetSource?: any; sizes: number[]; allowDownload: boolean; useBeforeTraining?: boolean }) {
+	await Promise.all((cards ?? []).filter(Boolean).map((card) => hydrateCardCompositeLayers(card, options)));
+}
+
+async function hydrateCardCompositeLayers(card: any, options: { assetSource?: any; sizes: number[]; allowDownload: boolean; bothTrainingStates?: boolean; useBeforeTraining?: boolean }) {
+	if (!card) return;
+	const sizes = Array.from(new Set(options.sizes.filter((size) => Number.isFinite(size) && size > 0)));
+	if (sizes.length === 0) return;
+	if (options.bothTrainingStates) {
+		const [normal, trained] = await Promise.all([
+			compositeLayersForCard(card, { ...options, trained: false, size: sizes[0] }),
+			compositeLayersForCard(card, { ...options, trained: true, size: sizes[0] }),
+		]);
+		if (normal) card.normalCompositeLayers = normal;
+		if (trained) card.trainedCompositeLayers = trained;
+		return;
+	}
+	const trained = !Boolean(options.useBeforeTraining) && shouldUseTrainedThumbnail(card);
+	const bySize = await Promise.all(sizes.map((size) => compositeLayersForCard(card, { ...options, trained, size })));
+	const first = bySize.find(Boolean);
+	if (first) card.compositeLayers = first;
+}
+
+async function compositeLayersForCard(card: any, options: { assetSource?: any; allowDownload: boolean; trained: boolean; size: number }): Promise<CardThumbnailCompositeLayer[] | undefined> {
+	const composite = cardCompositeRequest(card, options);
+	if (!composite) return undefined;
+	const svg = await getCardThumbnailCompositeSvg(composite, options.allowDownload);
+	return svg ? getCardThumbnailCompositeLayersFromSvg(svg) : undefined;
+}
+
+function cardCompositeRequest(card: any, options: { assetSource?: any; trained: boolean; size: number }): CardThumbnailCompositeRequest | null {
+	const rarity = card.cardRarityType ?? card.rarity ?? (card.isBirthday ? "rarity_birthday" : "rarity_1");
+	const source = card.assetSource ?? options.assetSource;
+	const imageUrl = imageUrlForComposite(card, options.trained, source);
+	if (!imageUrl) return null;
+	return {
+		imageUrl,
+		rarity,
+		attr: card.attr ?? "cute",
+		trained: options.trained,
+		size: options.size,
+	};
+}
+
+function imageUrlForComposite(card: any, trained: boolean, source: any): string | undefined {
+	const normal = card.thumbnailUrl ?? card.normalThumbnailUrl ?? (card.assetbundleName ? cardThumbnailUrl(card.assetbundleName, false, source) : undefined);
+	const trainedUrl = card.trainedThumbnailUrl ?? (card.assetbundleName ? cardThumbnailUrl(card.assetbundleName, true, source) : undefined);
+	return trained ? trainedUrl ?? normal : normal;
+}
+
+function shouldUseTrainedThumbnail(card: any): boolean {
+	const rarity = card.cardRarityType ?? card.rarity ?? (card.isBirthday ? "rarity_birthday" : "rarity_1");
+	if (card.defaultImage === "special_training") return true;
+	if (card.defaultImage === "original") return false;
+	if (typeof card.isTrained === "boolean") return card.isTrained;
+	return rarity === "rarity_3" || rarity === "rarity_4";
+}
+
+function cardThumbnailUrl(assetbundleName: string, trained: boolean, source: any): string {
+	const base = assetBaseUrl(source).replace(/\/$/, "");
+	return `${base}/thumbnail/chara/${assetbundleName}_${trained ? "after_training" : "normal"}.png`;
+}
+
+function assetBaseUrl(source: any): string {
+	return getAssetBaseUrl(typeof source === "string" && source.trim() ? source.trim() : "main-jp");
 }
 
 function normalizeVirtualLiveList(data: any) {
@@ -510,7 +676,7 @@ function normalizeGachaPickupCard(card: any) {
 	};
 }
 
-function createElement(req: RenderRequest) {
+async function createElement(req: RenderRequest) {
 	const data = sanitizeImageUrls(req.data);
 	switch (req.template) {
 		case "help_card":
@@ -518,10 +684,10 @@ function createElement(req: RenderRequest) {
 			return <HelpCard {...(data ?? defaultHelpData())} />;
 		case "card_detail":
 		case "card":
-			return <CardDetail card={normalizeCard(data)} />;
+			return <CardDetail card={await prepareCardDetail(normalizeCard(data))} />;
 		case "card_list":
 		case "cards":
-			return <CardList {...normalizeCardList(data)} />;
+			return <CardList {...(await prepareCardList(normalizeCardList(data)))} />;
 		case "music_detail":
 		case "music":
 			return <MusicDetail music={normalizeMusic(data)} />;
@@ -539,7 +705,7 @@ function createElement(req: RenderRequest) {
 			return <EventList {...normalizeEventList(data)} />;
 		case "gacha_info":
 		case "gacha":
-			return <GachaInfo gacha={normalizeGacha(data)} />;
+			return <GachaInfo gacha={await prepareGachaInfo(normalizeGacha(data))} />;
 		case "gacha_list":
 		case "gachas":
 			return <GachaList {...normalizeGachaList(data)} />;
@@ -549,22 +715,22 @@ function createElement(req: RenderRequest) {
 			return <VirtualLiveList {...normalizeVirtualLiveList(data)} />;
 		case "gacha_result":
 		case "gacha-result":
-			return <GachaResult {...(data ?? { pullType: "multi", results: [] })} />;
+			return <GachaResult {...(await prepareGachaResult(data))} />;
 		case "profile_card":
 		case "profile":
-			return <ProfileCard profile={normalizeProfile(data)} />;
+			return <ProfileCard profile={await prepareProfileCard(normalizeProfile(data))} />;
 		case "suite_panel":
 		case "suite_status":
-			return <SuitePanel {...normalizeSuitePanel(data ?? {})} />;
+			return <SuitePanel {...(await prepareSuitePanel(normalizeSuitePanel(data ?? {})))} />;
 		case "suite_card_box":
 		case "suite_cards":
-			return <SuiteCardBox {...normalizeSuiteCardBox(data ?? {})} />;
+			return <SuiteCardBox {...(await prepareSuiteCardBox(normalizeSuiteCardBox(data ?? {})))} />;
 		case "ranking_list":
 		case "ranking":
-			return <RankingList {...normalizeRankingList(data)} />;
+			return <RankingList {...(await prepareRankingList(normalizeRankingList(data)))} />;
 		case "churn_ranking_list":
 		case "churn_ranking":
-			return <ChurnRankingList {...normalizeRankingList(data)} />;
+			return <ChurnRankingList {...(await prepareChurnRankingList(normalizeRankingList(data)))} />;
 		case "water_table":
 		case "csb":
 			return <WaterTable {...normalizeWaterTable(data)} />;
@@ -574,6 +740,25 @@ function createElement(req: RenderRequest) {
 		default:
 			return <HelpCard {...defaultHelpData()} />;
 	}
+}
+
+function mergePreloadStatuses(status: any, composite: any) {
+	const total = (status.total ?? 0) + (composite.composite_total ?? 0);
+	const cached = (status.cached ?? 0) + (composite.composite_cached ?? 0);
+	const running = Boolean(status.running || composite.composite_running);
+	const progress = running && total > 0
+		? Math.min(0.999, ((status.progress ?? 0) * (status.total ?? 0) + (composite.composite_progress ?? 0) * (composite.composite_total ?? 0)) / total)
+		: total === 0 ? 1 : cached / total;
+	return {
+		...status,
+		...composite,
+		running,
+		progress,
+		cached,
+		missing: Math.max(0, total - cached),
+		total,
+		errors: [...(status.errors ?? []), ...(composite.composite_errors ?? [])].slice(0, 8),
+	};
 }
 
 Bun.serve({
@@ -653,11 +838,16 @@ Bun.serve({
 		if (url.pathname === "/cache/card-thumbnails/preload" && request.method === "POST") {
 			try {
 				const body = (await request.json()) as CachePreloadRequest;
+				console.info(`[renderer] starting card thumbnail preload: urls=${body.urls?.length ?? 0}, composites=${body.cards?.length ?? 0}`);
 				const status = await rendererAssetCache.startPreload(body.urls ?? [], {
 					force: body.force,
 					concurrency: body.concurrency,
 				});
-				return Response.json(status);
+				const composite = await startCardThumbnailCompositePreload(body.cards ?? [], {
+					force: body.force,
+					concurrency: body.concurrency,
+				});
+				return Response.json(mergePreloadStatuses(status, composite));
 			} catch (error) {
 				console.error("[renderer] preload card thumbnails failed:", error);
 				return Response.json(
@@ -673,8 +863,11 @@ Bun.serve({
 		if (url.pathname === "/cache/card-thumbnails/status" && request.method === "POST") {
 			try {
 				const body = (await request.json()) as CachePreloadRequest;
-				const status = await rendererAssetCache.statusForUrls(body.urls ?? []);
-				return Response.json(status);
+				const [status, composite] = await Promise.all([
+					rendererAssetCache.statusForUrls(body.urls ?? []),
+					statusForCardThumbnailComposites(body.cards ?? []),
+				]);
+				return Response.json(mergePreloadStatuses(status, composite));
 			} catch (error) {
 				console.error("[renderer] card thumbnail cache status failed:", error);
 				return Response.json(
@@ -690,7 +883,7 @@ Bun.serve({
 		if (url.pathname === "/render" && request.method === "POST") {
 			try {
 				const body = (await request.json()) as RenderRequest;
-				const trace = await renderWithTrace(createElement(body), {
+				const trace = await renderWithTrace(await createElement(body), {
 					width: body.width ?? 800,
 					height: body.height,
 					precision: parsePositiveNumber(body.precision, defaultPrecision),

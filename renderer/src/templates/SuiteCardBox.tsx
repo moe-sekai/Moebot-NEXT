@@ -38,7 +38,10 @@ interface SuiteCard {
 	assetbundleName?: string;
 	thumbnailUrl?: string;
 	trainedThumbnailUrl?: string;
+	compositeThumbnailUrl?: string;
+	compositeLayers?: import("../card-thumbnail-composites").CardThumbnailCompositeLayer[];
 	isTrained?: boolean;
+
 	defaultImage?: string;
 	mastery?: number;
 	masterRank?: number;
@@ -70,6 +73,8 @@ export function SuiteCardBox({
 	const allCards = normalizedGroups.flatMap((group) => group.cards ?? []);
 	const owned = ownedTotal ?? allCards.filter((card) => isOwned(card)).length;
 	const count = total ?? allCards.length;
+	const compact = allCards.length >= 80;
+	const tileLayout = compact ? { tileWidth: 108, tilePadding: 6, thumbSize: 88, infoGap: 2 } : { tileWidth: 132, tilePadding: 8, thumbSize: 112, infoGap: 3 };
 	const profileText = profile ? `${profile.displayName ?? profile.name ?? "未知玩家"}${profile.rank !== undefined ? ` · Rank ${profile.rank}` : ""}` : undefined;
 	const summary = [profileText, `持有 ${owned}/${count}`].filter(Boolean).join(" · ");
 
@@ -87,8 +92,8 @@ export function SuiteCardBox({
 							<span style={{ display: "flex", color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>{group.title ?? group.name ?? group.characterName ?? "未分组"}</span>
 							<span style={{ display: "flex", color: theme.colors.textMuted, fontSize: theme.fontSize.xs, fontWeight: 800 }}>{(group.cards ?? []).filter(isOwned).length}/{group.cards?.length ?? 0}</span>
 						</div>
-						<div style={{ display: "flex", flexWrap: "wrap", gap: theme.spacing.sm }}>
-							{(group.cards ?? []).map((card, cardIndex) => <CardTile key={`${card.cardId ?? card.id ?? cardIndex}`} card={card} options={options} source={assetSource} />)}
+						<div style={{ display: "flex", flexWrap: "wrap", gap: compact ? 6 : theme.spacing.sm }}>
+							{(group.cards ?? []).map((card, cardIndex) => <CardTile key={`${card.cardId ?? card.id ?? cardIndex}`} card={card} options={options} source={assetSource} layout={tileLayout} compact={compact} />)}
 						</div>
 					</div>
 				))}
@@ -97,7 +102,7 @@ export function SuiteCardBox({
 	);
 }
 
-function CardTile({ card, options, source }: { card: SuiteCard; options: SuiteCardBoxProps["options"]; source: AssetSourceType | string }) {
+function CardTile({ card, options, source, layout, compact }: { card: SuiteCard; options: SuiteCardBoxProps["options"]; source: AssetSourceType | string; layout: { tileWidth: number; tilePadding: number; thumbSize: number; infoGap: number }; compact: boolean }) {
 	const owned = isOwned(card);
 	const rarity = card.cardRarityType ?? card.rarity ?? (card.isBirthday ? "rarity_birthday" : "rarity_1");
 	const useBefore = Boolean(options?.useBeforeTraining);
@@ -108,21 +113,21 @@ function CardTile({ card, options, source }: { card: SuiteCard; options: SuiteCa
 	const obtained = card.createdAt ?? card.obtainedAt ?? card.acquiredAt;
 
 	return (
-		<div style={{ display: "flex", flexDirection: "column", width: 132, gap: 6, padding: 8, borderRadius: theme.borderRadius.lg, border: `1px solid ${owned ? theme.colors.border : theme.colors.borderStrong}`, backgroundColor: owned ? theme.colors.surface : theme.colors.surfaceLight }}>
+		<div style={{ display: "flex", flexDirection: "column", width: layout.tileWidth, gap: compact ? 4 : 6, padding: layout.tilePadding, borderRadius: theme.borderRadius.lg, border: `1px solid ${owned ? theme.colors.border : theme.colors.borderStrong}`, backgroundColor: owned ? theme.colors.surface : theme.colors.surfaceLight }}>
 			<div style={{ display: "flex", justifyContent: "center", position: "relative" }}>
-				<SekaiCardThumbnail imageUrl={trained ? trainedUrl ?? normalUrl : normalUrl} rarity={rarity} attr={card.attr ?? "cute"} isTrained={trained} mastery={owned ? card.mastery ?? card.masterRank : undefined} characterName={card.characterName} supplyType={supplyType} size={112} />
+				<SekaiCardThumbnail imageUrl={trained ? trainedUrl ?? normalUrl : normalUrl} compositeImageUrl={card.compositeThumbnailUrl} compositeLayers={card.compositeLayers} rarity={rarity} attr={card.attr ?? "cute"} isTrained={trained} mastery={owned ? card.mastery ?? card.masterRank : undefined} characterName={card.characterName} supplyType={supplyType} size={layout.thumbSize} />
 				{!owned && (
-					<div style={{ display: "flex", position: "absolute", left: 10, top: 0, width: 112, height: 112, borderRadius: 9, backgroundColor: "rgba(23, 32, 51, 0.52)", alignItems: "center", justifyContent: "center" }}>
+					<div style={{ display: "flex", position: "absolute", left: (layout.tileWidth - layout.tilePadding * 2 - layout.thumbSize) / 2, top: 0, width: layout.thumbSize, height: layout.thumbSize, borderRadius: 9, backgroundColor: "rgba(23, 32, 51, 0.52)", alignItems: "center", justifyContent: "center" }}>
 						<span style={{ display: "flex", color: "#ffffff", fontSize: theme.fontSize.xs, fontWeight: 900 }}>未持有</span>
 					</div>
 				)}
 			</div>
-			<div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-				<span style={{ display: "flex", justifyContent: "center", color: theme.colors.text, fontSize: theme.fontSize.xs, fontWeight: 900, textAlign: "center" }}>
+			<div style={{ display: "flex", flexDirection: "column", gap: layout.infoGap }}>
+				<span style={{ display: "flex", justifyContent: "center", color: theme.colors.text, fontSize: compact ? 10 : theme.fontSize.xs, fontWeight: 900, textAlign: "center" }}>
 					{options?.showId ? `#${card.cardId ?? card.id ?? "-"} ` : ""}{card.characterName ?? "未知角色"}
 				</span>
 				{owned ? (
-					<span style={{ display: "flex", justifyContent: "center", color: theme.colors.textSecondary, fontSize: 11, fontWeight: 800, textAlign: "center" }}>
+					<span style={{ display: "flex", justifyContent: "center", color: theme.colors.textSecondary, fontSize: compact ? 9 : 11, fontWeight: 800, textAlign: "center" }}>
 						{[
 							card.level !== undefined ? `Lv.${card.level}` : undefined,
 							(card.mastery ?? card.masterRank) !== undefined ? `MR${card.mastery ?? card.masterRank}` : undefined,
@@ -130,9 +135,9 @@ function CardTile({ card, options, source }: { card: SuiteCard; options: SuiteCa
 						].filter(Boolean).join(" · ") || "已持有"}
 					</span>
 				) : (
-					<span style={{ display: "flex", justifyContent: "center", color: theme.colors.textMuted, fontSize: 11, fontWeight: 800 }}>未解锁</span>
+					<span style={{ display: "flex", justifyContent: "center", color: theme.colors.textMuted, fontSize: compact ? 9 : 11, fontWeight: 800 }}>未解锁</span>
 				)}
-				{options?.showCreatedAt && obtained !== undefined && <span style={{ display: "flex", justifyContent: "center", color: theme.colors.textMuted, fontSize: 10, fontWeight: 700 }}>{String(obtained)}</span>}
+				{options?.showCreatedAt && obtained !== undefined && <span style={{ display: "flex", justifyContent: "center", color: theme.colors.textMuted, fontSize: compact ? 8 : 10, fontWeight: 700 }}>{String(obtained)}</span>}
 			</div>
 		</div>
 	);

@@ -17,6 +17,7 @@ export interface CardListProps {
 		thumbnailUrl?: string;
 		normalThumbnailUrl?: string;
 		trainedThumbnailUrl?: string;
+		compositeLayers?: import("../card-thumbnail-composites").CardThumbnailCompositeLayer[];
 		supplyType?: string;
 	}>;
 	page?: number;
@@ -104,6 +105,7 @@ export function CardList({
 								<div style={{ display: "flex", justifyContent: "center" }}>
 									<SekaiCardThumbnail
 										imageUrl={trained ? (trainedUrl ?? imageUrl) : imageUrl}
+										compositeLayers={card.compositeLayers}
 										rarity={rarity}
 										attr={card.attr ?? "cute"}
 										isTrained={trained}
