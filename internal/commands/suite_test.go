@@ -219,7 +219,7 @@ func TestFormatBondTextHandlesEmptyBonds(t *testing.T) {
 
 func TestMusicProgressFieldsUsesMusicResults(t *testing.T) {
 	fields := musicProgressFields()
-	want := []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMusicResults, suite.FieldUserMusicAchievements}
+	want := []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserDecks, suite.FieldUserCards, suite.FieldUserMusicResults, suite.FieldUserMusicAchievements}
 	if len(fields) != len(want) {
 		t.Fatalf("fields len = %d, want %d: %#v", len(fields), len(want), fields)
 	}
@@ -307,7 +307,7 @@ func TestSectionsFromMusicOverviewIncludeProgressAndReward(t *testing.T) {
 
 func TestMaterialFieldsUsesMaterials(t *testing.T) {
 	fields := materialFields()
-	want := []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMaterials}
+	want := []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserDecks, suite.FieldUserCards, suite.FieldUserMaterials}
 	if len(fields) != len(want) {
 		t.Fatalf("fields len = %d, want %d: %#v", len(fields), len(want), fields)
 	}
@@ -603,7 +603,7 @@ func TestLeaderRowsIncludeRemainAndMissionLevels(t *testing.T) {
 
 func TestMusicRewardFieldsUsesAchievements(t *testing.T) {
 	fields := musicRewardFields()
-	want := []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMusicResults, suite.FieldUserMusicAchievements}
+	want := []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserDecks, suite.FieldUserCards, suite.FieldUserMusicResults, suite.FieldUserMusicAchievements}
 	if len(fields) != len(want) {
 		t.Fatalf("fields len = %d, want %d: %#v", len(fields), len(want), fields)
 	}

@@ -19,14 +19,16 @@ import (
 )
 
 const defaultRendererRequestTimeout = 2 * time.Minute
+const DefaultChartRenderWidth = 2400
 
 // Client communicates with the Bun renderer microservice.
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
-	process    *exec.Cmd
-	precision  float64
-	cache      config.CacheConfig
+	baseURL        string
+	httpClient     *http.Client
+	process        *exec.Cmd
+	precision      float64
+	chartPrecision float64
+	cache          config.CacheConfig
 }
 
 // RenderRequest is sent to the renderer service.
@@ -72,6 +74,7 @@ type PreviewRenderResult struct {
 	ImagesMS         string
 	SatoriMS         string
 	ResvgMS          string
+	ChromeMS         string
 	SizeBytes        string
 	ImageTotal       string
 	ImageRemote      string
@@ -130,10 +133,15 @@ func New(cfg config.RendererConfig) *Client {
 	if precision <= 0 {
 		precision = config.DefaultRendererPrecision
 	}
+	chartPrecision := cfg.ChartPrecision
+	if chartPrecision <= 0 {
+		chartPrecision = config.DefaultChartRendererPrecision
+	}
 	return &Client{
-		baseURL:   fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port),
-		precision: precision,
-		cache:     cfg.Cache,
+		baseURL:        fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port),
+		precision:      precision,
+		chartPrecision: chartPrecision,
+		cache:          cfg.Cache,
 		httpClient: &http.Client{
 			Timeout: defaultRendererRequestTimeout,
 		},
@@ -243,7 +251,7 @@ func (c *Client) RenderWithTrace(req RenderRequest) (*PreviewRenderResult, error
 	}, nil
 }
 
-// RenderChartURL converts a chart SVG URL to PNG directly through resvg.
+// RenderChartURL converts a chart SVG URL to PNG through the renderer's browser screenshot pipeline.
 func (c *Client) RenderChartURL(chartURL string) ([]byte, error) {
 	result, err := c.RenderChartURLWithTrace(chartURL, 0)
 	if err != nil {
@@ -254,7 +262,10 @@ func (c *Client) RenderChartURL(chartURL string) ([]byte, error) {
 
 // RenderChartURLWithTrace converts a chart SVG URL to PNG and preserves renderer timing headers.
 func (c *Client) RenderChartURLWithTrace(chartURL string, width int) (*PreviewRenderResult, error) {
-	req := ChartRenderRequest{URL: chartURL, Width: width, Precision: c.precision}
+	if width <= 0 {
+		width = DefaultChartRenderWidth
+	}
+	req := ChartRenderRequest{URL: chartURL, Width: width, Precision: c.ChartPrecision()}
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal chart render request: %w", err)
@@ -276,6 +287,7 @@ func (c *Client) RenderChartURLWithTrace(chartURL string, width int) (*PreviewRe
 		PNG:        png,
 		TotalMS:    resp.Header.Get("x-render-total-ms"),
 		ResvgMS:    resp.Header.Get("x-render-resvg-ms"),
+		ChromeMS:   resp.Header.Get("x-render-chrome-ms"),
 		SizeBytes:  resp.Header.Get("x-render-size-bytes"),
 		StatusCode: resp.StatusCode,
 	}, nil
@@ -417,12 +429,28 @@ func (c *Client) SetPrecision(precision float64) {
 	c.precision = precision
 }
 
+// SetChartPrecision updates the chart SVG to PNG render scale used for future requests.
+func (c *Client) SetChartPrecision(precision float64) {
+	if precision <= 0 {
+		precision = config.DefaultChartRendererPrecision
+	}
+	c.chartPrecision = precision
+}
+
 // Precision returns the current SVG to PNG render scale.
 func (c *Client) Precision() float64 {
 	if c.precision <= 0 {
 		return config.DefaultRendererPrecision
 	}
 	return c.precision
+}
+
+// ChartPrecision returns the current chart SVG to PNG render scale.
+func (c *Client) ChartPrecision() float64 {
+	if c.chartPrecision <= 0 {
+		return config.DefaultChartRendererPrecision
+	}
+	return c.chartPrecision
 }
 
 func rendererCacheEnv(cache config.CacheConfig) []string {

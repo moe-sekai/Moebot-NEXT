@@ -58,7 +58,7 @@ type musicRewardRow struct {
 }
 
 func musicOverviewFields() []string {
-	return []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMusicResults, suite.FieldUserMusicAchievements}
+	return suite.Fields(suite.FieldUserMusicResults, suite.FieldUserMusicAchievements)
 }
 
 func musicProgressFields() []string { return musicOverviewFields() }

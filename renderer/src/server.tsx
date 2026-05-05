@@ -1,7 +1,8 @@
 import { getAssetBaseUrl } from "../shared";
 import { rendererAssetCache } from "./asset-cache";
 import { getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, startCardThumbnailCompositePreload, statusForCardThumbnailComposites, type CardThumbnailCompositeLayer, type CardThumbnailCompositeRequest } from "./card-thumbnail-composites";
-import { renderSvgToPngWithTrace, renderWithTrace } from "./engine";
+import { renderWithTrace } from "./engine";
+import { renderChartWithBrowser } from "./chart-browser-renderer";
 import { listRenderPreviews, renderPreviewTemplate } from "./preview";
 import {
 	CardDetail,
@@ -55,26 +56,6 @@ function parsePositiveNumber(value: unknown, fallback = 0): number {
 	return Number.isFinite(numberValue) && numberValue > 0
 		? numberValue
 		: fallback;
-}
-
-async function svgFromChartRequest(body: ChartRenderRequest): Promise<string> {
-	if (typeof body.svg === "string" && body.svg.trim()) {
-		return body.svg;
-	}
-	if (typeof body.url !== "string" || !body.url.trim()) {
-		throw new Error("chart svg url is required");
-	}
-	const chartUrl = new URL(body.url);
-	if (chartUrl.protocol !== "https:" && chartUrl.protocol !== "http:") {
-		throw new Error("chart svg url must be http(s)");
-	}
-	const response = await fetch(chartUrl, {
-		headers: { accept: "image/svg+xml,text/plain;q=0.9,*/*;q=0.8" },
-	});
-	if (!response.ok) {
-		throw new Error(`fetch chart svg failed: HTTP ${response.status}`);
-	}
-	return response.text();
 }
 
 function defaultHelpData() {
@@ -983,8 +964,9 @@ Bun.serve({
 		if (url.pathname === "/render/chart" && request.method === "POST") {
 			try {
 				const body = (await request.json()) as ChartRenderRequest;
-				const svg = await svgFromChartRequest(body);
-				const trace = await renderSvgToPngWithTrace(svg, {
+				const trace = await renderChartWithBrowser({
+					url: body.url,
+					svg: body.svg,
 					width: body.width,
 					precision: parsePositiveNumber(body.precision, defaultPrecision),
 				});
@@ -993,8 +975,10 @@ Bun.serve({
 						"content-type": "image/png",
 						"cache-control": "no-store",
 						"x-render-total-ms": String(trace.timings.totalMs),
-						"x-render-resvg-ms": String(trace.timings.resvgMs),
+						"x-render-chrome-ms": String(trace.timings.chromeMs),
 						"x-render-size-bytes": String(trace.sizeBytes),
+						"x-render-width": String(trace.width),
+						"x-render-height": String(trace.height),
 					},
 				});
 			} catch (error) {

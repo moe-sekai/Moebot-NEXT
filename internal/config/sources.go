@@ -635,6 +635,9 @@ func NormalizeConfig(cfg *Config) {
 	if cfg.Renderer.Precision <= 0 {
 		cfg.Renderer.Precision = DefaultRendererPrecision
 	}
+	if cfg.Renderer.ChartPrecision <= 0 {
+		cfg.Renderer.ChartPrecision = DefaultChartRendererPrecision
+	}
 	if cfg.SekaiAPI.BaseURL == "" {
 		cfg.SekaiAPI.BaseURL = DefaultSekaiAPIURL
 	}

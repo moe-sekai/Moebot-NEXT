@@ -296,11 +296,15 @@
           <div class="settings-form">
             <label class="settings-field">
               <span>渲染精度</span>
-              <input v-model.number="form.renderer.precision" class="ui-input" type="number" min="0.1" max="4" step="0.1" @input="normalizeRendererPrecision" />
+              <input v-model.number="form.renderer.precision" class="ui-input" type="number" min="0.1" step="0.1" @input="normalizeRendererPrecision" />
+            </label>
+            <label class="settings-field">
+              <span>谱面渲染精度</span>
+              <input v-model.number="form.renderer.chart_precision" class="ui-input" type="number" min="0.1" step="0.1" @input="normalizeRendererPrecision" />
             </label>
             <div class="settings-field settings-field--readonly">
               <span>说明</span>
-              <strong>SVG 转 PNG 输出倍率，当前约 {{ rendererOutputScaleText }}；越高越清晰但图片体积和耗时越大。</strong>
+              <strong>普通图片约 {{ rendererOutputScaleText }}，谱面约 {{ chartRendererOutputScaleText }}；越高越清晰但图片体积和耗时越大。</strong>
             </div>
           </div>
           <div class="renderer-cache-panel">
@@ -427,7 +431,7 @@ interface ServerProfileForm {
 
 interface SettingsForm {
 	server: { region: string };
-	renderer: { precision: number };
+	renderer: { precision: number; chart_precision: number };
 	servers: Record<string, ServerProfileForm>;
 }
 
@@ -514,7 +518,7 @@ const serverProfilesSupported = computed(() =>
 	serverEntries.value.every((entry) => serverProfileSupported(entry.form)),
 );
 const canSave = computed(
-	() => serverProfilesSupported.value && headersJSONValid.value && form.value.renderer.precision > 0,
+	() => serverProfilesSupported.value && headersJSONValid.value && form.value.renderer.precision > 0 && form.value.renderer.chart_precision > 0,
 );
 const headersJSONValid = computed(() =>
 	Object.values(form.value.servers).every(
@@ -523,6 +527,9 @@ const headersJSONValid = computed(() =>
 );
 const rendererOutputScaleText = computed(
 	() => `${formatNumber(form.value.renderer.precision)}x`,
+);
+const chartRendererOutputScaleText = computed(
+	() => `${formatNumber(form.value.renderer.chart_precision)}x`,
 );
 const thumbnailCacheRegion = computed(
 	() => form.value.server.region || config.value?.server.region || "jp",
@@ -606,6 +613,10 @@ const rendererItems = computed<ConfigItem[]>(() => [
 	{
 		label: "当前精度",
 		value: `${formatNumber(config.value?.renderer.precision ?? 1.5)}x`,
+	},
+	{
+		label: "谱面精度",
+		value: `${formatNumber(config.value?.renderer.chart_precision ?? 4)}x`,
 	},
 	{
 		label: "缓存启用",
@@ -904,7 +915,7 @@ function clearThumbnailCachePoll() {
 function createEmptyForm(): SettingsForm {
 	return {
 		server: { region: "jp" },
-		renderer: { precision: 1.5 },
+		renderer: { precision: 1.5, chart_precision: 4 },
 		servers: {},
 	};
 }
@@ -913,7 +924,7 @@ function applyConfigToForm(data: PublicConfig) {
 	const defaultRegion = data.server.region || "jp";
 	form.value = {
 		server: { region: defaultRegion },
-		renderer: { precision: data.renderer.precision || 1.5 },
+		renderer: { precision: data.renderer.precision || 1.5, chart_precision: data.renderer.chart_precision || 4 },
 		servers: {},
 	};
 	for (const option of regionOptions.value) {
@@ -939,7 +950,10 @@ function buildPayload(): UpdatePublicConfigPayload {
 	const defaultProfile = ensureServerForm(form.value.server.region);
 	return {
 		server: { region: form.value.server.region },
-		renderer: { precision: Number(form.value.renderer.precision) || 1.5 },
+		renderer: {
+			precision: Number(form.value.renderer.precision) || 1.5,
+			chart_precision: Number(form.value.renderer.chart_precision) || 4,
+		},
 		masterdata: buildMasterdataPayload(defaultProfile.masterdata),
 		assets: buildAssetsPayload(defaultProfile.assets),
 		servers: Object.fromEntries(
@@ -988,6 +1002,10 @@ function normalizeRendererPrecision() {
 	const precision = Number(form.value.renderer.precision);
 	if (!Number.isFinite(precision) || precision <= 0) {
 		form.value.renderer.precision = 1.5;
+	}
+	const chartPrecision = Number(form.value.renderer.chart_precision);
+	if (!Number.isFinite(chartPrecision) || chartPrecision <= 0) {
+		form.value.renderer.chart_precision = 4;
 	}
 }
 

@@ -83,15 +83,16 @@ func (s *Server) handleStatus(c *fiber.Ctx) error {
 			"port":    s.Config.Web.Port,
 		},
 		"renderer": fiber.Map{
-			"status":         statusText(rendererOK),
-			"ok":             rendererOK,
-			"message":        rendererMessage(rendererOK, rendererErr),
-			"base_url":       rendererBaseURL(s.Renderer),
-			"status_code":    rendererCode,
-			"latency_ms":     rendererLatency.Milliseconds(),
-			"service_port":   s.Config.Renderer.Port,
-			"dashboard_port": s.Config.Web.Port,
-			"precision":      s.Config.Renderer.Precision,
+			"status":          statusText(rendererOK),
+			"ok":              rendererOK,
+			"message":         rendererMessage(rendererOK, rendererErr),
+			"base_url":        rendererBaseURL(s.Renderer),
+			"status_code":     rendererCode,
+			"latency_ms":      rendererLatency.Milliseconds(),
+			"service_port":    s.Config.Renderer.Port,
+			"dashboard_port":  s.Config.Web.Port,
+			"precision":       s.Config.Renderer.Precision,
+			"chart_precision": s.Config.Renderer.ChartPrecision,
 		},
 		"masterdata": fiber.Map{
 			"status":    statusText(masterdataLoaded),
@@ -130,16 +131,17 @@ func (s *Server) handleMasterdataSummary(c *fiber.Ctx) error {
 func (s *Server) handleRendererHealth(c *fiber.Ctx) error {
 	ok, statusCode, err, latency := s.checkRenderer()
 	return c.JSON(fiber.Map{
-		"ok":             ok,
-		"status":         statusText(ok),
-		"message":        rendererMessage(ok, err),
-		"base_url":       rendererBaseURL(s.Renderer),
-		"status_code":    statusCode,
-		"latency_ms":     latency.Milliseconds(),
-		"renderer_port":  s.Config.Renderer.Port,
-		"dashboard_port": s.Config.Web.Port,
-		"precision":      s.Config.Renderer.Precision,
-		"note":           fmt.Sprintf("%d 是 Satori/Bun 图片渲染服务，%d 才是 Moebot NEXT 管理面板。", s.Config.Renderer.Port, s.Config.Web.Port),
+		"ok":              ok,
+		"status":          statusText(ok),
+		"message":         rendererMessage(ok, err),
+		"base_url":        rendererBaseURL(s.Renderer),
+		"status_code":     statusCode,
+		"latency_ms":      latency.Milliseconds(),
+		"renderer_port":   s.Config.Renderer.Port,
+		"dashboard_port":  s.Config.Web.Port,
+		"precision":       s.Config.Renderer.Precision,
+		"chart_precision": s.Config.Renderer.ChartPrecision,
+		"note":            fmt.Sprintf("%d 是 Satori/Bun 图片渲染服务，%d 才是 Moebot NEXT 管理面板。", s.Config.Renderer.Port, s.Config.Web.Port),
 	})
 }
 
@@ -243,7 +245,8 @@ type serverSettingsRequest struct {
 }
 
 type rendererSettingsRequest struct {
-	Precision float64 `json:"precision"`
+	Precision      *float64 `json:"precision"`
+	ChartPrecision *float64 `json:"chart_precision"`
 }
 
 type gameServerSettingsRequest struct {
@@ -451,10 +454,18 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 	next.Assets.CustomBaseURL = assetResolved.CustomBaseURL
 
 	if req.Renderer != nil {
-		if req.Renderer.Precision <= 0 {
-			return fiber.NewError(fiber.StatusBadRequest, "Renderer precision must be greater than 0")
+		if req.Renderer.Precision != nil {
+			if *req.Renderer.Precision <= 0 {
+				return fiber.NewError(fiber.StatusBadRequest, "Renderer precision must be greater than 0")
+			}
+			next.Renderer.Precision = *req.Renderer.Precision
 		}
-		next.Renderer.Precision = req.Renderer.Precision
+		if req.Renderer.ChartPrecision != nil {
+			if *req.Renderer.ChartPrecision <= 0 {
+				return fiber.NewError(fiber.StatusBadRequest, "Chart renderer precision must be greater than 0")
+			}
+			next.Renderer.ChartPrecision = *req.Renderer.ChartPrecision
+		}
 	}
 
 	config.NormalizeConfig(&next)
@@ -465,6 +476,7 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 	*s.Config = next
 	if s.Renderer != nil {
 		s.Renderer.SetPrecision(s.Config.Renderer.Precision)
+		s.Renderer.SetChartPrecision(s.Config.Renderer.ChartPrecision)
 	}
 	if s.Servers != nil {
 		s.Servers.ApplyConfig(s.Config)
@@ -805,10 +817,11 @@ func (s *Server) publicConfigMap() fiber.Map {
 		"suite_api":   publicSuiteAPIMap(s.Config.SuiteAPI),
 		"ranking_api": publicRankingAPIMap(s.Config.RankingAPI),
 		"renderer": fiber.Map{
-			"base_url":  rendererBaseURL(s.Renderer),
-			"host":      s.Config.Renderer.Host,
-			"port":      s.Config.Renderer.Port,
-			"precision": s.Config.Renderer.Precision,
+			"base_url":        rendererBaseURL(s.Renderer),
+			"host":            s.Config.Renderer.Host,
+			"port":            s.Config.Renderer.Port,
+			"precision":       s.Config.Renderer.Precision,
+			"chart_precision": s.Config.Renderer.ChartPrecision,
 			"cache": fiber.Map{
 				"enabled":     s.Config.Renderer.Cache.Enabled,
 				"path":        s.Config.Renderer.Cache.Path,

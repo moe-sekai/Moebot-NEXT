@@ -68,6 +68,66 @@ func TestPublicConfigIncludesMaskedSuiteAPI(t *testing.T) {
 	}
 }
 
+func TestPublicConfigIncludesRendererChartPrecision(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Renderer.Precision = 2
+	cfg.Renderer.ChartPrecision = 5
+	config.NormalizeConfig(cfg)
+
+	db, err := database.New(config.DatabaseConfig{Path: filepath.Join(t.TempDir(), "test.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	server := New(cfg, db, nil, nil, "", nil)
+
+	resp, err := server.App.Test(httptestRequest(http.MethodGet, "/api/config/public", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	renderer := body["renderer"].(map[string]any)
+	if renderer["precision"].(float64) != 2 || renderer["chart_precision"].(float64) != 5 {
+		t.Fatalf("renderer config = %+v", renderer)
+	}
+}
+
+func TestUpdatePublicConfigAllowsRendererPartialPrecisionUpdate(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yml")
+	cfg := config.DefaultConfig()
+	cfg.Renderer.Precision = 1.5
+	cfg.Renderer.ChartPrecision = 4
+	if err := config.Save(cfg, cfgPath); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.New(config.DatabaseConfig{Path: filepath.Join(dir, "test.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	server := New(cfg, db, nil, nil, cfgPath, nil)
+
+	payload := []byte(`{"renderer":{"precision":2.5}}`)
+	resp, err := server.App.Test(httptestRequest(http.MethodPut, "/api/config/public", bytes.NewReader(payload)), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		var body map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		t.Fatalf("status = %d body=%+v", resp.StatusCode, body)
+	}
+	if cfg.Renderer.Precision != 2.5 || cfg.Renderer.ChartPrecision != 4 {
+		t.Fatalf("renderer config = %+v", cfg.Renderer)
+	}
+}
+
 func TestUpdatePublicConfigSavesSuiteAPISettings(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yml")

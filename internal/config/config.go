@@ -8,6 +8,7 @@ import (
 )
 
 const DefaultRendererPrecision = 1.5
+const DefaultChartRendererPrecision = 4.0
 
 // Config is the root configuration for Moebot NEXT.
 type Config struct {
@@ -131,10 +132,11 @@ type RankingAPIConfig struct {
 
 // RendererConfig holds the Bun renderer service settings.
 type RendererConfig struct {
-	Host      string      `yaml:"host"`      // renderer listen host
-	Port      int         `yaml:"port"`      // renderer listen port
-	Precision float64     `yaml:"precision"` // SVG -> PNG render scale
-	Cache     CacheConfig `yaml:"cache"`
+	Host           string      `yaml:"host"`            // renderer listen host
+	Port           int         `yaml:"port"`            // renderer listen port
+	Precision      float64     `yaml:"precision"`       // SVG -> PNG render scale
+	ChartPrecision float64     `yaml:"chart_precision"` // chart SVG -> PNG render scale
+	Cache          CacheConfig `yaml:"cache"`
 }
 
 // CacheConfig holds image cache settings. Non-positive max size means unlimited;
@@ -217,9 +219,10 @@ func DefaultConfig() *Config {
 			Timeout: 10,
 		},
 		Renderer: RendererConfig{
-			Host:      "127.0.0.1",
-			Port:      3001,
-			Precision: DefaultRendererPrecision,
+			Host:           "127.0.0.1",
+			Port:           3001,
+			Precision:      DefaultRendererPrecision,
+			ChartPrecision: DefaultChartRendererPrecision,
 			Cache: CacheConfig{
 				Enabled:   true,
 				Path:      "./data/cache",

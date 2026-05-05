@@ -182,6 +182,19 @@ func TestRankingRegionAlwaysFollowsGameServerRegion(t *testing.T) {
 	}
 }
 
+func TestRendererChartPrecisionDefaultsToFour(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Renderer.ChartPrecision != DefaultChartRendererPrecision {
+		t.Fatalf("chart precision = %v, want %v", cfg.Renderer.ChartPrecision, DefaultChartRendererPrecision)
+	}
+
+	cfg.Renderer.ChartPrecision = 0
+	NormalizeConfig(cfg)
+	if cfg.Renderer.ChartPrecision != DefaultChartRendererPrecision {
+		t.Fatalf("normalized chart precision = %v, want %v", cfg.Renderer.ChartPrecision, DefaultChartRendererPrecision)
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(substr) == 0 || (len(s) >= len(substr) && stringContains(s, substr))
 }

@@ -32,7 +32,7 @@ type userMaterial struct {
 }
 
 func materialFields() []string {
-	return []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMaterials}
+	return suite.Fields(suite.FieldUserMaterials)
 }
 
 func RegisterMaterial(deps *Deps) {

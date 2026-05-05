@@ -54,6 +54,7 @@ export interface RendererStatus extends StatusBlock {
 	service_port: number;
 	dashboard_port: number;
 	precision: number;
+	chart_precision: number;
 }
 
 export interface MasterdataStatus extends StatusBlock {
@@ -87,6 +88,7 @@ export interface RendererHealth {
 	renderer_port: number;
 	dashboard_port: number;
 	precision: number;
+	chart_precision: number;
 	note: string;
 }
 
@@ -234,6 +236,7 @@ export interface PublicConfig {
 		host: string;
 		port: number;
 		precision: number;
+		chart_precision: number;
 		cache: {
 			enabled: boolean;
 			path: string;
@@ -309,6 +312,7 @@ export interface UpdateServerProfilePayload {
 
 export interface UpdateRendererPayload {
 	precision: number;
+	chart_precision: number;
 }
 
 export interface UpdatePublicConfigPayload {
