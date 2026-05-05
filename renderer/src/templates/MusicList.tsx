@@ -36,6 +36,7 @@ export function MusicList({
 	total,
 	assetSource = "main-jp",
 }: MusicListProps) {
+	const visibleMusics = (musics ?? []).slice(0, 12);
 	return (
 		<BaseCard
 			title={title}
@@ -59,7 +60,7 @@ export function MusicList({
 				>
 					{pageText(page, totalPages, total)}
 				</div>
-				{musics.map((music) => {
+				{visibleMusics.map((music) => {
 					const jacket = music.assetbundleName
 						? getMusicJacketUrl(music.assetbundleName, assetSource)
 						: undefined;

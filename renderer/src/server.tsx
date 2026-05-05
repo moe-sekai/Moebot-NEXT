@@ -1,7 +1,7 @@
 import { getAssetBaseUrl } from "../shared";
 import { rendererAssetCache } from "./asset-cache";
 import { getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, startCardThumbnailCompositePreload, statusForCardThumbnailComposites, type CardThumbnailCompositeLayer, type CardThumbnailCompositeRequest } from "./card-thumbnail-composites";
-import { renderWithTrace } from "./engine";
+import { renderSvgToPngWithTrace, renderWithTrace } from "./engine";
 import { listRenderPreviews, renderPreviewTemplate } from "./preview";
 import {
 	CardDetail,
@@ -40,6 +40,13 @@ interface CachePreloadRequest {
 	concurrency?: number;
 }
 
+interface ChartRenderRequest {
+	url?: string;
+	svg?: string;
+	width?: number;
+	precision?: number;
+}
+
 const port = Number(process.env.PORT ?? 3001);
 const defaultPrecision = parsePositiveNumber(process.env.RENDER_PRECISION, 1.5);
 
@@ -48,6 +55,26 @@ function parsePositiveNumber(value: unknown, fallback = 0): number {
 	return Number.isFinite(numberValue) && numberValue > 0
 		? numberValue
 		: fallback;
+}
+
+async function svgFromChartRequest(body: ChartRenderRequest): Promise<string> {
+	if (typeof body.svg === "string" && body.svg.trim()) {
+		return body.svg;
+	}
+	if (typeof body.url !== "string" || !body.url.trim()) {
+		throw new Error("chart svg url is required");
+	}
+	const chartUrl = new URL(body.url);
+	if (chartUrl.protocol !== "https:" && chartUrl.protocol !== "http:") {
+		throw new Error("chart svg url must be http(s)");
+	}
+	const response = await fetch(chartUrl, {
+		headers: { accept: "image/svg+xml,text/plain;q=0.9,*/*;q=0.8" },
+	});
+	if (!response.ok) {
+		throw new Error(`fetch chart svg failed: HTTP ${response.status}`);
+	}
+	return response.text();
 }
 
 function defaultHelpData() {
@@ -267,10 +294,37 @@ function normalizeProfile(data: any) {
 		musicClearCounts: data.musicClearCounts ?? data.MusicClearCounts,
 		characterRanks: data.characterRanks ?? data.CharacterRanks,
 		challengeLive: data.challengeLive ?? data.ChallengeLive,
-		profileHonors: data.profileHonors ?? data.ProfileHonors,
+		profileHonors: (data.profileHonors ?? data.ProfileHonors ?? []).map(normalizeProfileHonor),
 		leaderCard: data.leaderCard ? normalizeSuiteCard(data.leaderCard) : data.LeaderCard ? normalizeSuiteCard(data.LeaderCard) : undefined,
 		deckCards: (data.deckCards ?? data.DeckCards ?? []).map(normalizeSuiteCard),
-		honors: data.honors ?? data.Honors,
+		honors: (data.honors ?? data.Honors ?? []).map(normalizeProfileHonor),
+	};
+}
+
+function normalizeProfileHonor(honor: any) {
+	honor = honor ?? {};
+	return {
+		seq: honor.seq ?? honor.Seq,
+		honorType: honor.honorType ?? honor.HonorType,
+		honorId: honor.honorId ?? honor.HonorID,
+		level: honor.level ?? honor.Level,
+		name: honor.name ?? honor.Name,
+		honorRarity: honor.honorRarity ?? honor.HonorRarity,
+		assetbundleName: honor.assetbundleName ?? honor.AssetbundleName,
+		imageUrl: toPngImageUrl(honor.imageUrl ?? honor.ImageURL),
+		frameUrl: toPngImageUrl(honor.frameUrl ?? honor.FrameURL),
+		levelIconUrl: toPngImageUrl(honor.levelIconUrl ?? honor.LevelIconURL),
+		levelIcon6Url: toPngImageUrl(honor.levelIcon6Url ?? honor.LevelIcon6URL),
+		bondsHonorViewType: honor.bondsHonorViewType ?? honor.BondsHonorViewType,
+		bondsHonorWordId: honor.bondsHonorWordId ?? honor.BondsHonorWordID,
+		bondsHonorWordAssetbundleName: honor.bondsHonorWordAssetbundleName ?? honor.BondsHonorWordAssetbundleName,
+		bondsHonorWordUrl: toPngImageUrl(honor.bondsHonorWordUrl ?? honor.BondsHonorWordURL),
+		leftCharacterId: honor.leftCharacterId ?? honor.LeftCharacterID,
+		rightCharacterId: honor.rightCharacterId ?? honor.RightCharacterID,
+		leftCharacterUrl: toPngImageUrl(honor.leftCharacterUrl ?? honor.LeftCharacterURL),
+		rightCharacterUrl: toPngImageUrl(honor.rightCharacterUrl ?? honor.RightCharacterURL),
+		leftColor: honor.leftColor ?? honor.LeftColor,
+		rightColor: honor.rightColor ?? honor.RightColor,
 	};
 }
 
@@ -821,6 +875,7 @@ Bun.serve({
 					"GET /previews",
 					"GET /preview/:id",
 					"POST /render",
+					"POST /render/chart",
 					"POST /cache/card-thumbnails/preload",
 					"POST /cache/card-thumbnails/status",
 				],
@@ -915,6 +970,35 @@ Bun.serve({
 				return Response.json(mergePreloadStatuses(status, composite));
 			} catch (error) {
 				console.error("[renderer] card thumbnail cache status failed:", error);
+				return Response.json(
+					{
+						error: true,
+						message: error instanceof Error ? error.message : String(error),
+					},
+					{ status: 500 },
+				);
+			}
+		}
+
+		if (url.pathname === "/render/chart" && request.method === "POST") {
+			try {
+				const body = (await request.json()) as ChartRenderRequest;
+				const svg = await svgFromChartRequest(body);
+				const trace = await renderSvgToPngWithTrace(svg, {
+					width: body.width,
+					precision: parsePositiveNumber(body.precision, defaultPrecision),
+				});
+				return new Response(new Uint8Array(trace.png), {
+					headers: {
+						"content-type": "image/png",
+						"cache-control": "no-store",
+						"x-render-total-ms": String(trace.timings.totalMs),
+						"x-render-resvg-ms": String(trace.timings.resvgMs),
+						"x-render-size-bytes": String(trace.sizeBytes),
+					},
+				});
+			} catch (error) {
+				console.error("[renderer] chart render failed:", error);
 				return Response.json(
 					{
 						error: true,

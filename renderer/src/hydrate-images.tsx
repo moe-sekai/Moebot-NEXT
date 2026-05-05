@@ -55,6 +55,18 @@ async function hydrateNode(node: React.ReactNode, stats: ImageHydrationStats): P
     }
   }
 
+  if (typeof node.type === 'string') {
+    for (const propName of ['href', 'xlinkHref', 'data-src']) {
+      const value = props[propName]
+      if (!rendererAssetCache.isRemoteUrl(value)) continue
+      const cached = await rendererAssetCache.getDataUri(value)
+      if (cached.hit && cached.dataUri) {
+        nextProps[propName] = cached.dataUri
+        changed = true
+      }
+    }
+  }
+
   if ('children' in props) {
     const children = props.children as React.ReactNode
     const hydratedChildren = await hydrateNode(children, stats)

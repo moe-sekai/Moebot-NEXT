@@ -1,6 +1,7 @@
-import { getCardThumbnailUrl, getCharacterIconUrl, type AssetSourceType } from '../../shared'
+import { getBondsHonorCharacterUrl, getCardThumbnailUrl, getCharacterIconUrl, type AssetSourceType } from '../../shared'
 import { BaseCard } from './base'
 import { theme } from '../styles/theme'
+import { getLocalFrameAssetDataUri } from '../styles/assets'
 import { SekaiCardThumbnail } from './SekaiCardThumbnail'
 
 export interface ProfileCardProps {
@@ -65,7 +66,33 @@ interface ProfileHonor {
   name?: string
   honorRarity?: string
   assetbundleName?: string
+  imageUrl?: string
+  frameUrl?: string
+  levelIconUrl?: string
+  levelIcon6Url?: string
+  bondsHonorViewType?: string
+  bondsHonorWordId?: number
+  bondsHonorWordAssetbundleName?: string
+  bondsHonorWordUrl?: string
+  leftCharacterId?: number
+  rightCharacterId?: number
+  leftCharacterUrl?: string
+  rightCharacterUrl?: string
+  leftColor?: string
+  rightColor?: string
+  assetSource?: AssetSourceType | string
 }
+
+const DEFAULT_HONOR_FRAME_URLS: Record<string, string | undefined> = {
+  low: getLocalFrameAssetDataUri('frame_degree_m_1.png'),
+  middle: getLocalFrameAssetDataUri('frame_degree_m_2.png'),
+  high: getLocalFrameAssetDataUri('frame_degree_m_3.png'),
+  highest: getLocalFrameAssetDataUri('frame_degree_m_4.png'),
+}
+const DEFAULT_HONOR_LEVEL_ICON_URL = getLocalFrameAssetDataUri('icon_degreeLv.png')
+const DEFAULT_HONOR_LEVEL_ICON6_URL = getLocalFrameAssetDataUri('icon_degreeLv6.png')
+const HONOR_BADGE_WIDTH = 224
+const HONOR_BADGE_HEIGHT = Math.round(HONOR_BADGE_WIDTH * 80 / 380)
 
 interface ProfileDeckCard {
   cardId?: number
@@ -93,8 +120,8 @@ export function ProfileCard({ profile }: ProfileCardProps) {
   const deckCards = profile.deckCards ?? (leader ? [leader] : [])
   const bio = profile.bio ?? profile.signature
   const musicClearCounts = normalizeMusicClearCounts(profile.musicClearCounts ?? [])
-  const characterRanks = (profile.characterRanks ?? []).slice(0, 6)
-  const profileHonors = profile.profileHonors ?? []
+  const characterRanks = profile.characterRanks ?? []
+  const profileHonors = (profile.profileHonors ?? []).map(honor => ({ ...honor, assetSource: source }))
 
   return (
     <BaseCard title={profile.name} subtitle={`UID: ${profile.userId}`} accentColor={theme.colors.accentLight}>
@@ -175,7 +202,7 @@ export function ProfileCard({ profile }: ProfileCardProps) {
           <StatCard label="总综合力" value={profile.totalPower?.toLocaleString() ?? '-'} highlight />
           <StatCard label="MVP" value={profile.stats?.mvpCount?.toLocaleString() ?? '-'} />
           <StatCard label="Super Star" value={profile.stats?.superStarCount?.toLocaleString() ?? '-'} />
-          <StatCard label="挑战 Live" value={profile.challengeLive?.highScore?.toLocaleString() ?? '-'} />
+          {profile.challengeLive && <ChallengeLiveMiniCard challenge={profile.challengeLive} />}
         </div>
 
         {deckCards.length > 0 && (
@@ -199,21 +226,13 @@ export function ProfileCard({ profile }: ProfileCardProps) {
           </div>
         )}
 
-        {(musicClearCounts.length > 0 || characterRanks.length > 0) && (
-          <div style={{ display: 'flex', gap: theme.spacing.md, alignItems: 'stretch' }}>
-            {musicClearCounts.length > 0 && <MusicClearPanel counts={musicClearCounts} />}
-            {characterRanks.length > 0 && <CharacterRankPanel ranks={characterRanks} />}
-          </div>
-        )}
+        {profileHonors.length > 0 && <ProfileHonorPanel honors={profileHonors} />}
 
-        {(profile.challengeLive || profileHonors.length > 0) && (
-          <div style={{ display: 'flex', gap: theme.spacing.md, alignItems: 'stretch' }}>
-            {profile.challengeLive && <ChallengeLivePanel challenge={profile.challengeLive} />}
-            {profileHonors.length > 0 && <ProfileHonorPanel honors={profileHonors} />}
-          </div>
-        )}
+        {musicClearCounts.length > 0 && <MusicClearPanel counts={musicClearCounts} />}
 
-        {profile.honors && profile.honors.length > 0 && (
+        {characterRanks.length > 0 && <CharacterRankPanel ranks={characterRanks} />}
+
+        {profileHonors.length === 0 && profile.honors && profile.honors.length > 0 && (
           <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
             {profile.honors.slice(0, 3).map((honor, index) => (
               <div
@@ -241,36 +260,38 @@ export function ProfileCard({ profile }: ProfileCardProps) {
   )
 }
 
-function ChallengeLivePanel({ challenge }: { challenge: ChallengeLive }) {
+function ChallengeLiveMiniCard({ challenge }: { challenge: ChallengeLive }) {
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
         flex: 1,
-        gap: theme.spacing.sm,
+        gap: 5,
         backgroundColor: theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
-        borderRadius: theme.borderRadius.xl,
+        borderRadius: theme.borderRadius.lg,
         padding: theme.spacing.md,
       }}
     >
-      <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>挑战 Live</span>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: theme.spacing.md, alignItems: 'baseline' }}>
-        <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: 800 }}>{challenge.characterName}</span>
-        <span style={{ display: 'flex', color: theme.colors.accent, fontSize: theme.fontSize.lg, fontWeight: 900 }}>{challenge.highScore.toLocaleString()}</span>
-      </div>
+      <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: 800 }}>挑战 Live · {challenge.characterName}</span>
+      <span style={{ display: 'flex', color: theme.colors.accent, fontSize: theme.fontSize.lg, fontWeight: 900 }}>{challenge.highScore.toLocaleString()}</span>
     </div>
   )
 }
 
 function ProfileHonorPanel({ honors }: { honors: ProfileHonor[] }) {
+  const hasRenderableHonor = honors.some(honor => Boolean(honor.imageUrl) || (honor.honorType === 'bonds' && honor.leftCharacterId && honor.rightCharacterId))
+
+  if (!hasRenderableHonor) {
+    return <ProfileHonorFallbackPanel honors={honors} />
+  }
+
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
-        flex: 1.6,
         gap: theme.spacing.sm,
         backgroundColor: theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
@@ -279,61 +300,223 @@ function ProfileHonorPanel({ honors }: { honors: ProfileHonor[] }) {
       }}
     >
       <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>展示称号</span>
-      <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
-        {honors.slice(0, 3).map((honor) => (
-          <span
-            key={`${honor.seq ?? honor.honorId}`}
-            style={{
-              display: 'flex',
-              padding: '6px 10px',
-              borderRadius: theme.borderRadius.round,
-              backgroundColor: theme.colors.surfaceLight,
-              border: `1px solid ${theme.colors.border}`,
-              color: theme.colors.textSecondary,
-              fontSize: theme.fontSize.xs,
-              fontWeight: 800,
-            }}
-          >
-            {honor.name ?? `称号 #${honor.honorId}`}{honor.level ? ` Lv.${honor.level}` : ''}
-          </span>
+      <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'nowrap', alignItems: 'center' }}>
+        {honors.slice(0, 3).map((honor, index) => (
+          <HonorBadge key={`${honor.seq ?? honor.honorId}-${index}`} honor={honor} />
         ))}
       </div>
     </div>
   )
 }
 
+function ProfileHonorFallbackPanel({ honors }: { honors: ProfileHonor[] }) {
+  return (
+    <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+      {honors.slice(0, 3).map((honor, index) => (
+        <HonorTextFallback key={`${honor.seq ?? honor.honorId}-${index}`} honor={honor} />
+      ))}
+    </div>
+  )
+}
+
+function HonorBadge({ honor }: { honor: ProfileHonor }) {
+  if (honor.honorType === 'bonds' && honor.leftCharacterId && honor.rightCharacterId) {
+    return <BondsHonorBadge honor={honor} />
+  }
+  if (!honor.imageUrl) {
+    return <HonorTextFallback honor={honor} />
+  }
+
+  return (
+    <HonorBadgeFrame honor={honor}>
+      <img src={honor.imageUrl} width={HONOR_BADGE_WIDTH} height={HONOR_BADGE_HEIGHT} style={{ objectFit: 'fill' }} />
+    </HonorBadgeFrame>
+  )
+}
+
+function HonorBadgeFrame({ honor, children }: { honor: ProfileHonor; children: any }) {
+  const scale = HONOR_BADGE_WIDTH / 380
+  const displayLevel = honorLevelDisplay(honor.level)
+  const normalStars = Math.min(displayLevel, 5)
+  const plusStars = Math.max(displayLevel - 5, 0)
+  const frameUrl = DEFAULT_HONOR_FRAME_URLS[honor.honorRarity ?? ''] ?? honor.frameUrl
+  const levelIconUrl = DEFAULT_HONOR_LEVEL_ICON_URL ?? honor.levelIconUrl
+  const levelIcon6Url = DEFAULT_HONOR_LEVEL_ICON6_URL ?? honor.levelIcon6Url
+  const starSize = Math.max(7, Math.round(16 * scale))
+  const starX = Math.round(50 * scale)
+  const starY = HONOR_BADGE_HEIGHT - starSize - 2
+
+  return (
+    <div style={{ display: 'flex', position: 'relative', width: HONOR_BADGE_WIDTH, height: HONOR_BADGE_HEIGHT, overflow: 'hidden', borderRadius: HONOR_BADGE_HEIGHT / 2, flexShrink: 0 }}>
+      {children}
+      {frameUrl && <img src={frameUrl} width={HONOR_BADGE_WIDTH} height={HONOR_BADGE_HEIGHT} style={{ position: 'absolute', left: 0, top: 0, objectFit: 'fill' }} />}
+      {levelIconUrl && normalStars > 0 && Array.from({ length: normalStars }).map((_, i) => (
+        <img key={`lv-${i}`} src={levelIconUrl} width={starSize} height={starSize} style={{ position: 'absolute', left: starX + i * starSize, top: starY }} />
+      ))}
+      {levelIcon6Url && plusStars > 0 && Array.from({ length: plusStars }).map((_, i) => (
+        <img key={`lv6-${i}`} src={levelIcon6Url} width={starSize} height={starSize} style={{ position: 'absolute', left: starX + i * starSize, top: starY }} />
+      ))}
+    </div>
+  )
+}
+
+function BondsHonorBadge({ honor }: { honor: ProfileHonor }) {
+  const leftColor = honor.leftColor ?? theme.colors.accentLight
+  const rightColor = honor.rightColor ?? theme.colors.accentSoft
+  const leftUrl = honor.leftCharacterUrl ?? getBondsHonorCharacterUrl(honor.leftCharacterId!, honorAssetSource(honor))
+  const rightUrl = honor.rightCharacterUrl ?? getBondsHonorCharacterUrl(honor.rightCharacterId!, honorAssetSource(honor))
+  const scale = HONOR_BADGE_WIDTH / 380
+  const maskLeft = Math.round(10 * scale)
+  const maskWidth = Math.round(360 * scale)
+
+  return (
+    <HonorBadgeFrame honor={honor}>
+      <div
+        style={{
+          display: 'flex',
+          position: 'absolute',
+          left: maskLeft,
+          top: 0,
+          width: maskWidth,
+          height: HONOR_BADGE_HEIGHT,
+          borderRadius: HONOR_BADGE_HEIGHT / 2,
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: Math.round(180 * scale), height: HONOR_BADGE_HEIGHT, backgroundColor: leftColor }} />
+        <div style={{ display: 'flex', position: 'absolute', left: Math.round(180 * scale), top: 0, width: Math.round(180 * scale), height: HONOR_BADGE_HEIGHT, backgroundColor: rightColor }} />
+        <div
+          style={{
+            display: 'flex',
+            position: 'absolute',
+            left: Math.round(6 * scale),
+            top: Math.round(6 * scale),
+            width: Math.round(348 * scale),
+            height: Math.round(68 * scale),
+            borderRadius: Math.round(34 * scale),
+            border: `${Math.max(2, Math.round(8 * scale))}px solid #fff`,
+          }}
+        />
+        <img
+          src={leftUrl}
+          width={Math.round(160 * scale)}
+          height={Math.round(136 * scale)}
+          style={{
+            position: 'absolute',
+            left: Math.round(10 * scale),
+            top: Math.round(-43 * scale),
+            objectFit: 'contain',
+          }}
+        />
+        <img
+          src={rightUrl}
+          width={Math.round(160 * scale)}
+          height={Math.round(136 * scale)}
+          style={{
+            position: 'absolute',
+            left: Math.round(190 * scale),
+            top: Math.round(-43 * scale),
+            objectFit: 'contain',
+          }}
+        />
+        {honor.bondsHonorWordUrl && (
+          <img
+            src={honor.bondsHonorWordUrl}
+            width={Math.round(200 * scale)}
+            height={Math.round(44 * scale)}
+            style={{
+              position: 'absolute',
+              left: Math.round(80 * scale),
+              top: Math.round(18 * scale),
+              objectFit: 'contain',
+            }}
+          />
+        )}
+      </div>
+    </HonorBadgeFrame>
+  )
+}
+
+function honorAssetSource(honor: ProfileHonor): AssetSourceType | string {
+  return honor.assetSource ?? 'main-jp'
+}
+
+function HonorTextFallback({ honor }: { honor: ProfileHonor }) {
+  return (
+    <span
+      style={{
+        display: 'flex',
+        padding: '6px 10px',
+        borderRadius: theme.borderRadius.round,
+        backgroundColor: theme.colors.surfaceLight,
+        border: `1px solid ${theme.colors.border}`,
+        color: theme.colors.textSecondary,
+        fontSize: theme.fontSize.xs,
+        fontWeight: 800,
+      }}
+    >
+      {honor.name ?? `称号 #${honor.honorId}`}{honor.level ? ` Lv.${honor.level}` : ''}
+    </span>
+  )
+}
+
+function honorLevelDisplay(level: number | undefined): number {
+  if (!level || level <= 0) return 0
+  return level > 10 ? level - 10 : level
+}
+
 function MusicClearPanel({ counts }: { counts: MusicClearCount[] }) {
+  const maxValue = Math.max(1, ...counts.flatMap(count => [count.liveClear, count.fullCombo, count.allPerfect]))
+
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
-        flex: 1.4,
-        gap: theme.spacing.sm,
+        gap: theme.spacing.md,
         backgroundColor: theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
         borderRadius: theme.borderRadius.xl,
         padding: theme.spacing.md,
       }}
     >
-      <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>通关统计</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>打歌统计</span>
+        <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: 10, fontWeight: 800 }}>Clear / FC / AP</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
         {counts.map((count) => (
-          <div key={count.difficulty} style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
-            <span style={{ display: 'flex', width: 66, color: difficultyColor(count.difficulty), fontSize: theme.fontSize.xs, fontWeight: 900 }}>
-              {difficultyLabel(count.difficulty)}
-            </span>
-            <span style={{ display: 'flex', flex: 1, color: theme.colors.textSecondary, fontSize: 11, fontWeight: 800 }}>
-              Clear {count.liveClear.toLocaleString()}
-            </span>
-            <span style={{ display: 'flex', flex: 1, color: theme.colors.textSecondary, fontSize: 11, fontWeight: 800 }}>
-              FC {count.fullCombo.toLocaleString()}
-            </span>
-            <span style={{ display: 'flex', flex: 1, color: theme.colors.textSecondary, fontSize: 11, fontWeight: 800 }}>
-              AP {count.allPerfect.toLocaleString()}
-            </span>
-          </div>
+          <MusicClearRow key={count.difficulty} count={count} maxValue={maxValue} />
         ))}
+      </div>
+    </div>
+  )
+}
+
+function MusicClearRow({ count, maxValue }: { count: MusicClearCount; maxValue: number }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+      <span style={{ display: 'flex', width: 70, color: difficultyColor(count.difficulty), fontSize: theme.fontSize.xs, fontWeight: 900 }}>
+        {difficultyLabel(count.difficulty)}
+      </span>
+      <MusicStatBar label="Clear" value={count.liveClear} maxValue={maxValue} color={difficultyColor(count.difficulty)} />
+      <MusicStatBar label="FC" value={count.fullCombo} maxValue={maxValue} color={theme.colors.success} />
+      <MusicStatBar label="AP" value={count.allPerfect} maxValue={maxValue} color={theme.colors.warning} />
+    </div>
+  )
+}
+
+function MusicStatBar({ label, value, maxValue, color }: { label: string; value: number; maxValue: number; color: string }) {
+  const width = Math.max(5, Math.round((value / maxValue) * 92))
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+        <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: 9, fontWeight: 800 }}>{label}</span>
+        <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: 9, fontWeight: 900 }}>{value.toLocaleString()}</span>
+      </div>
+      <div style={{ display: 'flex', width: 96, height: 5, borderRadius: theme.borderRadius.round, backgroundColor: theme.colors.surfaceLight, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', width, height: 5, borderRadius: theme.borderRadius.round, backgroundColor: color }} />
       </div>
     </div>
   )
@@ -345,25 +528,54 @@ function CharacterRankPanel({ ranks }: { ranks: CharacterRank[] }) {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        flex: 1,
-        gap: theme.spacing.sm,
+        gap: theme.spacing.md,
         backgroundColor: theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
         borderRadius: theme.borderRadius.xl,
         padding: theme.spacing.md,
       }}
     >
-      <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>角色等级 TOP</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>角色等级</span>
+        <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: 10, fontWeight: 800 }}>{ranks.length} CHARACTERS</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm }}>
         {ranks.map((rank) => (
-          <div key={rank.characterId} style={{ display: 'flex', justifyContent: 'space-between', gap: theme.spacing.sm }}>
-            <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: 800, maxWidth: 130 }}>{rank.characterName}</span>
-            <span style={{ display: 'flex', color: theme.colors.accent, fontSize: theme.fontSize.xs, fontWeight: 900 }}>Lv.{rank.rank}</span>
-          </div>
+          <CharacterRankBadge key={rank.characterId} rank={rank} />
         ))}
       </div>
     </div>
   )
+}
+
+function CharacterRankBadge({ rank }: { rank: CharacterRank }) {
+  const iconUrl = getCharacterIconUrl(rank.characterId)
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        width: 128,
+        padding: 6,
+        borderRadius: theme.borderRadius.lg,
+        backgroundColor: theme.colors.surfaceLight,
+        border: `1px solid ${theme.colors.border}`,
+      }}
+    >
+      <img src={iconUrl} width={32} height={32} style={{ objectFit: 'contain', borderRadius: 16, flexShrink: 0 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+        <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: 10, fontWeight: 800 }}>{shortCharacterName(rank.characterName)}</span>
+        <span style={{ display: 'flex', color: theme.colors.accent, fontSize: theme.fontSize.xs, fontWeight: 900 }}>Lv.{rank.rank}</span>
+      </div>
+    </div>
+  )
+}
+
+function shortCharacterName(name: string): string {
+  if (!name) return '-'
+  return name.length > 5 ? name.slice(0, 5) : name
 }
 
 function DeckCard({ card, source, leader }: { card: ProfileDeckCard; source: AssetSourceType | string; leader?: boolean }) {

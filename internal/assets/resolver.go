@@ -109,6 +109,30 @@ func (r *Resolver) GetHonorBgURL(assetBundleName string, mainOrSub string) strin
 	return fmt.Sprintf("%s/honor/%s/degree_%s.png", r.base(), assetBundleName, mainOrSub)
 }
 
+// GetHonorFrameURL returns the default honor frame URL for a rarity.
+func (r *Resolver) GetHonorFrameURL(rarity string, mainOrSub string) string {
+	return fmt.Sprintf("%s/honor/frame/frame_degree_%s_%d.png", r.base(), honorFrameSize(mainOrSub), honorRarityNumber(rarity))
+}
+
+// GetHonorLevelIconURL returns a profile honor level-star icon URL.
+func (r *Resolver) GetHonorLevelIconURL(sixPlus bool) string {
+	name := "icon_degreeLv"
+	if sixPlus {
+		name = "icon_degreeLv6"
+	}
+	return fmt.Sprintf("%s/honor/frame/%s.png", r.base(), name)
+}
+
+// GetBondsHonorCharacterURL returns the bonds honor SD character URL.
+func (r *Resolver) GetBondsHonorCharacterURL(characterID int) string {
+	return fmt.Sprintf("%s/bonds_honor/character/chr_sd_%02d_01.png", r.base(), characterID)
+}
+
+// GetBondsHonorWordURL returns the bonds honor word image URL.
+func (r *Resolver) GetBondsHonorWordURL(assetBundleName string) string {
+	return fmt.Sprintf("%s/bonds_honor/word/%s_01.png", r.base(), assetBundleName)
+}
+
 // GetStampURL returns the stamp / sticker image URL.
 func (r *Resolver) GetStampURL(assetBundleName string) string {
 	return fmt.Sprintf("%s/stamp/%s/%s.png", r.base(), assetBundleName, assetBundleName)

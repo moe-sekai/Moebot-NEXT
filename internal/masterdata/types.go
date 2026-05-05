@@ -30,6 +30,8 @@ type MasterData struct {
 	Skills                            []SkillInfo                        `json:"skills"`
 	CharacterUnits                    []GameCharacterUnit                `json:"gameCharacterUnits"`
 	Honors                            []HonorInfo                        `json:"honors"`
+	BondsHonors                       []BondsHonorInfo                   `json:"bondsHonors"`
+	BondsHonorWords                   []BondsHonorWordInfo               `json:"bondsHonorWords"`
 	MusicVocals                       []MusicVocal                       `json:"musicVocals"`
 	ChallengeLiveHighScoreRewards     []ChallengeLiveHighScoreReward     `json:"challengeLiveHighScoreRewards"`
 	ResourceBoxes                     []ResourceBox                      `json:"resourceBoxes"`
@@ -447,10 +449,49 @@ type GameCharacterUnit struct {
 
 // HonorInfo represents an achievement / profile title.
 type HonorInfo struct {
+	ID              int          `json:"id"`
+	GroupID         int          `json:"groupId"`
+	HonorRarity     string       `json:"honorRarity"` // low, middle, high, highest
+	Name            string       `json:"name"`
+	AssetbundleName string       `json:"assetbundleName"`
+	HonorType       string       `json:"honorType"`
+	Levels          []HonorLevel `json:"levels"`
+}
+
+// HonorLevel represents level-specific metadata for scalable profile honors.
+type HonorLevel struct {
+	HonorID         int    `json:"honorId"`
+	Level           int    `json:"level"`
+	Bonus           int    `json:"bonus"`
+	Description     string `json:"description"`
+	HonorRarity     string `json:"honorRarity,omitempty"`
+	AssetbundleName string `json:"assetbundleName,omitempty"`
+}
+
+// BondsHonorInfo represents a kizuna / bonds profile title.
+type BondsHonorInfo struct {
+	ID                   int               `json:"id"`
+	Seq                  int               `json:"seq"`
+	BondsGroupID         int               `json:"bondsGroupId"`
+	GameCharacterUnitID1 int               `json:"gameCharacterUnitId1"`
+	GameCharacterUnitID2 int               `json:"gameCharacterUnitId2"`
+	HonorRarity          string            `json:"honorRarity"`
+	Name                 string            `json:"name"`
+	Levels               []BondsHonorLevel `json:"levels"`
+}
+
+type BondsHonorLevel struct {
+	ID           int    `json:"id"`
+	BondsHonorID int    `json:"bondsHonorId"`
+	Level        int    `json:"level"`
+	Description  string `json:"description"`
+}
+
+type BondsHonorWordInfo struct {
 	ID              int    `json:"id"`
-	GroupID         int    `json:"groupId"`
-	HonorRarity     string `json:"honorRarity"` // low, middle, high, highest
-	Name            string `json:"name"`
+	Seq             int    `json:"seq"`
+	BondsGroupID    int    `json:"bondsGroupId"`
 	AssetbundleName string `json:"assetbundleName"`
-	HonorType       string `json:"honorType"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
 }

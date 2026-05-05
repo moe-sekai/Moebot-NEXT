@@ -455,14 +455,14 @@ func musicHasDifficulty(store *masterdata.Store, musicID int, diff string) bool 
 	return false
 }
 
-func selectedDifficultyPayload(payload renderer.MusicDetailPayload, diff string) renderer.MusicDetailPayload {
+func selectedDifficultyPayload(payload renderer.MusicDetailPayload, diff string, chartSourceURL string) renderer.MusicDetailPayload {
 	if diff == "" {
-		return payload
+		diff = "master"
 	}
 	for _, d := range payload.Difficulties {
 		if d.MusicDifficulty == diff || d.Difficulty == diff {
 			payload.SelectedDifficulty = diff
-			payload.ChartURL = fmt.Sprintf("https://charts-new.unipjsk.com/moe/svg/%d/%s.svg", payload.ID, diff)
+			payload.ChartURL = assets.ChartSourceURL(chartSourceURL, payload.ID, diff)
 			break
 		}
 	}

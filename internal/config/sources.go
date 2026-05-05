@@ -20,9 +20,10 @@ const (
 	SuiteModeLocal    = SuiteModeHaruki
 	SuiteModeMoeSekai = SuiteModeHaruki
 
-	DefaultSuiteAPIURL   = "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
-	DefaultSekaiAPIURL   = "https://seka-api.exmeaning.com"
-	DefaultRankingAPIURL = "https://rks.exmeaning.com"
+	DefaultSuiteAPIURL    = "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
+	DefaultSekaiAPIURL    = "https://seka-api.exmeaning.com"
+	DefaultRankingAPIURL  = "https://rks.exmeaning.com"
+	DefaultChartSourceURL = "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
 
 	MasterdataSourceMoeSekai = "moesekai"
 	MasterdataSourceHaruki   = "haruki"
@@ -650,6 +651,9 @@ func NormalizeConfig(cfg *Config) {
 		cfg.SuiteAPI.Timeout = 10
 	}
 	cfg.SuiteAPI.DefaultMode = SuiteModeHaruki
+	if strings.TrimSpace(cfg.Assets.ChartSourceURL) == "" {
+		cfg.Assets.ChartSourceURL = DefaultChartSourceURL
+	}
 
 	defaults := DefaultGameServerProfiles()
 	if cfg.GameServers == nil {
@@ -755,10 +759,11 @@ func defaultGameServerProfile(region string, enabled bool) GameServerConfig {
 			Timeout: 10,
 		},
 		Assets: AssetsConfig{
-			Region:        region,
-			Mirror:        AssetMirrorMain,
-			MusicAliasURL: "https://moe.exmeaning.com/data/music_alias/music_aliases.json",
-			StickerPath:   "./assets/stickers",
+			Region:         region,
+			Mirror:         AssetMirrorMain,
+			MusicAliasURL:  "https://moe.exmeaning.com/data/music_alias/music_aliases.json",
+			ChartSourceURL: DefaultChartSourceURL,
+			StickerPath:    "./assets/stickers",
 		},
 	}
 	if region == RegionJP || region == RegionCN {
@@ -785,7 +790,7 @@ func hasGameServerOverrides(cfg *Config) bool {
 		return false
 	}
 	for _, profile := range cfg.GameServers {
-		if profile.Enabled != nil || profile.Masterdata.Source != "" || profile.Masterdata.Region != "" || profile.Masterdata.URL != "" || profile.Masterdata.LocalPath != "" || profile.Assets.Source != "" || profile.Assets.Region != "" || profile.Assets.BaseURL != "" || profile.Assets.MusicAliasURL != "" || profile.SekaiAPI.Region != "" || profile.SekaiAPI.BaseURL != "" || len(profile.SekaiAPI.Headers) > 0 || profile.SuiteAPI.URL != "" || len(profile.SuiteAPI.Headers) > 0 || profile.SuiteAPI.EnabledSet || profile.RankingAPI.Region != "" || profile.RankingAPI.BaseURL != "" {
+		if profile.Enabled != nil || profile.Masterdata.Source != "" || profile.Masterdata.Region != "" || profile.Masterdata.URL != "" || profile.Masterdata.LocalPath != "" || profile.Assets.Source != "" || profile.Assets.Region != "" || profile.Assets.BaseURL != "" || profile.Assets.MusicAliasURL != "" || profile.Assets.ChartSourceURL != "" || profile.SekaiAPI.Region != "" || profile.SekaiAPI.BaseURL != "" || len(profile.SekaiAPI.Headers) > 0 || profile.SuiteAPI.URL != "" || len(profile.SuiteAPI.Headers) > 0 || profile.SuiteAPI.EnabledSet || profile.RankingAPI.Region != "" || profile.RankingAPI.BaseURL != "" {
 			return true
 		}
 	}
@@ -859,6 +864,12 @@ func mergeAssetsProfile(base AssetsConfig, override AssetsConfig, region string)
 	}
 	if override.MusicAliasURL != "" {
 		base.MusicAliasURL = override.MusicAliasURL
+	}
+	if override.ChartSourceURL != "" {
+		base.ChartSourceURL = override.ChartSourceURL
+	}
+	if base.ChartSourceURL == "" {
+		base.ChartSourceURL = DefaultChartSourceURL
 	}
 	if override.StickerPath != "" {
 		base.StickerPath = override.StickerPath

@@ -38,6 +38,13 @@ type RenderRequest struct {
 	Precision float64     `json:"precision,omitempty"`
 }
 
+// ChartRenderRequest asks the renderer to convert one remote chart SVG into PNG directly.
+type ChartRenderRequest struct {
+	URL       string  `json:"url"`
+	Width     int     `json:"width,omitempty"`
+	Precision float64 `json:"precision,omitempty"`
+}
+
 // PreviewMeta describes a sample Satori template exposed by the renderer.
 type PreviewMeta struct {
 	ID           string `json:"id"`
@@ -233,6 +240,44 @@ func (c *Client) RenderWithTrace(req RenderRequest) (*PreviewRenderResult, error
 		ImageCacheMisses: resp.Header.Get("x-render-image-cache-misses"),
 		ImageCacheErrors: resp.Header.Get("x-render-image-cache-errors"),
 		StatusCode:       resp.StatusCode,
+	}, nil
+}
+
+// RenderChartURL converts a chart SVG URL to PNG directly through resvg.
+func (c *Client) RenderChartURL(chartURL string) ([]byte, error) {
+	result, err := c.RenderChartURLWithTrace(chartURL, 0)
+	if err != nil {
+		return nil, err
+	}
+	return result.PNG, nil
+}
+
+// RenderChartURLWithTrace converts a chart SVG URL to PNG and preserves renderer timing headers.
+func (c *Client) RenderChartURLWithTrace(chartURL string, width int) (*PreviewRenderResult, error) {
+	req := ChartRenderRequest{URL: chartURL, Width: width, Precision: c.precision}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal chart render request: %w", err)
+	}
+	resp, err := c.httpClient.Post(c.baseURL+"/render/chart", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("chart render request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("renderer returned %d: %s", resp.StatusCode, string(errBody))
+	}
+	png, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read rendered chart image: %w", err)
+	}
+	return &PreviewRenderResult{
+		PNG:        png,
+		TotalMS:    resp.Header.Get("x-render-total-ms"),
+		ResvgMS:    resp.Header.Get("x-render-resvg-ms"),
+		SizeBytes:  resp.Header.Get("x-render-size-bytes"),
+		StatusCode: resp.StatusCode,
 	}, nil
 }
 

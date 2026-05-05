@@ -4,8 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"moebot-next/internal/assets"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/renderer"
 )
 
 func TestParseCardPrimaryAndPresetAliases(t *testing.T) {
@@ -52,7 +54,7 @@ func TestSearchAndBuildCardListParsesLunabotStyleFilters(t *testing.T) {
 		{ID: 21, CharacterID: 5, CardRarityType: "rarity_4", Attr: "cool", Prefix: "实乃理常驻", ReleaseAt: now - 1, SupportUnit: "none"},
 	}, CardSupplies: []masterdata.CardSupplyInfo{{ID: 1, CardSupplyType: "term_limited"}}})
 
-	rows, selected := searchAndBuild(BaseDefinitions()[0], store, nil, "khn 四星")
+	rows, selected := searchAndBuild(BaseDefinitions()[0], store, nil, nil, "", "khn 四星")
 	if selected == nil || selected.Type != "card_list" {
 		t.Fatalf("selected = %#v, want card_list", selected)
 	}
@@ -60,7 +62,7 @@ func TestSearchAndBuildCardListParsesLunabotStyleFilters(t *testing.T) {
 		t.Fatalf("rows = %#v, want only khn rarity_4", rows)
 	}
 
-	rows, selected = searchAndBuild(BaseDefinitions()[0], store, nil, "mnr 4 蓝 限定")
+	rows, selected = searchAndBuild(BaseDefinitions()[0], store, nil, nil, "", "mnr 4 蓝 限定")
 	if selected == nil || selected.Type != "card_list" {
 		t.Fatalf("selected = %#v, want card_list", selected)
 	}
@@ -150,6 +152,130 @@ func TestParseInlineSkLineDoesNotMatchSk(t *testing.T) {
 	}
 	if parsed.CommandText != "sk线" || parsed.Argument != "100" {
 		t.Fatalf("parsed command = %q argument = %q", parsed.CommandText, parsed.Argument)
+	}
+}
+
+func TestParseMusicInfoPresetAliases(t *testing.T) {
+	service := NewService("/", nil, nil, nil, nil)
+	for _, input := range []string{"/songinfo 谷歌", "/musicinfo 谷歌", "/song 谷歌", "/music 谷歌"} {
+		parsed := service.Parse(input)
+		if parsed.Definition == nil || parsed.Definition.ID != "music-detail" {
+			t.Fatalf("%s parsed definition = %#v, want music-detail", input, parsed.Definition)
+		}
+		if parsed.MatchSource != MatchPresetAlias {
+			t.Fatalf("%s source = %q, want preset alias", input, parsed.MatchSource)
+		}
+	}
+}
+
+func TestSearchAndBuildMusicAliasListPayload(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{Musics: []masterdata.MusicInfo{
+		{ID: 1, Title: "Alpha"},
+		{ID: 2, Title: "Beta"},
+	}, MusicDifficulties: []masterdata.MusicDifficulty{
+		{MusicID: 1, MusicDifficulty: "master", PlayLevel: 30},
+		{MusicID: 2, MusicDifficulty: "master", PlayLevel: 31},
+	}})
+	aliases := map[int]assets.MusicAlias{
+		1: {MusicID: 1, Aliases: []string{"同名别名"}},
+		2: {MusicID: 2, Aliases: []string{"同名别名"}},
+	}
+	var def Definition
+	for _, candidate := range BaseDefinitions() {
+		if candidate.ID == "music-detail" {
+			def = candidate
+			break
+		}
+	}
+
+	rows, selected := searchAndBuild(def, store, nil, aliases, "", "同名别名")
+	if selected == nil || selected.Type != "music_list" {
+		t.Fatalf("selected = %#v, want music_list", selected)
+	}
+	payload, ok := selected.Payload.(renderer.MusicListPayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want MusicListPayload", selected.Payload)
+	}
+	if len(rows) != 2 || payload.Total != 2 || len(payload.Musics) != 2 {
+		t.Fatalf("rows=%d total=%d payload musics=%d, want 2/2/2", len(rows), payload.Total, len(payload.Musics))
+	}
+}
+
+func TestSearchAndBuildChartPayloadUsesChartSource(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{Musics: []masterdata.MusicInfo{{ID: 739, Title: "Chart Song"}}, MusicDifficulties: []masterdata.MusicDifficulty{
+		{MusicID: 739, MusicDifficulty: "easy", PlayLevel: 5},
+		{MusicID: 739, MusicDifficulty: "normal", PlayLevel: 12},
+		{MusicID: 739, MusicDifficulty: "hard", PlayLevel: 18},
+		{MusicID: 739, MusicDifficulty: "expert", PlayLevel: 28},
+		{MusicID: 739, MusicDifficulty: "master", PlayLevel: 32},
+		{MusicID: 739, MusicDifficulty: "append", PlayLevel: 34},
+	}})
+	var def Definition
+	for _, candidate := range BaseDefinitions() {
+		if candidate.ID == "chart-detail" {
+			def = candidate
+			break
+		}
+	}
+
+	_, selected := searchAndBuild(def, store, nil, nil, "https://charts.example.test/{id}/{difficulty}.svg", "739")
+	if selected == nil {
+		t.Fatal("selected is nil")
+	}
+	payload, ok := selected.Payload.(renderer.MusicDetailPayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want MusicDetailPayload", selected.Payload)
+	}
+	if payload.ChartURL != "https://charts.example.test/739/master.svg" || payload.SelectedDifficulty != "master" {
+		t.Fatalf("chart url=%q selected=%q", payload.ChartURL, payload.SelectedDifficulty)
+	}
+
+	for _, tc := range []struct {
+		argument string
+		wantDiff string
+	}{
+		{argument: "739 ex", wantDiff: "expert"},
+		{argument: "739 expert", wantDiff: "expert"},
+		{argument: "739 ma", wantDiff: "master"},
+		{argument: "739 mas", wantDiff: "master"},
+		{argument: "739 master", wantDiff: "master"},
+		{argument: "739 apd", wantDiff: "append"},
+		{argument: "739 ap", wantDiff: "append"},
+		{argument: "739 append", wantDiff: "append"},
+		{argument: "739 hd", wantDiff: "hard"},
+		{argument: "739 hard", wantDiff: "hard"},
+		{argument: "739 nm", wantDiff: "normal"},
+		{argument: "739 normal", wantDiff: "normal"},
+		{argument: "739 ez", wantDiff: "easy"},
+		{argument: "739 easy", wantDiff: "easy"},
+	} {
+		_, selected := searchAndBuild(def, store, nil, nil, "https://charts.example.test/{id}/{difficulty}.svg", tc.argument)
+		if selected == nil {
+			t.Fatalf("%s selected is nil", tc.argument)
+		}
+		payload, ok := selected.Payload.(renderer.MusicDetailPayload)
+		if !ok {
+			t.Fatalf("%s payload type = %T, want MusicDetailPayload", tc.argument, selected.Payload)
+		}
+		wantURL := "https://charts.example.test/739/" + tc.wantDiff + ".svg"
+		if payload.SelectedDifficulty != tc.wantDiff || payload.ChartURL != wantURL {
+			t.Fatalf("%s selected=%q url=%q, want %s %s", tc.argument, payload.SelectedDifficulty, payload.ChartURL, tc.wantDiff, wantURL)
+		}
+	}
+}
+
+func TestParseChartChinesePresetAliases(t *testing.T) {
+	service := NewService("/", nil, nil, nil, nil)
+	for _, input := range []string{"/谱面 739", "/谱面预览 master 739"} {
+		parsed := service.Parse(input)
+		if parsed.Definition == nil || parsed.Definition.ID != "chart-detail" {
+			t.Fatalf("%s parsed definition = %#v, want chart-detail", input, parsed.Definition)
+		}
+		if parsed.MatchSource != MatchPresetAlias {
+			t.Fatalf("%s source = %q, want preset alias", input, parsed.MatchSource)
+		}
 	}
 }
 

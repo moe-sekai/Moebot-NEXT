@@ -148,14 +148,15 @@ type CacheConfig struct {
 
 // AssetsConfig holds asset/resource settings.
 type AssetsConfig struct {
-	Source        string `yaml:"source"`     // moesekai / sekai_best / custom
-	Region        string `yaml:"region"`     // cn / jp / tw / kr / en
-	Mirror        string `yaml:"mirror"`     // main / backup / overseas / overseas_backup
-	CDNSource     string `yaml:"cdn_source"` // legacy mirror key or custom URL
-	BaseURL       string `yaml:"base_url"`
-	CustomBaseURL string `yaml:"custom_base_url"`
-	MusicAliasURL string `yaml:"music_alias_url"`
-	StickerPath   string `yaml:"sticker_path"`
+	Source         string `yaml:"source"`     // moesekai / sekai_best / custom
+	Region         string `yaml:"region"`     // cn / jp / tw / kr / en
+	Mirror         string `yaml:"mirror"`     // main / backup / overseas / overseas_backup
+	CDNSource      string `yaml:"cdn_source"` // legacy mirror key or custom URL
+	BaseURL        string `yaml:"base_url"`
+	CustomBaseURL  string `yaml:"custom_base_url"`
+	MusicAliasURL  string `yaml:"music_alias_url"`
+	ChartSourceURL string `yaml:"chart_source_url"`
+	StickerPath    string `yaml:"sticker_path"`
 }
 
 // LogConfig holds logging settings.
@@ -227,10 +228,11 @@ func DefaultConfig() *Config {
 			},
 		},
 		Assets: AssetsConfig{
-			Mirror:        AssetMirrorMain,
-			CDNSource:     "cn_main",
-			MusicAliasURL: "https://moe.exmeaning.com/data/music_alias/music_aliases.json",
-			StickerPath:   "./assets/stickers",
+			Mirror:         AssetMirrorMain,
+			CDNSource:      "cn_main",
+			MusicAliasURL:  "https://moe.exmeaning.com/data/music_alias/music_aliases.json",
+			ChartSourceURL: DefaultChartSourceURL,
+			StickerPath:    "./assets/stickers",
 		},
 		Log: LogConfig{
 			Level:  "info",

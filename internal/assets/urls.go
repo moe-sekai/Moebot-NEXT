@@ -115,6 +115,26 @@ func trainingSuffix(trained bool) string {
 	return "normal"
 }
 
+func honorRarityNumber(rarity string) int {
+	switch rarity {
+	case "middle":
+		return 2
+	case "high":
+		return 3
+	case "highest":
+		return 4
+	default:
+		return 1
+	}
+}
+
+func honorFrameSize(mainOrSub string) string {
+	if mainOrSub == "sub" || mainOrSub == "s" {
+		return "s"
+	}
+	return "m"
+}
+
 // cardThumbnailBase normalizes card thumbnails to JP assets. Card thumbnail
 // filenames are shared across regions and JP is the fastest-updating superset,
 // so CN/TW/KR/EN commands can reuse one JP thumbnail cache.
@@ -217,6 +237,21 @@ func GetUnitLogoURL(unitID UnitID) string {
 func GetHonorBgURL(assetBundleName string, mainOrSub string) string {
 	return fmt.Sprintf("%s/honor/%s/degree_%s.png",
 		cdnBase(), assetBundleName, mainOrSub)
+}
+
+// GetHonorFrameURL returns the default honor frame URL for a rarity.
+func GetHonorFrameURL(rarity string, mainOrSub string) string {
+	return fmt.Sprintf("%s/honor/frame/frame_degree_%s_%d.png",
+		cdnBase(), honorFrameSize(mainOrSub), honorRarityNumber(rarity))
+}
+
+// GetHonorLevelIconURL returns a profile honor level-star icon URL.
+func GetHonorLevelIconURL(sixPlus bool) string {
+	name := "icon_degreeLv"
+	if sixPlus {
+		name = "icon_degreeLv6"
+	}
+	return fmt.Sprintf("%s/honor/frame/%s.png", cdnBase(), name)
 }
 
 // GetStampURL returns the stamp / sticker image URL.

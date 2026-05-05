@@ -10,6 +10,7 @@ import (
 	"moebot-next/internal/assets"
 	"moebot-next/internal/bot"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/musicsearch"
 	"moebot-next/internal/renderer"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
@@ -63,13 +64,13 @@ func registerMusicDetailCommand(deps *Deps, command string) {
 				return
 			}
 
-			result := searchMusicAdvanced(runtime.Store, runtime.MusicAliases, keyword, "")
-			if result.Music == nil {
-				ctx.SendChain(message.Text(result.Message))
+			result := musicsearch.Search(runtime.Store, runtime.MusicAliases, keyword, musicsearch.Options{Limit: musicsearch.DefaultListLimit})
+			if result.Mode == musicsearch.ModeList {
+				sendMusicList(ctx, deps, runtime.Store, runtime.Assets, recordCommand, runtime.Region, start, musicListTitleForQuery(keyword, "曲目候选列表"), keyword, result.Musics, result.Page, result.TotalPages, result.Total)
 				return
 			}
-			if len(result.Musics) > 1 {
-				sendMusicList(ctx, deps, runtime.Store, runtime.Assets, recordCommand, runtime.Region, start, "活动关联曲目", keyword, result.Musics, 1, 1, len(result.Musics))
+			if result.Music == nil {
+				ctx.SendChain(message.Text(result.Message))
 				return
 			}
 			payload := renderer.BuildMusicDetailPayloadWithAssets(runtime.Store, *result.Music, runtime.Assets)
@@ -123,15 +124,26 @@ func registerChartCommand(deps *Deps) {
 				ctx.SendChain(message.Text(fmt.Sprintf("请输入要搜索的谱面关键词~\n例: /%s master 千本樱", commandName)))
 				return
 			}
-			result := searchMusicAdvanced(runtime.Store, runtime.MusicAliases, query, options.Difficulty)
+			result := musicsearch.Search(runtime.Store, runtime.MusicAliases, query, musicsearch.Options{Difficulty: options.Difficulty, Limit: musicsearch.DefaultListLimit})
+			if result.Mode == musicsearch.ModeList {
+				sendMusicList(ctx, deps, runtime.Store, runtime.Assets, recordCommand, runtime.Region, start, musicListTitleForQuery(query, "谱面候选列表"), query, result.Musics, result.Page, result.TotalPages, result.Total)
+				return
+			}
 			if result.Music == nil {
 				ctx.SendChain(message.Text(result.Message))
 				return
 			}
 
 			payload := renderer.BuildMusicDetailPayloadWithAssets(runtime.Store, *result.Music, runtime.Assets)
-			payload = selectedDifficultyPayload(payload, options.Difficulty)
+			payload = selectedDifficultyPayload(payload, options.Difficulty, runtime.Profile.Assets.ChartSourceURL)
 			if deps.Renderer != nil && deps.Renderer.Health() {
+				if payload.ChartURL != "" {
+					if png, err := deps.Renderer.RenderChartURL(payload.ChartURL); err == nil {
+						ctx.SendChain(message.ImageBytes(png))
+						bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
+						return
+					}
+				}
 				png, err := deps.Renderer.Render(buildChartRenderRequest(payload))
 				if err == nil {
 					if result.Message != "" {
@@ -156,7 +168,17 @@ func registerChartCommand(deps *Deps) {
 
 func sendMusicList(ctx *zero.Ctx, deps *Deps, store *masterdata.Store, resolver *assets.Resolver, recordCommand string, region string, start time.Time, title string, subtitle string, musics []masterdata.MusicInfo, page int, totalPages int, total int) {
 	assetResolver := resolver
-	payload := renderer.BuildMusicListPayloadWithAssets(title, subtitle, musics, store, assetResolver, page, totalPages, total)
+	if total <= 0 {
+		total = len(musics)
+	}
+	if page <= 0 {
+		page = 1
+	}
+	if totalPages <= 0 {
+		totalPages = musicsearch.TotalPages(total, musicsearch.DefaultListLimit)
+	}
+	shown := musicsearch.LimitMusics(musics, musicsearch.DefaultListLimit)
+	payload := renderer.BuildMusicListPayloadWithAssets(title, subtitle, shown, store, assetResolver, page, totalPages, total)
 	if deps.Renderer != nil && deps.Renderer.Health() {
 		png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "music_list", Data: payload})
 		if err == nil {
@@ -167,6 +189,13 @@ func sendMusicList(ctx *zero.Ctx, deps *Deps, store *masterdata.Store, resolver 
 	}
 	ctx.SendChain(message.Text(formatMusicListText(payload)))
 	bot.RecordCommandRegion(deps.DB, recordCommand, region, ctx, start)
+}
+
+func musicListTitleForQuery(query string, fallback string) string {
+	if strings.HasPrefix(musicsearch.Normalize(query), "event") {
+		return "活动关联曲目"
+	}
+	return fallback
 }
 
 func filterLeakMusics(musics []masterdata.MusicInfo) []masterdata.MusicInfo {

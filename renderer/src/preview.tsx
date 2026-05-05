@@ -17,6 +17,7 @@ import { EventInfo } from "./templates/EventInfo";
 import { EventList } from "./templates/EventList";
 import { RankingList } from "./templates/RankingList";
 import { ProfileCard } from "./templates/ProfileCard";
+import { getBondsHonorCharacterUrl, getHonorBgUrl, getHonorFrameUrl, getHonorLevelIconUrl } from "../shared";
 import { HelpCard } from "./templates/HelpCard";
 import { GachaInfo } from "./templates/GachaInfo";
 import { GachaList } from "./templates/GachaList";
@@ -642,9 +643,50 @@ function createPreviewElement(id: string) {
 							superStarCount: 567,
 						},
 						deckCards: createDeckPreviewCards(),
-						honors: [
-							{ honorId: 1, name: "活动 TOP100", level: 5 },
-							{ honorId: 2, name: "皆传", level: 12 },
+						characterRanks: [
+							{ characterId: 1, characterName: "一歌", rank: 72 },
+							{ characterId: 20, characterName: "瑞希", rank: 68 },
+							{ characterId: 9, characterName: "遥", rank: 64 },
+							{ characterId: 14, characterName: "杏", rank: 58 },
+							{ characterId: 17, characterName: "司", rank: 55 },
+							{ characterId: 3, characterName: "穗波", rank: 51 },
+						],
+						profileHonors: [
+							{
+								honorId: 1,
+								name: "一歌ファン",
+								level: 5,
+								honorRarity: "low",
+								assetbundleName: "honor_0001",
+								imageUrl: getHonorBgUrl("honor_0001", false, "main-jp"),
+								frameUrl: getHonorFrameUrl("low", false, "main-jp"),
+								levelIconUrl: getHonorLevelIconUrl("main-jp"),
+								levelIcon6Url: getHonorLevelIconUrl("main-jp").replace("icon_degreeLv.png", "icon_degreeLv6.png"),
+							},
+							{
+								honorId: 79,
+								name: "皆传",
+								level: 12,
+								honorRarity: "highest",
+								assetbundleName: "honor_0034",
+								imageUrl: getHonorBgUrl("honor_0034", false, "main-jp"),
+								frameUrl: getHonorFrameUrl("highest", false, "main-jp"),
+								levelIconUrl: getHonorLevelIconUrl("main-jp"),
+								levelIcon6Url: getHonorLevelIconUrl("main-jp").replace("icon_degreeLv.png", "icon_degreeLv6.png"),
+							},
+							{
+								honorId: 101201,
+								honorType: "bonds",
+								name: "羁绊称号",
+								level: 4,
+								honorRarity: "high",
+								leftCharacterId: 1,
+								rightCharacterId: 20,
+								leftCharacterUrl: getBondsHonorCharacterUrl(1, "main-jp"),
+								rightCharacterUrl: getBondsHonorCharacterUrl(20, "main-jp"),
+								leftColor: "#33aaee",
+								rightColor: "#ddaacc",
+							},
 						],
 					}}
 				/>

@@ -655,13 +655,27 @@ type ChallengeLivePayload struct {
 }
 
 type ProfileHonorPayload struct {
-	Seq             int    `json:"seq"`
-	HonorType       string `json:"honorType,omitempty"`
-	HonorID         int    `json:"honorId"`
-	Level           int    `json:"level"`
-	Name            string `json:"name,omitempty"`
-	HonorRarity     string `json:"honorRarity,omitempty"`
-	AssetbundleName string `json:"assetbundleName,omitempty"`
+	Seq                           int    `json:"seq"`
+	HonorType                     string `json:"honorType,omitempty"`
+	HonorID                       int    `json:"honorId"`
+	Level                         int    `json:"level"`
+	Name                          string `json:"name,omitempty"`
+	HonorRarity                   string `json:"honorRarity,omitempty"`
+	AssetbundleName               string `json:"assetbundleName,omitempty"`
+	ImageURL                      string `json:"imageUrl,omitempty"`
+	FrameURL                      string `json:"frameUrl,omitempty"`
+	LevelIconURL                  string `json:"levelIconUrl,omitempty"`
+	LevelIcon6URL                 string `json:"levelIcon6Url,omitempty"`
+	BondsHonorViewType            string `json:"bondsHonorViewType,omitempty"`
+	BondsHonorWordID              int    `json:"bondsHonorWordId,omitempty"`
+	BondsHonorWordAssetbundleName string `json:"bondsHonorWordAssetbundleName,omitempty"`
+	BondsHonorWordURL             string `json:"bondsHonorWordUrl,omitempty"`
+	LeftCharacterID               int    `json:"leftCharacterId,omitempty"`
+	RightCharacterID              int    `json:"rightCharacterId,omitempty"`
+	LeftCharacterURL              string `json:"leftCharacterUrl,omitempty"`
+	RightCharacterURL             string `json:"rightCharacterUrl,omitempty"`
+	LeftColor                     string `json:"leftColor,omitempty"`
+	RightColor                    string `json:"rightColor,omitempty"`
 }
 
 type ProfileDeckCardPayload struct {
@@ -1095,16 +1109,20 @@ func BuildProfileCardPayloadWithAssets(store *masterdata.Store, profile sekai.Pr
 	}
 	for _, honor := range profile.ProfileHonors {
 		honorPayload := ProfileHonorPayload{
-			Seq:       honor.Seq,
-			HonorType: honor.HonorType,
-			HonorID:   honor.HonorID,
-			Level:     honor.Level,
+			Seq:                honor.Seq,
+			HonorType:          honor.HonorType,
+			HonorID:            honor.HonorID,
+			Level:              honor.Level,
+			BondsHonorViewType: honor.BondsHonorViewType,
+			BondsHonorWordID:   honor.BondsHonorWordID,
 		}
 		if store != nil {
-			if masterHonor := store.GetHonor(honor.HonorID); masterHonor != nil {
-				honorPayload.Name = masterHonor.Name
-				honorPayload.HonorRarity = masterHonor.HonorRarity
-				honorPayload.AssetbundleName = masterHonor.AssetbundleName
+			if honor.HonorType == "bonds" {
+				if bondsHonor := store.GetBondsHonor(honor.HonorID); bondsHonor != nil {
+					applyProfileBondsHonorMasterData(&honorPayload, bondsHonor, store, resolver)
+				}
+			} else if masterHonor := store.GetHonor(honor.HonorID); masterHonor != nil {
+				applyProfileHonorMasterData(&honorPayload, masterHonor, resolver)
 			}
 		}
 		payload.ProfileHonors = append(payload.ProfileHonors, honorPayload)
@@ -1117,6 +1135,78 @@ func BuildProfileCardPayloadWithAssets(store *masterdata.Store, profile sekai.Pr
 		payload.DeckCards = append(payload.DeckCards, buildProfileDeckCardPayload(store, card, resolver))
 	}
 	return payload
+}
+
+func applyProfileHonorMasterData(payload *ProfileHonorPayload, honor *masterdata.HonorInfo, resolver *assets.Resolver) {
+	if payload == nil || honor == nil {
+		return
+	}
+	assetResolver := resolverOrDefault(resolver)
+	payload.Name = honor.Name
+	payload.HonorRarity = honor.HonorRarity
+	payload.AssetbundleName = honor.AssetbundleName
+	if level := findHonorLevel(honor.Levels, payload.Level); level != nil {
+		if level.HonorRarity != "" {
+			payload.HonorRarity = level.HonorRarity
+		}
+		if level.AssetbundleName != "" {
+			payload.AssetbundleName = level.AssetbundleName
+		}
+	}
+	if payload.AssetbundleName != "" {
+		payload.ImageURL = assetResolver.GetHonorBgURL(payload.AssetbundleName, "main")
+	}
+	if payload.HonorRarity != "" {
+		payload.FrameURL = assetResolver.GetHonorFrameURL(payload.HonorRarity, "main")
+	}
+	payload.LevelIconURL = assetResolver.GetHonorLevelIconURL(false)
+	payload.LevelIcon6URL = assetResolver.GetHonorLevelIconURL(true)
+}
+
+func findHonorLevel(levels []masterdata.HonorLevel, level int) *masterdata.HonorLevel {
+	if level <= 0 {
+		return nil
+	}
+	for i := range levels {
+		if levels[i].Level == level {
+			return &levels[i]
+		}
+	}
+	return nil
+}
+
+func applyProfileBondsHonorMasterData(payload *ProfileHonorPayload, honor *masterdata.BondsHonorInfo, store *masterdata.Store, resolver *assets.Resolver) {
+	if payload == nil || honor == nil || store == nil {
+		return
+	}
+	assetResolver := resolverOrDefault(resolver)
+	payload.Name = honor.Name
+	payload.HonorRarity = honor.HonorRarity
+	payload.FrameURL = assetResolver.GetHonorFrameURL(honor.HonorRarity, "main")
+	payload.LevelIconURL = assetResolver.GetHonorLevelIconURL(false)
+	payload.LevelIcon6URL = assetResolver.GetHonorLevelIconURL(true)
+
+	leftUnit := store.GetCharacterUnit(honor.GameCharacterUnitID1)
+	rightUnit := store.GetCharacterUnit(honor.GameCharacterUnitID2)
+	if leftUnit == nil || rightUnit == nil {
+		return
+	}
+	if strings.Contains(payload.BondsHonorViewType, "reverse") {
+		leftUnit, rightUnit = rightUnit, leftUnit
+	}
+	payload.LeftCharacterID = leftUnit.GameCharacterID
+	payload.RightCharacterID = rightUnit.GameCharacterID
+	payload.LeftColor = leftUnit.ColorCode
+	payload.RightColor = rightUnit.ColorCode
+	payload.LeftCharacterURL = assetResolver.GetBondsHonorCharacterURL(payload.LeftCharacterID)
+	payload.RightCharacterURL = assetResolver.GetBondsHonorCharacterURL(payload.RightCharacterID)
+
+	if payload.BondsHonorWordID > 0 {
+		if word := store.GetBondsHonorWord(payload.BondsHonorWordID); word != nil {
+			payload.BondsHonorWordAssetbundleName = word.AssetbundleName
+			payload.BondsHonorWordURL = assetResolver.GetBondsHonorWordURL(word.AssetbundleName)
+		}
+	}
 }
 
 func buildProfileDeckCardPayload(store *masterdata.Store, card sekai.ProfileDeckCard, resolver *assets.Resolver) ProfileDeckCardPayload {

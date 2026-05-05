@@ -152,6 +152,7 @@ export interface PublicAssetsConfig {
 	renderer_source: string;
 	music_alias_url: string;
 	music_alias_configured: boolean;
+	chart_source_url: string;
 	sticker_path: string;
 	supported: boolean;
 	error?: string;
@@ -258,6 +259,7 @@ export interface UpdateAssetsPayload {
 	mirror: string;
 	custom_base_url: string;
 	music_alias_url: string;
+	chart_source_url: string;
 	sticker_path: string;
 }
 

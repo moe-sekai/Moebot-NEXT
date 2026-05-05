@@ -190,6 +190,10 @@
                       <span>曲名别名 URL</span>
                       <input v-model.trim="entry.form.assets.music_alias_url" class="ui-input" placeholder="https://.../music_aliases.json" />
                     </label>
+                    <label class="settings-field settings-field--full">
+                      <span>谱面来源</span>
+                      <input v-model.trim="entry.form.assets.chart_source_url" class="ui-input" placeholder="https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg" />
+                    </label>
                     <label class="settings-field">
                       <span>贴纸路径</span>
                       <input v-model.trim="entry.form.assets.sticker_path" class="ui-input" placeholder="./assets/stickers" />
@@ -212,6 +216,7 @@
                     <div><span>Renderer Source</span><code>{{ assetsPreview(entry, 'renderer') }}</code></div>
                     <div><span>贴纸路径</span><code>{{ entry.form.assets.sticker_path || '-' }}</code></div>
                     <div><span>曲名别名</span><code>{{ entry.form.assets.music_alias_url || '-' }}</code></div>
+                    <div><span>谱面来源</span><code>{{ entry.form.assets.chart_source_url || '-' }}</code></div>
                   </div>
                 </div>
 
@@ -393,6 +398,7 @@ interface AssetsForm {
 	mirror: string;
 	custom_base_url: string;
 	music_alias_url: string;
+	chart_source_url: string;
 	sticker_path: string;
 }
 
@@ -963,6 +969,7 @@ function buildAssetsPayload(assets: AssetsForm) {
 		mirror: assets.mirror,
 		custom_base_url: assets.custom_base_url,
 		music_alias_url: assets.music_alias_url,
+		chart_source_url: assets.chart_source_url,
 		sticker_path: assets.sticker_path,
 	};
 }
@@ -1016,6 +1023,7 @@ function createServerForm(
 				assets?.custom_base_url ||
 				(assets?.source === "custom" ? assets?.base_url || "" : ""),
 			music_alias_url: assets?.music_alias_url || "",
+			chart_source_url: assets?.chart_source_url || "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg",
 			sticker_path: assets?.sticker_path || "./assets/stickers",
 		},
 		sekai_api: {

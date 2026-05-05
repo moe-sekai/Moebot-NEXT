@@ -9,7 +9,7 @@ bot:
   # 只填写不带 / 的关键词；留空或 {} 即恢复默认预设关键词。
   command_aliases:
     查卡: []      # 例: ["查卡牌", "mycard"]
-    查曲: []      # 例: ["songinfo"]
+    查曲: []      # 例: ["查歌曲", "mysong"]；song/songinfo/music/musicinfo 已内置
   super_users: []
   driver:
     type: "ws-reverse"        # ws-reverse or ws
@@ -86,6 +86,7 @@ assets:
   base_url: "https://storage.exmeaning.com/sekai-jp-assets"
   custom_base_url: ""
   music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+  chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg" # 例: /739/master.svg
   sticker_path: "./assets/stickers"
 
 # 多服务器配置。默认只启用日服；用户可用 /cn绑定、/tw绑定、/kr绑定、/en绑定
@@ -103,6 +104,7 @@ game_servers:
       source: "moesekai"
       mirror: "main"
       music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
       sticker_path: "./assets/stickers"
     sekai_api:
       enabled: false
@@ -132,6 +134,7 @@ game_servers:
       source: "moesekai"
       mirror: "main"
       music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
       sticker_path: "./assets/stickers"
     sekai_api:
       enabled: false
@@ -160,6 +163,7 @@ game_servers:
       region: "tw"
       source: "sekai_best"
       music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
       sticker_path: "./assets/stickers"
     sekai_api:
       enabled: false
@@ -183,6 +187,7 @@ game_servers:
       region: "kr"
       source: "sekai_best"
       music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
       sticker_path: "./assets/stickers"
     sekai_api:
       enabled: false
@@ -206,6 +211,7 @@ game_servers:
       region: "en"
       source: "sekai_best"
       music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
       sticker_path: "./assets/stickers"
     sekai_api:
       enabled: false

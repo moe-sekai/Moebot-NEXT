@@ -13,6 +13,7 @@ import (
 	"moebot-next/internal/cardquery"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/musicsearch"
 	"moebot-next/internal/ranking"
 	"moebot-next/internal/renderer"
 	"moebot-next/internal/servers"
@@ -242,7 +243,7 @@ func (s *Service) ParseWithOptions(input string, options ParseOptions) ParseResu
 		return result
 	}
 
-	results, selected := searchAndBuild(def, store, assetResolver, argument)
+	results, selected := searchAndBuild(def, store, assetResolver, s.aliasesForRegion(result.Region), s.chartSourceForRegion(result.Region), argument)
 	result.Results = results
 	if selected != nil {
 		result.Selected = selected
@@ -277,6 +278,14 @@ func (s *Service) RenderWithOptions(input string, width int, height int, options
 	}
 	def := *parsed.Definition
 	if parsed.Selected != nil && parsed.Selected.Payload != nil && def.Template != "" {
+		if def.ID == "chart-detail" {
+			if payload, ok := parsed.Selected.Payload.(renderer.MusicDetailPayload); ok && payload.ChartURL != "" {
+				if result, err := s.Renderer.RenderChartURLWithTrace(payload.ChartURL, width); err == nil {
+					return result, parsed, nil
+				}
+				parsed.Warnings = append(parsed.Warnings, "谱面 SVG 直出渲染失败，尝试使用 Satori 详情图兜底。")
+			}
+		}
 		template := templateForPayload(def.Template, parsed.Selected.Payload)
 		request := renderer.RenderRequest{Template: template, Data: parsed.Selected.Payload, Width: width, Height: height, Precision: precisionForCommandTemplate(template)}
 		result, err := s.Renderer.RenderWithTrace(request)
@@ -656,6 +665,20 @@ func (s *Service) runtimeForRegion(region string) *servers.Runtime {
 	return s.Servers.Get(region)
 }
 
+func (s *Service) aliasesForRegion(region string) map[int]assets.MusicAlias {
+	if runtime := s.runtimeForRegion(region); runtime != nil {
+		return runtime.MusicAliases
+	}
+	return nil
+}
+
+func (s *Service) chartSourceForRegion(region string) string {
+	if runtime := s.runtimeForRegion(region); runtime != nil {
+		return runtime.Profile.Assets.ChartSourceURL
+	}
+	return ""
+}
+
 func (s *Service) hydrateChurnBoardAvatars(runtime *servers.Runtime, churn *ranking.Board) {
 	if runtime == nil || runtime.Ranking == nil || churn == nil || len(churn.Rankings) == 0 {
 		return
@@ -735,6 +758,20 @@ func precisionForCommandTemplate(template string) float64 {
 		return 1
 	}
 	return 0
+}
+
+func selectedDifficultyPayloadForParser(payload renderer.MusicDetailPayload, diff string, chartSourceURL string) renderer.MusicDetailPayload {
+	if diff == "" {
+		diff = "master"
+	}
+	for _, d := range payload.Difficulties {
+		if d.MusicDifficulty == diff || d.Difficulty == diff {
+			payload.SelectedDifficulty = diff
+			payload.ChartURL = assets.ChartSourceURL(chartSourceURL, payload.ID, diff)
+			break
+		}
+	}
+	return payload
 }
 
 func defaultRankingTiersForParser() []int {
@@ -964,7 +1001,7 @@ func absIntForParser(value int) int {
 	return value
 }
 
-func searchAndBuild(def Definition, store *masterdata.Store, resolver *assets.Resolver, argument string) ([]EntityResult, *EntityResult) {
+func searchAndBuild(def Definition, store *masterdata.Store, resolver *assets.Resolver, aliases map[int]assets.MusicAlias, chartSourceURL string, argument string) ([]EntityResult, *EntityResult) {
 	argument = strings.TrimSpace(argument)
 	switch def.SearchType {
 	case SearchTypeCard:
@@ -992,15 +1029,30 @@ func searchAndBuild(def Definition, store *masterdata.Store, resolver *assets.Re
 		selected.Payload = payload
 		return rows, &selected
 	case SearchTypeMusic:
-		musics := store.SearchMusics(argument)
+		query := argument
+		var musicOptions musicsearch.QueryOptions
+		if def.ID == "chart-detail" {
+			query, musicOptions = musicsearch.ParseQuery(argument)
+		}
+		result := musicsearch.Search(store, aliases, query, musicsearch.Options{Difficulty: musicOptions.Difficulty, Limit: musicsearch.DefaultListLimit})
+		musics := result.DisplayMusics()
 		rows := make([]EntityResult, 0, len(musics))
 		for _, music := range musics {
 			rows = append(rows, EntityResult{ID: music.ID, Title: music.Title, Subtitle: strings.Join(nonEmpty(music.Composer, music.Lyricist, music.Arranger), " / "), Type: "music"})
 		}
-		if len(musics) == 0 {
+		if result.Mode == musicsearch.ModeList {
+			payload := renderer.BuildMusicListPayloadWithAssets("曲目查询", commandListSubtitle(query), result.Musics, store, resolver, result.Page, result.TotalPages, result.Total)
+			selected := EntityResult{Title: "曲目列表", Subtitle: fmt.Sprintf("共 %d 首，展示前 %d 首", result.Total, len(result.Musics)), Type: "music_list", Payload: payload}
+			if len(rows) > 0 {
+				selected.ID = rows[0].ID
+			}
+			return rows, &selected
+		}
+		if result.Music == nil {
 			return rows, nil
 		}
-		payload := renderer.BuildMusicDetailPayloadWithAssets(store, musics[0], resolver)
+		payload := renderer.BuildMusicDetailPayloadWithAssets(store, *result.Music, resolver)
+		payload = selectedDifficultyPayloadForParser(payload, musicOptions.Difficulty, chartSourceURL)
 		selected := rows[0]
 		selected.Payload = payload
 		return rows, &selected

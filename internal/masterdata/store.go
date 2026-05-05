@@ -33,6 +33,8 @@ type Store struct {
 	skills                            []SkillInfo
 	characterUnits                    []GameCharacterUnit
 	honors                            []HonorInfo
+	bondsHonors                       []BondsHonorInfo
+	bondsHonorWords                   []BondsHonorWordInfo
 	musicVocals                       []MusicVocal
 	challengeLiveHighScoreRewards     []ChallengeLiveHighScoreReward
 	resourceBoxes                     []ResourceBox
@@ -40,17 +42,19 @@ type Store struct {
 	characterMissionV2ParameterGroups []CharacterMissionV2ParameterGroup
 
 	// ---- primary-key indexes (ID → *element inside slice) ----
-	cardByID          map[int]*CardInfo
-	musicByID         map[int]*MusicInfo
-	eventByID         map[int]*EventInfo
-	gachaByID         map[int]*GachaInfo
-	virtualLiveByID   map[int]*VirtualLive
-	cardSupplyByID    map[int]*CardSupplyInfo
-	skillByID         map[int]*SkillInfo
-	characterUnitByID map[int]*GameCharacterUnit
-	honorByID         map[int]*HonorInfo
-	musicVocalByID    map[int]*MusicVocal
-	resourceBoxByKey  map[string]*ResourceBox
+	cardByID           map[int]*CardInfo
+	musicByID          map[int]*MusicInfo
+	eventByID          map[int]*EventInfo
+	gachaByID          map[int]*GachaInfo
+	virtualLiveByID    map[int]*VirtualLive
+	cardSupplyByID     map[int]*CardSupplyInfo
+	skillByID          map[int]*SkillInfo
+	characterUnitByID  map[int]*GameCharacterUnit
+	honorByID          map[int]*HonorInfo
+	bondsHonorByID     map[int]*BondsHonorInfo
+	bondsHonorWordByID map[int]*BondsHonorWordInfo
+	musicVocalByID     map[int]*MusicVocal
+	resourceBoxByKey   map[string]*ResourceBox
 
 	// ---- derived / relation indexes ----
 	diffsByMusicID           map[int][]MusicDifficulty
@@ -82,6 +86,8 @@ func (s *Store) initMaps() {
 	s.skillByID = make(map[int]*SkillInfo)
 	s.characterUnitByID = make(map[int]*GameCharacterUnit)
 	s.honorByID = make(map[int]*HonorInfo)
+	s.bondsHonorByID = make(map[int]*BondsHonorInfo)
+	s.bondsHonorWordByID = make(map[int]*BondsHonorWordInfo)
 	s.musicVocalByID = make(map[int]*MusicVocal)
 	s.resourceBoxByKey = make(map[string]*ResourceBox)
 	s.diffsByMusicID = make(map[int][]MusicDifficulty)
@@ -118,6 +124,8 @@ func (s *Store) SetAll(data *MasterData) {
 	s.skills = data.Skills
 	s.characterUnits = data.CharacterUnits
 	s.honors = data.Honors
+	s.bondsHonors = data.BondsHonors
+	s.bondsHonorWords = data.BondsHonorWords
 	s.musicVocals = data.MusicVocals
 	s.challengeLiveHighScoreRewards = data.ChallengeLiveHighScoreRewards
 	s.resourceBoxes = data.ResourceBoxes
@@ -160,6 +168,12 @@ func (s *Store) buildIndexes() {
 	}
 	for i := range s.honors {
 		s.honorByID[s.honors[i].ID] = &s.honors[i]
+	}
+	for i := range s.bondsHonors {
+		s.bondsHonorByID[s.bondsHonors[i].ID] = &s.bondsHonors[i]
+	}
+	for i := range s.bondsHonorWords {
+		s.bondsHonorWordByID[s.bondsHonorWords[i].ID] = &s.bondsHonorWords[i]
 	}
 	for i := range s.musicVocals {
 		s.musicVocalByID[s.musicVocals[i].ID] = &s.musicVocals[i]
@@ -269,6 +283,20 @@ func (s *Store) GetHonor(id int) *HonorInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.honorByID[id]
+}
+
+// GetBondsHonor returns the bonds honor with the given ID, or nil.
+func (s *Store) GetBondsHonor(id int) *BondsHonorInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.bondsHonorByID[id]
+}
+
+// GetBondsHonorWord returns the bonds honor word with the given ID, or nil.
+func (s *Store) GetBondsHonorWord(id int) *BondsHonorWordInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.bondsHonorWordByID[id]
 }
 
 // GetMusicVocal returns the music-vocal with the given ID, or nil.
@@ -450,6 +478,15 @@ func (s *Store) AllHonors() []HonorInfo {
 	defer s.mu.RUnlock()
 	out := make([]HonorInfo, len(s.honors))
 	copy(out, s.honors)
+	return out
+}
+
+// AllBondsHonors returns a copy of the full bonds honor list.
+func (s *Store) AllBondsHonors() []BondsHonorInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]BondsHonorInfo, len(s.bondsHonors))
+	copy(out, s.bondsHonors)
 	return out
 }
 

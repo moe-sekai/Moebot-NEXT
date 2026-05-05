@@ -58,6 +58,40 @@ function normalizePrecision(value?: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : DEFAULT_RENDER_PRECISION
 }
 
+export interface SvgRenderTrace {
+  png: Buffer
+  timings: {
+    resvgMs: number
+    totalMs: number
+  }
+  sizeBytes: number
+  width?: number
+}
+
+/**
+ * Render a raw SVG string to PNG with resvg only.
+ */
+export async function renderSvgToPngWithTrace(svg: string, options: RenderOptions = {}): Promise<SvgRenderTrace> {
+  const totalStart = Date.now()
+  const resvgStart = Date.now()
+  const precision = normalizePrecision(options.precision)
+  const width = typeof options.width === 'number' && Number.isFinite(options.width) && options.width > 0
+    ? Math.max(1, Math.round(options.width * precision))
+    : 0
+  const resvg = new Resvg(svg, width > 0 ? { fitTo: { mode: 'width', value: width } } : {})
+  const png = Buffer.from(resvg.render().asPng())
+  const resvgMs = Date.now() - resvgStart
+  return {
+    png,
+    timings: {
+      resvgMs,
+      totalMs: Date.now() - totalStart,
+    },
+    sizeBytes: png.length,
+    ...(width > 0 ? { width } : {}),
+  }
+}
+
 /**
  * Render JSX to SVG and PNG with timing metadata for debugging and preview pages.
  */

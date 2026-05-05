@@ -18,6 +18,9 @@ func TestImageAssetURLsUsePNG(t *testing.T) {
 		GetAttrIconURL(Attribute("cute")),
 		GetUnitLogoURL(UnitID("piapro")),
 		GetHonorBgURL("honor_test", "main"),
+		GetHonorFrameURL("high", "main"),
+		GetHonorLevelIconURL(false),
+		GetHonorLevelIconURL(true),
 	}
 	for _, url := range urls {
 		if strings.Contains(url, ".webp") {
@@ -41,6 +44,9 @@ func TestResolverImageAssetURLsUsePNG(t *testing.T) {
 		resolver.GetAttrIconURL(Attribute("cute")),
 		resolver.GetUnitLogoURL(UnitID("piapro")),
 		resolver.GetHonorBgURL("honor_test", "main"),
+		resolver.GetHonorFrameURL("high", "main"),
+		resolver.GetHonorLevelIconURL(false),
+		resolver.GetHonorLevelIconURL(true),
 	}
 	for _, url := range urls {
 		if strings.Contains(url, ".webp") {

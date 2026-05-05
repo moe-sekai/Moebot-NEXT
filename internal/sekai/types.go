@@ -45,10 +45,12 @@ type ChallengeLiveResult struct {
 }
 
 type ProfileHonor struct {
-	Seq       int
-	HonorType string
-	HonorID   int
-	Level     int
+	Seq                int
+	HonorType          string
+	HonorID            int
+	Level              int
+	BondsHonorViewType string
+	BondsHonorWordID   int
 }
 
 type ProfileDeckCard struct {
@@ -109,10 +111,12 @@ type profileResponse struct {
 		HighScore   int `json:"highScore"`
 	} `json:"userChallengeLiveSoloResult"`
 	UserProfileHonors []struct {
-		Seq              int    `json:"seq"`
-		ProfileHonorType string `json:"profileHonorType"`
-		HonorID          int    `json:"honorId"`
-		HonorLevel       int    `json:"honorLevel"`
+		Seq                int    `json:"seq"`
+		ProfileHonorType   string `json:"profileHonorType"`
+		HonorID            int    `json:"honorId"`
+		HonorLevel         int    `json:"honorLevel"`
+		BondsHonorViewType string `json:"bondsHonorViewType"`
+		BondsHonorWordID   int    `json:"bondsHonorWordId"`
 	} `json:"userProfileHonors"`
 	UserMultiLiveTopScoreCount struct {
 		Mvp       int `json:"mvp"`
@@ -198,10 +202,12 @@ func (r profileResponse) normalize(fallbackUserID string) Profile {
 	profileHonors := make([]ProfileHonor, 0, len(r.UserProfileHonors))
 	for _, honor := range r.UserProfileHonors {
 		profileHonors = append(profileHonors, ProfileHonor{
-			Seq:       honor.Seq,
-			HonorType: honor.ProfileHonorType,
-			HonorID:   honor.HonorID,
-			Level:     honor.HonorLevel,
+			Seq:                honor.Seq,
+			HonorType:          honor.ProfileHonorType,
+			HonorID:            honor.HonorID,
+			Level:              honor.HonorLevel,
+			BondsHonorViewType: honor.BondsHonorViewType,
+			BondsHonorWordID:   honor.BondsHonorWordID,
 		})
 	}
 	sort.SliceStable(profileHonors, func(i, j int) bool {

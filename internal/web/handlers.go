@@ -11,6 +11,7 @@ import (
 	"moebot-next/internal/assets"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/musicsearch"
 	"moebot-next/internal/renderer"
 
 	"github.com/gofiber/fiber/v2"
@@ -264,12 +265,13 @@ type masterdataSettingsRequest struct {
 }
 
 type assetsSettingsRequest struct {
-	Region        string `json:"region"`
-	Source        string `json:"source"`
-	Mirror        string `json:"mirror"`
-	CustomBaseURL string `json:"custom_base_url"`
-	MusicAliasURL string `json:"music_alias_url"`
-	StickerPath   string `json:"sticker_path"`
+	Region         string `json:"region"`
+	Source         string `json:"source"`
+	Mirror         string `json:"mirror"`
+	CustomBaseURL  string `json:"custom_base_url"`
+	MusicAliasURL  string `json:"music_alias_url"`
+	ChartSourceURL string `json:"chart_source_url"`
+	StickerPath    string `json:"sticker_path"`
 }
 
 type sekaiAPISettingsRequest struct {
@@ -431,6 +433,7 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 		}
 		next.Assets.CustomBaseURL = strings.TrimSpace(req.Assets.CustomBaseURL)
 		next.Assets.MusicAliasURL = strings.TrimSpace(req.Assets.MusicAliasURL)
+		next.Assets.ChartSourceURL = strings.TrimSpace(req.Assets.ChartSourceURL)
 		if req.Assets.StickerPath != "" {
 			next.Assets.StickerPath = strings.TrimSpace(req.Assets.StickerPath)
 		}
@@ -532,6 +535,7 @@ func applyAssetsSettings(target *config.AssetsConfig, req *assetsSettingsRequest
 	}
 	target.CustomBaseURL = strings.TrimSpace(req.CustomBaseURL)
 	target.MusicAliasURL = strings.TrimSpace(req.MusicAliasURL)
+	target.ChartSourceURL = strings.TrimSpace(req.ChartSourceURL)
 	if req.StickerPath != "" {
 		target.StickerPath = strings.TrimSpace(req.StickerPath)
 	}
@@ -762,6 +766,7 @@ func (s *Server) publicConfigMap() fiber.Map {
 		"renderer_source":        assetResolved.RendererKey,
 		"music_alias_url":        s.Config.Assets.MusicAliasURL,
 		"music_alias_configured": s.Config.Assets.MusicAliasURL != "",
+		"chart_source_url":       fallbackString(s.Config.Assets.ChartSourceURL, config.DefaultChartSourceURL),
 		"sticker_path":           s.Config.Assets.StickerPath,
 		"supported":              assetErr == nil,
 	}
@@ -890,6 +895,7 @@ func (s *Server) publicServerProfilesMap(defaultRegion string) fiber.Map {
 			"renderer_source":        assetResolved.RendererKey,
 			"music_alias_url":        profile.Assets.MusicAliasURL,
 			"music_alias_configured": profile.Assets.MusicAliasURL != "",
+			"chart_source_url":       fallbackString(profile.Assets.ChartSourceURL, config.DefaultChartSourceURL),
 			"sticker_path":           profile.Assets.StickerPath,
 			"supported":              assetErr == nil,
 		}
@@ -1089,7 +1095,16 @@ func (s *Server) handleSearchMusics(c *fiber.Ctx) error {
 		return err
 	}
 	q := strings.TrimSpace(c.Query("q"))
-	results := s.defaultStore().SearchMusics(q)
+	store := s.Store
+	var aliases map[int]assets.MusicAlias
+	if s.Servers != nil {
+		if runtime := s.Servers.Default(); runtime != nil {
+			store = runtime.Store
+			aliases = runtime.MusicAliases
+		}
+	}
+	result := musicsearch.Search(store, aliases, q, musicsearch.Options{Limit: 25})
+	results := result.DisplayMusics()
 	rows := make([]fiber.Map, 0, len(results))
 	for _, music := range results {
 		rows = append(rows, fiber.Map{
