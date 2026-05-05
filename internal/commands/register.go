@@ -38,6 +38,8 @@ func RegisterAll(deps *Deps) {
 	RegisterChallengeInfo(deps)
 	RegisterEventRecord(deps)
 	RegisterLeaderCount(deps)
+	RegisterCharacterRankMission(deps)
+	RegisterAnvo(deps)
 	RegisterSuiteCardBox(deps)
 	RegisterRanking(deps)
 	RegisterBirthday()

@@ -5,7 +5,9 @@ import { renderWithTrace } from "./engine";
 import { renderChartWithBrowser } from "./chart-browser-renderer";
 import { listRenderPreviews, renderPreviewTemplate } from "./preview";
 import {
+	AnvoList,
 	CardDetail,
+	CharacterRankMission,
 	CardList,
 	ChartDetail,
 	ChurnRankingList,
@@ -805,6 +807,12 @@ async function createElement(req: RenderRequest) {
 		case "suite_card_box":
 		case "suite_cards":
 			return <SuiteCardBox {...(await prepareSuiteCardBox(normalizeSuiteCardBox(data ?? {})))} />;
+		case "anvo_list":
+		case "anvo":
+			return <AnvoList {...(data ?? {})} />;
+		case "character_rank_mission":
+		case "cr_mission":
+			return <CharacterRankMission {...(data ?? {})} />;
 		case "ranking_list":
 		case "ranking":
 			return <RankingList {...(await prepareRankingList(normalizeRankingList(data)))} />;

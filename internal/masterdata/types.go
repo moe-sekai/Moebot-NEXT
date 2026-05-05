@@ -168,10 +168,19 @@ type MusicDifficulty struct {
 
 // MusicVocal represents a vocal version of a song.
 type MusicVocal struct {
-	ID              int    `json:"id"`
-	MusicID         int    `json:"musicId"`
-	Caption         string `json:"caption"`
-	AssetbundleName string `json:"assetbundleName"`
+	ID              int                   `json:"id"`
+	MusicID         int                   `json:"musicId"`
+	Caption         string                `json:"caption"`
+	AssetbundleName string                `json:"assetbundleName"`
+	MusicVocalType  string                `json:"musicVocalType"`
+	Characters      []MusicVocalCharacter `json:"characters"`
+}
+
+// MusicVocalCharacter links a vocal version to its singing character.
+type MusicVocalCharacter struct {
+	CharacterID   int    `json:"characterId"`
+	CharacterType string `json:"characterType"`
+	Seq           int    `json:"seq"`
 }
 
 func parseCardParameters(raw json.RawMessage, cardID int) ([]CardParameter, error) {
