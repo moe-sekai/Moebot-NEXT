@@ -143,3 +143,57 @@ func TestResolveCardQueryPureIDDetail(t *testing.T) {
 		t.Fatalf("Cards = %#v, want card #1204", result.Cards)
 	}
 }
+
+func TestCardBoxCardsUsesCardQueryFilters(t *testing.T) {
+	store := masterdata.NewStore()
+	now := time.Now().UnixMilli()
+	store.SetAll(&masterdata.MasterData{
+		Cards: []masterdata.CardInfo{
+			{ID: 1, CharacterID: 5, CardRarityType: "rarity_4", Attr: "cool", Prefix: "实乃理限定", ReleaseAt: now, SupportUnit: "none", CardSupplyID: 1},
+			{ID: 2, CharacterID: 5, CardRarityType: "rarity_4", Attr: "cool", Prefix: "实乃理常驻", ReleaseAt: now - 1, SupportUnit: "none"},
+			{ID: 3, CharacterID: 6, CardRarityType: "rarity_4", Attr: "cool", Prefix: "遥限定", ReleaseAt: now - 2, SupportUnit: "none", CardSupplyID: 1},
+		},
+		CardSupplies: []masterdata.CardSupplyInfo{{ID: 1, CardSupplyType: "term_limited"}},
+	})
+
+	cards, msg := cardBoxCards(store, cardBoxQueryOptions{FilterText: "mnr 4 蓝 限定"})
+	if msg != "" {
+		t.Fatalf("msg = %q, want empty", msg)
+	}
+	if len(cards) != 1 || cards[0].ID != 1 {
+		t.Fatalf("cards = %#v, want only limited cool mnr 4*", cards)
+	}
+}
+
+func TestCardBoxCardsPureIDReturnsSingleCard(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{Cards: []masterdata.CardInfo{
+		{ID: 1204, CharacterID: 21, CardRarityType: "rarity_4", Attr: "cute", Prefix: "详情卡"},
+		{ID: 1205, CharacterID: 21, CardRarityType: "rarity_4", Attr: "cool", Prefix: "其它卡"},
+	}})
+
+	cards, msg := cardBoxCards(store, cardBoxQueryOptions{FilterText: "1204"})
+	if msg != "" {
+		t.Fatalf("msg = %q, want empty", msg)
+	}
+	if len(cards) != 1 || cards[0].ID != 1204 {
+		t.Fatalf("cards = %#v, want card #1204", cards)
+	}
+}
+
+func TestCardBoxCardsPreservesCardQueryOrderForFilteredResults(t *testing.T) {
+	store := masterdata.NewStore()
+	now := time.Now().UnixMilli()
+	store.SetAll(&masterdata.MasterData{Cards: []masterdata.CardInfo{
+		{ID: 1, CharacterID: 1, CardRarityType: "rarity_4", Attr: "cool", Prefix: "蓝卡旧低角色", ReleaseAt: now - 100, SupportUnit: "none"},
+		{ID: 2, CharacterID: 26, CardRarityType: "rarity_4", Attr: "cool", Prefix: "蓝卡新高角色", ReleaseAt: now, SupportUnit: "none"},
+	}})
+
+	cards, msg := cardBoxCards(store, cardBoxQueryOptions{FilterText: "蓝"})
+	if msg != "" {
+		t.Fatalf("msg = %q, want empty", msg)
+	}
+	if len(cards) != 2 || cards[0].ID != 2 || cards[1].ID != 1 {
+		t.Fatalf("cards order = %#v, want /查卡 release-desc order [2, 1]", cards)
+	}
+}

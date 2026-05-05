@@ -111,6 +111,7 @@ function CardTile({ card, options, source, layout, compact }: { card: SuiteCard;
 	const trainedUrl = card.trainedThumbnailUrl ?? (card.assetbundleName ? getCardThumbnailUrl(card.assetbundleName, true, source, "png") : undefined);
 	const supplyType = badgeSupplyType(card);
 	const obtained = card.createdAt ?? card.obtainedAt ?? card.acquiredAt;
+	const cardTitle = card.prefix ?? card.characterName ?? "未知卡牌";
 
 	return (
 		<div style={{ display: "flex", flexDirection: "column", width: layout.tileWidth, gap: compact ? 4 : 6, padding: layout.tilePadding, borderRadius: theme.borderRadius.lg, border: `1px solid ${owned ? theme.colors.border : theme.colors.borderStrong}`, backgroundColor: owned ? theme.colors.surface : theme.colors.surfaceLight }}>
@@ -123,8 +124,8 @@ function CardTile({ card, options, source, layout, compact }: { card: SuiteCard;
 				)}
 			</div>
 			<div style={{ display: "flex", flexDirection: "column", gap: layout.infoGap }}>
-				<span style={{ display: "flex", justifyContent: "center", color: theme.colors.text, fontSize: compact ? 10 : theme.fontSize.xs, fontWeight: 900, textAlign: "center" }}>
-					{options?.showId ? `#${card.cardId ?? card.id ?? "-"} ` : ""}{card.characterName ?? "未知角色"}
+				<span style={{ display: "flex", justifyContent: "center", color: theme.colors.text, fontSize: compact ? 9 : 10, lineHeight: 1.15, fontWeight: 900, textAlign: "center", minHeight: compact ? 20 : 23, maxHeight: compact ? 21 : 24, overflow: "hidden" }}>
+					{options?.showId ? `#${card.cardId ?? card.id ?? "-"} ` : ""}{cardTitle}
 				</span>
 				{owned ? (
 					<span style={{ display: "flex", justifyContent: "center", color: theme.colors.textSecondary, fontSize: compact ? 9 : 11, fontWeight: 800, textAlign: "center" }}>

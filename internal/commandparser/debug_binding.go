@@ -852,9 +852,7 @@ func suiteDebugCardBoxCards(store *masterdata.Store, options suiteDebugCardBoxOp
 		if result.Message != "" {
 			return nil, result.Message
 		}
-		cards := append([]masterdata.CardInfo(nil), result.Cards...)
-		suiteDebugSortCards(cards)
-		return cards, ""
+		return append([]masterdata.CardInfo(nil), result.Cards...), ""
 	}
 	cards := store.AllCards()
 	suiteDebugSortCards(cards)

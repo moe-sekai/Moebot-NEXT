@@ -144,9 +144,7 @@ func cardBoxCards(store *masterdata.Store, options cardBoxQueryOptions) ([]maste
 		if result.Message != "" {
 			return nil, result.Message
 		}
-		cards := append([]masterdata.CardInfo(nil), result.Cards...)
-		sortCardBoxMasterCards(cards)
-		return cards, ""
+		return append([]masterdata.CardInfo(nil), result.Cards...), ""
 	}
 	cards := store.AllCards()
 	sortCardBoxMasterCards(cards)
