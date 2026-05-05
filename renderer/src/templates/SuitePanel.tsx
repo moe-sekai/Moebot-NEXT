@@ -23,6 +23,8 @@ interface SuiteProfile {
 	signature?: string;
 	source?: string;
 	updatedAt?: number | string;
+	uploadTime?: number | string;
+	updateText?: string;
 	avatarUrl?: string;
 }
 
@@ -31,14 +33,26 @@ interface SuiteStat {
 	name?: string;
 	value?: unknown;
 	description?: string;
+	hint?: string;
+	color?: string;
 	highlight?: boolean;
+}
+
+interface SuiteSectionRow {
+	rank?: number | string;
+	label?: string;
+	value?: unknown;
+	meta?: string;
+	color?: string;
+	card?: SuiteDeckCard;
+	[key: string]: unknown;
 }
 
 interface SuiteSection {
 	title?: string;
 	subtitle?: string;
 	columns?: Array<string | { key?: string; label?: string }>;
-	rows?: Array<Record<string, unknown> | unknown[]>;
+	rows?: Array<SuiteSectionRow | unknown[]>;
 	items?: Array<string | { label?: string; value?: unknown; description?: string }>;
 }
 
@@ -68,9 +82,10 @@ export function SuitePanel({
 	assetSource = "main-jp",
 }: SuitePanelProps) {
 	const normalizedStats = normalizeStats(stats);
+	const updated = profile?.updateText ?? profile?.uploadTime ?? profile?.updatedAt;
 	const meta = [
 		profile?.source ? `来源：${profile.source}` : undefined,
-		profile?.updatedAt ? `更新：${formatValue(profile.updatedAt)}` : undefined,
+		updated ? `更新：${formatValue(updated)}` : undefined,
 	].filter(Boolean).join(" · ");
 
 	return (
@@ -192,11 +207,13 @@ function DeckThumb({ card, source, leader }: { card: SuiteDeckCard; source: Asse
 }
 
 function StatBox({ stat }: { stat: SuiteStat }) {
+	const accent = stat.color ?? (stat.highlight ? theme.colors.accent : theme.colors.text);
+	const description = stat.description ?? stat.hint;
 	return (
-		<div style={{ display: "flex", flexDirection: "column", width: 164, gap: 5, backgroundColor: stat.highlight ? theme.colors.surfaceAccent : theme.colors.surface, border: `1px solid ${stat.highlight ? theme.colors.borderStrong : theme.colors.border}`, borderRadius: theme.borderRadius.lg, padding: theme.spacing.md }}>
+		<div style={{ display: "flex", flexDirection: "column", width: 164, gap: 5, backgroundColor: stat.highlight || stat.color ? theme.colors.surfaceAccent : theme.colors.surface, border: `1px solid ${stat.highlight || stat.color ? theme.colors.borderStrong : theme.colors.border}`, borderRadius: theme.borderRadius.lg, padding: theme.spacing.md }}>
 			<span style={{ display: "flex", color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: 800 }}>{stat.label ?? stat.name ?? "统计"}</span>
-			<span style={{ display: "flex", color: stat.highlight ? theme.colors.accent : theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: 900 }}>{formatValue(stat.value ?? "-")}</span>
-			{stat.description && <span style={{ display: "flex", color: theme.colors.textMuted, fontSize: 11 }}>{stat.description}</span>}
+			<span style={{ display: "flex", color: accent, fontSize: theme.fontSize.lg, fontWeight: 900 }}>{formatValue(stat.value ?? "-")}</span>
+			{description && <span style={{ display: "flex", color: theme.colors.textMuted, fontSize: 11 }}>{description}</span>}
 		</div>
 	);
 }
@@ -211,7 +228,7 @@ function SectionBlock({ section }: { section: SuiteSection }) {
 			{rows.length > 0 ? (
 				<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
 					{columns.length > 0 && <Row values={columns.map((col) => typeof col === "string" ? col : col.label ?? col.key ?? "-")} header />}
-					{rows.map((row, index) => <Row key={index} values={rowValues(row, columns)} />)}
+					{rows.map((row, index) => <Row key={index} values={rowValues(row, columns)} row={Array.isArray(row) ? undefined : row} />)}
 				</div>
 			) : (
 				<div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
@@ -229,18 +246,23 @@ function SectionBlock({ section }: { section: SuiteSection }) {
 	);
 }
 
-function Row({ values, header }: { values: unknown[]; header?: boolean }) {
+function Row({ values, header, row }: { values: unknown[]; header?: boolean; row?: SuiteSectionRow }) {
 	return (
 		<div style={{ display: "flex", gap: theme.spacing.sm, padding: "7px 10px", borderRadius: theme.borderRadius.md, backgroundColor: header ? theme.colors.surfaceLight : "rgba(242, 247, 251, 0.55)" }}>
-			{values.map((value, index) => <span key={index} style={{ display: "flex", flex: 1, color: header ? theme.colors.text : theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: header ? 900 : 800 }}>{formatValue(value)}</span>)}
+			{values.map((value, index) => <span key={index} style={{ display: "flex", flex: 1, color: row?.color ?? (header ? theme.colors.text : theme.colors.textSecondary), fontSize: theme.fontSize.xs, fontWeight: header ? 900 : 800 }}>{formatValue(value)}</span>)}
 		</div>
 	);
 }
 
-function rowValues(row: Record<string, unknown> | unknown[], columns: SuiteSection["columns"] = []): unknown[] {
+function rowValues(row: SuiteSectionRow | unknown[], columns: SuiteSection["columns"] = []): unknown[] {
 	if (Array.isArray(row)) return row;
-	if (columns.length === 0) return Object.values(row);
-	return columns.map((col) => row[typeof col === "string" ? col : col.key ?? col.label ?? ""]);
+	if (columns.length > 0) return columns.map((col) => row[typeof col === "string" ? col : col.key ?? col.label ?? ""]);
+	return [row.rank, row.label, row.value, row.meta, formatCardLabel(row.card)].filter((value) => value !== undefined && value !== "");
+}
+
+function formatCardLabel(card?: SuiteDeckCard): string | undefined {
+	if (!card) return undefined;
+	return [card.characterName, card.cardId ?? card.id ? `#${card.cardId ?? card.id}` : undefined, card.level ? `Lv.${card.level}` : undefined].filter(Boolean).join(" · ");
 }
 
 function normalizeStats(stats?: SuitePanelProps["stats"]): SuiteStat[] {

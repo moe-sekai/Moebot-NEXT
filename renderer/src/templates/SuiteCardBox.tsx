@@ -1,7 +1,7 @@
 import { getCardThumbnailUrl, type AssetSourceType } from "../../shared";
 import { theme } from "../styles/theme";
 import { BaseCard } from "./base";
-import { SekaiCardThumbnail, canUseTrainedArt } from "./SekaiCardThumbnail";
+import { SekaiCardThumbnail } from "./SekaiCardThumbnail";
 
 export interface SuiteCardBoxProps {
 	title?: string;
@@ -101,7 +101,7 @@ function CardTile({ card, options, source }: { card: SuiteCard; options: SuiteCa
 	const owned = isOwned(card);
 	const rarity = card.cardRarityType ?? card.rarity ?? (card.isBirthday ? "rarity_birthday" : "rarity_1");
 	const useBefore = Boolean(options?.useBeforeTraining);
-	const trained = !useBefore && (card.defaultImage === "special_training" || card.isTrained || canUseTrainedArt(rarity));
+	const trained = !useBefore && (card.defaultImage === "special_training" || Boolean(card.isTrained));
 	const normalUrl = card.thumbnailUrl ?? (card.assetbundleName ? getCardThumbnailUrl(card.assetbundleName, false, source, "png") : undefined);
 	const trainedUrl = card.trainedThumbnailUrl ?? (card.assetbundleName ? getCardThumbnailUrl(card.assetbundleName, true, source, "png") : undefined);
 	const supplyType = badgeSupplyType(card);

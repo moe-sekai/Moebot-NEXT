@@ -19,5 +19,8 @@ web/dist/
 .env
 *.local.yml
 config.yml
+# Worktrees
+.worktrees/
+
 # Logs
 *.log

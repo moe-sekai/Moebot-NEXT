@@ -730,6 +730,7 @@ func defaultGameServerProfile(region string, enabled bool) GameServerConfig {
 		},
 		SuiteAPI: SuiteAPIConfig{
 			Enabled:     true,
+			EnabledSet:  true,
 			URL:         DefaultSuiteAPIURL,
 			Timeout:     10,
 			DefaultMode: SuiteModeHaruki,
@@ -770,7 +771,7 @@ func hasGameServerOverrides(cfg *Config) bool {
 		return false
 	}
 	for _, profile := range cfg.GameServers {
-		if profile.Enabled != nil || profile.Masterdata.Source != "" || profile.Masterdata.Region != "" || profile.Masterdata.URL != "" || profile.Masterdata.LocalPath != "" || profile.Assets.Source != "" || profile.Assets.Region != "" || profile.Assets.BaseURL != "" || profile.Assets.MusicAliasURL != "" || profile.SekaiAPI.Region != "" || profile.SekaiAPI.BaseURL != "" || profile.SuiteAPI.URL != "" || profile.SuiteAPI.Enabled || profile.RankingAPI.Region != "" || profile.RankingAPI.BaseURL != "" {
+		if profile.Enabled != nil || profile.Masterdata.Source != "" || profile.Masterdata.Region != "" || profile.Masterdata.URL != "" || profile.Masterdata.LocalPath != "" || profile.Assets.Source != "" || profile.Assets.Region != "" || profile.Assets.BaseURL != "" || profile.Assets.MusicAliasURL != "" || profile.SekaiAPI.Region != "" || profile.SekaiAPI.BaseURL != "" || profile.SuiteAPI.URL != "" || profile.SuiteAPI.EnabledSet || profile.RankingAPI.Region != "" || profile.RankingAPI.BaseURL != "" {
 			return true
 		}
 	}
@@ -877,8 +878,9 @@ func mergeSekaiAPIProfile(base SekaiAPIConfig, override SekaiAPIConfig, region s
 }
 
 func mergeSuiteAPIProfile(base SuiteAPIConfig, override SuiteAPIConfig) SuiteAPIConfig {
-	if override.Enabled {
-		base.Enabled = true
+	if override.EnabledSet {
+		base.Enabled = override.Enabled
+		base.EnabledSet = true
 	}
 	if override.URL != "" {
 		base.URL = strings.TrimSpace(override.URL)

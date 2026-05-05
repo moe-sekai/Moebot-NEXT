@@ -391,6 +391,8 @@ function normalizeSuiteProfile(profile: any) {
 		signature: profile.signature ?? profile.Signature,
 		source: profile.source ?? profile.Source,
 		updatedAt: profile.updatedAt ?? profile.UpdatedAt,
+		uploadTime: profile.uploadTime ?? profile.UploadTime,
+		updateText: profile.updateText ?? profile.UpdateText,
 		avatarUrl: toPngImageUrl(profile.avatarUrl ?? profile.AvatarURL),
 	};
 }

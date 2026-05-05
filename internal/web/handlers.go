@@ -549,6 +549,7 @@ func applySuiteAPISettings(target *config.SuiteAPIConfig, req *suiteAPISettingsR
 	}
 	if req.Enabled != nil {
 		target.Enabled = *req.Enabled
+		target.EnabledSet = true
 	}
 	if strings.TrimSpace(req.URL) != "" {
 		target.URL = strings.TrimSpace(req.URL)

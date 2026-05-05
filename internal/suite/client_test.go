@@ -152,6 +152,31 @@ func TestFieldsAddsCommonProfileFieldsBeforeFeatureFields(t *testing.T) {
 	}
 }
 
+func TestClientGetUserDataDecodesWrappedData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"upload_time": int64(1700000000000),
+				"userGamedata": map[string]any{
+					"userId": "123456789012345678",
+					"name":   "包裹玩家",
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(config.SuiteAPIConfig{Enabled: true, URL: server.URL + "/public/jp/suite/{uid}"})
+
+	var profile statusResponse
+	if err := client.GetUserData("123456789012345678", "", nil, &profile); err != nil {
+		t.Fatal(err)
+	}
+	if profile.UserGamedata.UserID.String() != "123456789012345678" || profile.UserGamedata.Name != "包裹玩家" || profile.UploadTime != 1700000000000 {
+		t.Fatalf("profile = %+v", profile)
+	}
+}
+
 func TestClientGetUserDataDecodesIntoFeatureProfile(t *testing.T) {
 	var gotKey string
 	var gotFilter string
