@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"moebot-next/internal/commandparser"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/suite"
@@ -19,6 +20,32 @@ func TestSuiteStatusTextShowsUploadSourceAndInterface(t *testing.T) {
 	for _, want := range []string{"CN", "123456789012345678", "测试玩家", "moesekai", "Suite数据", "更新时间", "Haruki 公开 API"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("status text missing %q in:\n%s", want, text)
+		}
+	}
+}
+
+func TestParserCommandsIncludesSuiteStatusAliases(t *testing.T) {
+	cmds := parserCommands(&Deps{Definitions: commandparser.BaseDefinitions()}, "抓包状态")
+	seen := map[string]bool{}
+	for _, cmd := range cmds {
+		seen[cmd.Name] = true
+	}
+	for _, want := range []string{"抓包状态", "抓包数据", "抓包信息", "suite", "cn抓包状态", "cn抓包数据", "cn抓包信息", "cnsuite"} {
+		if !seen[want] {
+			t.Fatalf("parserCommands missing %q in %#v", want, cmds)
+		}
+	}
+}
+
+func TestParserCommandsIncludesSuiteShowAlias(t *testing.T) {
+	cmds := parserCommands(&Deps{Definitions: commandparser.BaseDefinitions()}, "展示抓包")
+	seen := map[string]bool{}
+	for _, cmd := range cmds {
+		seen[cmd.Name] = true
+	}
+	for _, want := range []string{"展示抓包", "显示抓包", "cn展示抓包", "cn显示抓包"} {
+		if !seen[want] {
+			t.Fatalf("parserCommands missing %q in %#v", want, cmds)
 		}
 	}
 }
@@ -77,6 +104,45 @@ func TestFormatGachaHistoryTextSortsAndNamesGachas(t *testing.T) {
 	}
 	if strings.Index(text, "测试卡池B") > strings.Index(text, "未知卡池 #999") || strings.Index(text, "未知卡池 #999") > strings.Index(text, "测试卡池A") {
 		t.Fatalf("records should be sorted by count desc:\n%s", text)
+	}
+}
+
+func TestFormatCardBoxTextAppliesSortOptions(t *testing.T) {
+	cards := []masterdata.CardInfo{
+		{ID: 3, CharacterID: 2, Prefix: "低专精", ReleaseAt: 3000},
+		{ID: 1, CharacterID: 1, Prefix: "高专精", ReleaseAt: 1000},
+		{ID: 2, CharacterID: 1, Prefix: "中专精", ReleaseAt: 2000},
+	}
+	profile := cardBoxProfile{
+		BaseProfile:  suite.BaseProfile{UploadTime: 1700000000000, Source: "local"},
+		UserGamedata: suite.UserGamedata{Name: "测试玩家"},
+	}
+	owned := map[int]suite.UserCard{
+		1: {CardID: 1, Level: 50, MasterRank: 5, SkillLevel: 1, CreatedAt: 1000},
+		2: {CardID: 2, Level: 40, MasterRank: 2, SkillLevel: 4, CreatedAt: 3000},
+		3: {CardID: 3, Level: 30, MasterRank: 1, SkillLevel: 2, CreatedAt: 2000},
+	}
+
+	text := formatCardBoxText(config.RegionCN, profile, cards, owned, cardBoxQueryOptions{SortBy: "mr"})
+	if strings.Index(text, "#1") > strings.Index(text, "#2") || strings.Index(text, "#2") > strings.Index(text, "#3") {
+		t.Fatalf("mr sort should order by master rank desc, got:\n%s", text)
+	}
+
+	text = formatCardBoxText(config.RegionCN, profile, cards, owned, cardBoxQueryOptions{SortBy: "time"})
+	if strings.Index(text, "#2") > strings.Index(text, "#3") || strings.Index(text, "#3") > strings.Index(text, "#1") {
+		t.Fatalf("time sort should order by created time desc, got:\n%s", text)
+	}
+
+	text = formatCardBoxText(config.RegionCN, profile, cards, owned, cardBoxQueryOptions{SortBy: "sl"})
+	if strings.Index(text, "#2") > strings.Index(text, "#3") || strings.Index(text, "#3") > strings.Index(text, "#1") {
+		t.Fatalf("sl sort should order by skill level desc, got:\n%s", text)
+	}
+}
+
+func TestParseCardBoxOptionsIDSortsByID(t *testing.T) {
+	options := parseCardBoxOptions("id")
+	if !options.ShowID || options.SortBy != "id" {
+		t.Fatalf("id option = %#v, want ShowID and id sort", options)
 	}
 }
 

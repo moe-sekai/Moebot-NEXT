@@ -183,23 +183,17 @@ func inferRegionFromSuiteURL(endpoint string) string {
 }
 
 func decodeUserDataResponse(data []byte, out any) error {
-	if err := json.Unmarshal(data, out); err == nil {
-		return nil
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err == nil {
+		if wrapped, ok := raw["data"]; ok && len(wrapped) > 0 && string(wrapped) != "null" {
+			if err := json.Unmarshal(wrapped, out); err != nil {
+				return err
+			}
+			mergeTopLevelBaseProfile(data, out)
+			return nil
+		}
 	}
-	var wrapped struct {
-		Data json.RawMessage `json:"data"`
-	}
-	if err := json.Unmarshal(data, &wrapped); err != nil {
-		return err
-	}
-	if len(wrapped.Data) == 0 || string(wrapped.Data) == "null" {
-		return json.Unmarshal(data, out)
-	}
-	if err := json.Unmarshal(wrapped.Data, out); err != nil {
-		return err
-	}
-	mergeTopLevelBaseProfile(data, out)
-	return nil
+	return json.Unmarshal(data, out)
 }
 
 func mergeTopLevelBaseProfile(data []byte, out any) {

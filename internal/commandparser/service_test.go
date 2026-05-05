@@ -69,6 +69,27 @@ func TestSearchAndBuildCardListParsesLunabotStyleFilters(t *testing.T) {
 	}
 }
 
+func TestParseSuiteStatusAliases(t *testing.T) {
+	service := NewService("/", nil, nil, nil, nil)
+	for _, input := range []string{"/抓包数据", "/抓包信息", "/suite", "/cn抓包数据", "/cnsuite"} {
+		parsed := service.Parse(input)
+		if parsed.Definition == nil || parsed.Definition.ID != "suite-status" {
+			t.Fatalf("%s parsed definition = %#v, want suite-status", input, parsed.Definition)
+		}
+	}
+}
+
+func TestSuiteVisibilityCommandsAreActionOnly(t *testing.T) {
+	for _, def := range BaseDefinitions() {
+		if def.ID != "suite-hide" && def.ID != "suite-show" {
+			continue
+		}
+		if def.Template != "" || def.PreviewID != "" || def.RenderMode != RenderModeAction {
+			t.Fatalf("%s should be action-only, got template=%q preview=%q render=%q", def.ID, def.Template, def.PreviewID, def.RenderMode)
+		}
+	}
+}
+
 func TestParseInlineRankingTargetArgument(t *testing.T) {
 	service := NewService("/", nil, nil, nil, nil)
 	parsed := service.Parse("/cnsk1-10")

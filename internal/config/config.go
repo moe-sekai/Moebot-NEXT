@@ -100,10 +100,27 @@ type SekaiAPIConfig struct {
 
 type SuiteAPIConfig struct {
 	Enabled     bool   `yaml:"enabled"`
+	EnabledSet  bool   `yaml:"-"`
 	URL         string `yaml:"url"`
 	Token       string `yaml:"token"`
 	Timeout     int    `yaml:"timeout"`
 	DefaultMode string `yaml:"default_mode"`
+}
+
+func (c *SuiteAPIConfig) UnmarshalYAML(value *yaml.Node) error {
+	type suiteAPIConfig SuiteAPIConfig
+	raw := suiteAPIConfig(*c)
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		if value.Content[i].Value == "enabled" {
+			raw.EnabledSet = true
+			break
+		}
+	}
+	*c = SuiteAPIConfig(raw)
+	return nil
 }
 
 type RankingAPIConfig struct {
@@ -188,6 +205,7 @@ func DefaultConfig() *Config {
 		},
 		SuiteAPI: SuiteAPIConfig{
 			Enabled:     true,
+			EnabledSet:  true,
 			URL:         DefaultSuiteAPIURL,
 			Timeout:     10,
 			DefaultMode: SuiteModeHaruki,

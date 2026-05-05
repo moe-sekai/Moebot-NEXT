@@ -55,6 +55,34 @@ game_servers:
 	}
 }
 
+func TestSuiteAPIExplicitFalseSurvivesNormalize(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yml")
+	content := []byte(`server:
+  region: "cn"
+suite_api:
+  enabled: false
+game_servers:
+  cn:
+    enabled: true
+`)
+	if err := os.WriteFile(path, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SuiteAPI.Enabled {
+		t.Fatal("suite api enabled=false should survive normalize")
+	}
+	profile := ResolveGameServerProfile(cfg, RegionCN)
+	if profile.SuiteAPI.Enabled {
+		t.Fatal("cn suite api should inherit explicit global disabled flag")
+	}
+}
+
 func TestNormalizeSuiteMode(t *testing.T) {
 	cases := map[string]string{
 		"":          SuiteModeHaruki,

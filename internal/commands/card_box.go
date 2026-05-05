@@ -116,6 +116,7 @@ func parseCardBoxOptions(raw string) cardBoxQueryOptions {
 			options.OwnedOnly = true
 		case "id", "ids", "编号", "显示id":
 			options.ShowID = true
+			options.SortBy = "id"
 		case "before", "normal", "花前", "特训前":
 			options.UseBeforeTraining = true
 		case "time", "created", "createdat", "获取时间", "入手时间", "时间排序":
@@ -191,6 +192,7 @@ func cardBoxSubtitle(options cardBoxQueryOptions, total int, owned int) string {
 }
 
 func formatCardBoxText(region string, profile cardBoxProfile, cards []masterdata.CardInfo, owned map[int]suite.UserCard, options cardBoxQueryOptions) string {
+	cards = sortedCardBoxTextCards(cards, owned, options)
 	name := profile.UserGamedata.Name
 	if name == "" {
 		name = "未知玩家"
@@ -236,4 +238,50 @@ func formatCardBoxText(region string, profile cardBoxProfile, cards []masterdata
 		lines = append(lines, "暂无符合条件的卡牌")
 	}
 	return strings.Join(lines, "\n")
+}
+
+func sortedCardBoxTextCards(cards []masterdata.CardInfo, owned map[int]suite.UserCard, options cardBoxQueryOptions) []masterdata.CardInfo {
+	out := append([]masterdata.CardInfo(nil), cards...)
+	if options.SortBy == "" {
+		return out
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		left, leftOwned := owned[out[i].ID]
+		right, rightOwned := owned[out[j].ID]
+		switch options.SortBy {
+		case "mr":
+			if left.MasterRank != right.MasterRank {
+				return left.MasterRank > right.MasterRank
+			}
+			if leftOwned != rightOwned {
+				return leftOwned
+			}
+		case "sl":
+			if left.SkillLevel != right.SkillLevel {
+				return left.SkillLevel > right.SkillLevel
+			}
+			if leftOwned != rightOwned {
+				return leftOwned
+			}
+		case "time":
+			if left.CreatedAt != right.CreatedAt {
+				return left.CreatedAt > right.CreatedAt
+			}
+			if leftOwned != rightOwned {
+				return leftOwned
+			}
+		case "id":
+			if out[i].ID != out[j].ID {
+				return out[i].ID < out[j].ID
+			}
+		}
+		if out[i].CharacterID != out[j].CharacterID {
+			return out[i].CharacterID < out[j].CharacterID
+		}
+		if out[i].ReleaseAt != out[j].ReleaseAt {
+			return out[i].ReleaseAt < out[j].ReleaseAt
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
 }

@@ -22,7 +22,7 @@ func RegisterSuite(deps *Deps) {
 }
 
 func registerSuiteStatusCommands(deps *Deps) {
-	for _, cmd := range regionalCommands("抓包状态") {
+	for _, cmd := range parserCommands(deps, "抓包状态") {
 		commandName := cmd.Name
 		forcedRegion := cmd.Region
 		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
@@ -92,7 +92,7 @@ func registerSuiteVisibilityCommands(deps *Deps) {
 		{Command: "展示抓包", Hidden: false, Text: "已展示%s抓包信息"},
 	} {
 		action := action
-		for _, cmd := range regionalCommands(action.Command) {
+		for _, cmd := range parserCommands(deps, action.Command) {
 			forcedRegion := cmd.Region
 			zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 				runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)
@@ -123,6 +123,7 @@ func suiteSettingOrDefault(deps *Deps, platformID string, region string) *models
 		PlatformID:   platformID,
 		ServerRegion: region,
 		Mode:         config.SuiteModeHaruki,
+		Hidden:       err != gorm.ErrRecordNotFound,
 	}
 }
 

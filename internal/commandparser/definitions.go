@@ -15,6 +15,7 @@ const (
 
 	RenderModeSearch  = "search"
 	RenderModePreview = "preview"
+	RenderModeAction  = "action"
 )
 
 // SearchType identifies a masterdata-backed parser target.
@@ -311,10 +312,8 @@ var baseDefinitions = []Definition{
 		PrimaryCommand: "隐藏抓包",
 		Commands:       []string{"隐藏抓包"},
 		Usage:          "/隐藏抓包",
-		Template:       "suite_panel",
-		PreviewID:      "suite-panel",
 		SearchType:     SearchTypeNone,
-		RenderMode:     RenderModePreview,
+		RenderMode:     RenderModeAction,
 	},
 	{
 		ID:             "suite-show",
@@ -323,10 +322,8 @@ var baseDefinitions = []Definition{
 		PrimaryCommand: "展示抓包",
 		Commands:       []string{"展示抓包", "显示抓包"},
 		Usage:          "/展示抓包",
-		Template:       "suite_panel",
-		PreviewID:      "suite-panel",
 		SearchType:     SearchTypeNone,
-		RenderMode:     RenderModePreview,
+		RenderMode:     RenderModeAction,
 	},
 	{
 		ID:              "gacha-history",
