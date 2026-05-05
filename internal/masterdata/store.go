@@ -1,6 +1,8 @@
 package masterdata
 
 import (
+	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -17,21 +19,25 @@ type Store struct {
 	mu sync.RWMutex
 
 	// ---- raw slices (source of truth) ----
-	loadedAt          time.Time
-	cards             []CardInfo
-	musics            []MusicInfo
-	musicDifficulties []MusicDifficulty
-	events            []EventInfo
-	eventDeckBonuses  []EventDeckBonus
-	eventCards        []EventCard
-	eventMusics       []EventMusic
-	virtualLives      []VirtualLive
-	gachas            []GachaInfo
-	cardSupplies      []CardSupplyInfo
-	skills            []SkillInfo
-	characterUnits    []GameCharacterUnit
-	honors            []HonorInfo
-	musicVocals       []MusicVocal
+	loadedAt                          time.Time
+	cards                             []CardInfo
+	musics                            []MusicInfo
+	musicDifficulties                 []MusicDifficulty
+	events                            []EventInfo
+	eventDeckBonuses                  []EventDeckBonus
+	eventCards                        []EventCard
+	eventMusics                       []EventMusic
+	virtualLives                      []VirtualLive
+	gachas                            []GachaInfo
+	cardSupplies                      []CardSupplyInfo
+	skills                            []SkillInfo
+	characterUnits                    []GameCharacterUnit
+	honors                            []HonorInfo
+	musicVocals                       []MusicVocal
+	challengeLiveHighScoreRewards     []ChallengeLiveHighScoreReward
+	resourceBoxes                     []ResourceBox
+	resourceBoxDetails                []ResourceBoxDetail
+	characterMissionV2ParameterGroups []CharacterMissionV2ParameterGroup
 
 	// ---- primary-key indexes (ID → *element inside slice) ----
 	cardByID          map[int]*CardInfo
@@ -44,14 +50,18 @@ type Store struct {
 	characterUnitByID map[int]*GameCharacterUnit
 	honorByID         map[int]*HonorInfo
 	musicVocalByID    map[int]*MusicVocal
+	resourceBoxByKey  map[string]*ResourceBox
 
 	// ---- derived / relation indexes ----
-	diffsByMusicID       map[int][]MusicDifficulty
-	bonusesByEventID     map[int][]EventDeckBonus
-	eventCardsByEventID  map[int][]EventCard
-	eventMusicsByEventID map[int][]EventMusic
-	unitsByCharacterID   map[int][]GameCharacterUnit
-	vocalsByMusicID      map[int][]MusicVocal
+	diffsByMusicID           map[int][]MusicDifficulty
+	bonusesByEventID         map[int][]EventDeckBonus
+	eventCardsByEventID      map[int][]EventCard
+	eventMusicsByEventID     map[int][]EventMusic
+	unitsByCharacterID       map[int][]GameCharacterUnit
+	vocalsByMusicID          map[int][]MusicVocal
+	challengeRewardsByCharID map[int][]ChallengeLiveHighScoreReward
+	resourceBoxDetailsByKey  map[string][]ResourceBoxDetail
+	missionParamGroupsByID   map[int][]CharacterMissionV2ParameterGroup
 }
 
 // NewStore creates an empty Store ready for use.
@@ -73,12 +83,16 @@ func (s *Store) initMaps() {
 	s.characterUnitByID = make(map[int]*GameCharacterUnit)
 	s.honorByID = make(map[int]*HonorInfo)
 	s.musicVocalByID = make(map[int]*MusicVocal)
+	s.resourceBoxByKey = make(map[string]*ResourceBox)
 	s.diffsByMusicID = make(map[int][]MusicDifficulty)
 	s.bonusesByEventID = make(map[int][]EventDeckBonus)
 	s.eventCardsByEventID = make(map[int][]EventCard)
 	s.eventMusicsByEventID = make(map[int][]EventMusic)
 	s.unitsByCharacterID = make(map[int][]GameCharacterUnit)
 	s.vocalsByMusicID = make(map[int][]MusicVocal)
+	s.challengeRewardsByCharID = make(map[int][]ChallengeLiveHighScoreReward)
+	s.resourceBoxDetailsByKey = make(map[string][]ResourceBoxDetail)
+	s.missionParamGroupsByID = make(map[int][]CharacterMissionV2ParameterGroup)
 }
 
 // ---------- Atomic Data Swap -----------------------------------------------
@@ -105,6 +119,10 @@ func (s *Store) SetAll(data *MasterData) {
 	s.characterUnits = data.CharacterUnits
 	s.honors = data.Honors
 	s.musicVocals = data.MusicVocals
+	s.challengeLiveHighScoreRewards = data.ChallengeLiveHighScoreRewards
+	s.resourceBoxes = data.ResourceBoxes
+	s.resourceBoxDetails = data.ResourceBoxDetails
+	s.characterMissionV2ParameterGroups = data.CharacterMissionV2ParameterGroups
 
 	s.buildIndexes()
 }
@@ -146,6 +164,9 @@ func (s *Store) buildIndexes() {
 	for i := range s.musicVocals {
 		s.musicVocalByID[s.musicVocals[i].ID] = &s.musicVocals[i]
 	}
+	for i := range s.resourceBoxes {
+		s.resourceBoxByKey[resourceBoxKey(s.resourceBoxes[i].ResourceBoxPurpose, s.resourceBoxes[i].ID)] = &s.resourceBoxes[i]
+	}
 
 	// --- relation indexes ---
 	for _, d := range s.musicDifficulties {
@@ -165,6 +186,21 @@ func (s *Store) buildIndexes() {
 	}
 	for _, v := range s.musicVocals {
 		s.vocalsByMusicID[v.MusicID] = append(s.vocalsByMusicID[v.MusicID], v)
+	}
+	for _, reward := range s.challengeLiveHighScoreRewards {
+		s.challengeRewardsByCharID[reward.CharacterID] = append(s.challengeRewardsByCharID[reward.CharacterID], reward)
+	}
+	for _, detail := range s.resourceBoxDetails {
+		key := resourceBoxKey(detail.ResourceBoxPurpose, detail.ResourceBoxID)
+		s.resourceBoxDetailsByKey[key] = append(s.resourceBoxDetailsByKey[key], detail)
+	}
+	for _, group := range s.characterMissionV2ParameterGroups {
+		s.missionParamGroupsByID[group.ID] = append(s.missionParamGroupsByID[group.ID], group)
+	}
+	for id := range s.missionParamGroupsByID {
+		groups := s.missionParamGroupsByID[id]
+		sort.SliceStable(groups, func(i, j int) bool { return groups[i].Seq < groups[j].Seq })
+		s.missionParamGroupsByID[id] = groups
 	}
 }
 
@@ -286,6 +322,34 @@ func (s *Store) GetMusicVocals(musicID int) []MusicVocal {
 	return s.vocalsByMusicID[musicID]
 }
 
+// GetChallengeLiveHighScoreRewards returns all high-score rewards for a character ID.
+func (s *Store) GetChallengeLiveHighScoreRewards(characterID int) []ChallengeLiveHighScoreReward {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]ChallengeLiveHighScoreReward(nil), s.challengeRewardsByCharID[characterID]...)
+}
+
+// GetResourceBox returns a resource box by purpose and ID.
+func (s *Store) GetResourceBox(purpose string, id int) *ResourceBox {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.resourceBoxByKey[resourceBoxKey(purpose, id)]
+}
+
+// GetResourceBoxDetails returns expanded resource box details by purpose and ID.
+func (s *Store) GetResourceBoxDetails(purpose string, id int) []ResourceBoxDetail {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]ResourceBoxDetail(nil), s.resourceBoxDetailsByKey[resourceBoxKey(purpose, id)]...)
+}
+
+// GetCharacterMissionV2ParameterGroups returns all mission parameter rows for a group ID.
+func (s *Store) GetCharacterMissionV2ParameterGroups(id int) []CharacterMissionV2ParameterGroup {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]CharacterMissionV2ParameterGroup(nil), s.missionParamGroupsByID[id]...)
+}
+
 // ---------- List Getters (all items) ---------------------------------------
 // Returned slices are shallow copies — safe to iterate without holding the lock,
 // but the element values should not be mutated.
@@ -398,6 +462,24 @@ func (s *Store) AllMusicVocals() []MusicVocal {
 	return out
 }
 
+// AllChallengeLiveHighScoreRewards returns a copy of all challenge-live score rewards.
+func (s *Store) AllChallengeLiveHighScoreRewards() []ChallengeLiveHighScoreReward {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]ChallengeLiveHighScoreReward, len(s.challengeLiveHighScoreRewards))
+	copy(out, s.challengeLiveHighScoreRewards)
+	return out
+}
+
+// AllResourceBoxDetails returns a copy of all expanded resource box details.
+func (s *Store) AllResourceBoxDetails() []ResourceBoxDetail {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]ResourceBoxDetail, len(s.resourceBoxDetails))
+	copy(out, s.resourceBoxDetails)
+	return out
+}
+
 // ---------- Count Helpers --------------------------------------------------
 
 // LoadedAt returns the time when masterdata was last loaded into the store.
@@ -440,6 +522,10 @@ func (s *Store) VirtualLiveCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.virtualLives)
+}
+
+func resourceBoxKey(purpose string, id int) string {
+	return fmt.Sprintf("%s:%d", purpose, id)
 }
 
 // IsLoaded reports whether any masterdata has been loaded into the store.

@@ -71,3 +71,18 @@ func TestMusicInfoUnmarshalCategoryStrings(t *testing.T) {
 		t.Fatalf("categories = %#v", music.Categories)
 	}
 }
+
+func TestStoreIndexesResourceBoxDetails(t *testing.T) {
+	store := NewStore()
+	store.SetAll(&MasterData{ResourceBoxDetails: []ResourceBoxDetail{
+		{ResourceBoxPurpose: "challenge_live_high_score", ResourceBoxID: 10, ResourceType: "jewel", ResourceQuantity: 100},
+		{ResourceBoxPurpose: "challenge_live_high_score", ResourceBoxID: 10, ResourceType: "material", ResourceID: 15, ResourceQuantity: 2},
+	}})
+	details := store.GetResourceBoxDetails("challenge_live_high_score", 10)
+	if len(details) != 2 {
+		t.Fatalf("details len = %d, want 2: %#v", len(details), details)
+	}
+	if details[0].ResourceQuantity != 100 || details[1].ResourceID != 15 {
+		t.Fatalf("unexpected details: %#v", details)
+	}
+}

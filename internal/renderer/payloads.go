@@ -202,16 +202,39 @@ type SuiteSectionPayload struct {
 	Title    string                   `json:"title"`
 	Subtitle string                   `json:"subtitle,omitempty"`
 	Kind     string                   `json:"kind,omitempty"`
+	Note     string                   `json:"note,omitempty"`
+	Columns  []SuiteColumnPayload     `json:"columns,omitempty"`
 	Rows     []SuiteSectionRowPayload `json:"rows"`
+	Extra    map[string]interface{}   `json:"extra,omitempty"`
+}
+
+type SuiteColumnPayload struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
 }
 
 type SuiteSectionRowPayload struct {
-	Rank  int                   `json:"rank,omitempty"`
-	Label string                `json:"label"`
-	Value string                `json:"value,omitempty"`
-	Meta  string                `json:"meta,omitempty"`
-	Color string                `json:"color,omitempty"`
-	Card  *SuiteUserCardPayload `json:"card,omitempty"`
+	ID            int                    `json:"id,omitempty"`
+	Rank          int                    `json:"rank,omitempty"`
+	Label         string                 `json:"label"`
+	Value         string                 `json:"value,omitempty"`
+	Meta          string                 `json:"meta,omitempty"`
+	Color         string                 `json:"color,omitempty"`
+	Card          *SuiteUserCardPayload  `json:"card,omitempty"`
+	CharacterID   int                    `json:"characterId,omitempty"`
+	MusicID       int                    `json:"musicId,omitempty"`
+	EventID       int                    `json:"eventId,omitempty"`
+	IconURL       string                 `json:"iconUrl,omitempty"`
+	ImageURL      string                 `json:"imageUrl,omitempty"`
+	BannerURL     string                 `json:"bannerUrl,omitempty"`
+	LogoURL       string                 `json:"logoUrl,omitempty"`
+	DateText      string                 `json:"dateText,omitempty"`
+	StartAt       int64                  `json:"startAt,omitempty"`
+	EndAt         int64                  `json:"endAt,omitempty"`
+	Progress      float64                `json:"progress,omitempty"`
+	ProgressMax   float64                `json:"progressMax,omitempty"`
+	ProgressLabel string                 `json:"progressLabel,omitempty"`
+	Extra         map[string]interface{} `json:"extra,omitempty"`
 }
 
 type SuiteCardBoxPayload struct {

@@ -83,7 +83,7 @@ func RegisterBond(deps *Deps) {
 			payload.Subtitle = suitePanelSubtitle(profile.BaseProfile)
 			rows, stats := rowsFromBonds(profile, bondDefaultLimit)
 			payload.Stats = append(suiteBasicStats(profile.commonSuiteProfile()), stats...)
-			payload.Sections = []renderer.SuiteSectionPayload{{Title: "羁绊 TOP", Rows: rows}}
+			payload.Sections = []renderer.SuiteSectionPayload{{Title: "羁绊 TOP", Kind: "bond_list", Note: "角色头像来自本地 assets/characters。", Rows: rows}}
 			sendSuitePanelOrText(ctx, deps, payload, formatBondText(runtime.Region, profile, bondDefaultLimit))
 			bot.RecordCommandRegion(deps.DB, "羁绊", runtime.Region, ctx, start)
 		})

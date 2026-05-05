@@ -362,7 +362,7 @@ function normalizeSuitePanel(data: any) {
 		subtitle: data.subtitle ?? data.Subtitle,
 		profile: normalizeSuiteProfile(data.profile ?? data.Profile),
 		stats: data.stats ?? data.Stats ?? [],
-		sections: data.sections ?? data.Sections ?? [],
+		sections: (data.sections ?? data.Sections ?? []).map(normalizeSuiteSection),
 		deckCards: (data.deckCards ?? data.DeckCards ?? []).map(normalizeSuiteCard),
 		assetSource: data.assetSource ?? data.AssetSource,
 	};
@@ -384,6 +384,49 @@ function normalizeSuiteCardBox(data: any) {
 		assetSource: data.assetSource ?? data.AssetSource,
 		total: data.total ?? data.Total,
 		ownedTotal: data.ownedTotal ?? data.OwnedTotal,
+	};
+}
+
+function normalizeSuiteSection(section: any) {
+	section = section ?? {};
+	return {
+		title: section.title ?? section.Title,
+		subtitle: section.subtitle ?? section.Subtitle,
+		kind: section.kind ?? section.Kind,
+		note: section.note ?? section.Note,
+		columns: section.columns ?? section.Columns,
+		items: section.items ?? section.Items,
+		extra: section.extra ?? section.Extra,
+		rows: (section.rows ?? section.Rows ?? []).map(normalizeSuiteSectionRow),
+	};
+}
+
+function normalizeSuiteSectionRow(row: any) {
+	if (Array.isArray(row)) return row;
+	row = row ?? {};
+	return {
+		...row,
+		id: row.id ?? row.ID,
+		rank: row.rank ?? row.Rank,
+		label: row.label ?? row.Label,
+		value: row.value ?? row.Value,
+		meta: row.meta ?? row.Meta,
+		color: row.color ?? row.Color,
+		card: row.card ?? row.Card,
+		characterId: row.characterId ?? row.CharacterID,
+		musicId: row.musicId ?? row.MusicID,
+		eventId: row.eventId ?? row.EventID,
+		iconUrl: toPngImageUrl(row.iconUrl ?? row.IconURL),
+		imageUrl: toPngImageUrl(row.imageUrl ?? row.ImageURL),
+		bannerUrl: toPngImageUrl(row.bannerUrl ?? row.BannerURL),
+		logoUrl: toPngImageUrl(row.logoUrl ?? row.LogoURL),
+		dateText: row.dateText ?? row.DateText,
+		startAt: row.startAt ?? row.StartAt,
+		endAt: row.endAt ?? row.EndAt,
+		progress: row.progress ?? row.Progress,
+		progressMax: row.progressMax ?? row.ProgressMax,
+		progressLabel: row.progressLabel ?? row.ProgressLabel,
+		extra: row.extra ?? row.Extra,
 	};
 }
 

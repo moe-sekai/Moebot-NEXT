@@ -7,7 +7,7 @@ import (
 
 	"moebot-next/internal/bot"
 	"moebot-next/internal/config"
-	"moebot-next/internal/renderer"
+	"moebot-next/internal/masterdata"
 	"moebot-next/internal/suite"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
@@ -15,13 +15,20 @@ import (
 	"gorm.io/gorm"
 )
 
-type musicProgressProfile struct {
+const musicOverviewDefaultLimit = 10
+const musicRewardDefaultLimit = musicOverviewDefaultLimit
+
+type musicOverviewProfile struct {
 	suite.BaseProfile
 	UserGamedata     suite.UserGamedata `json:"userGamedata"`
 	UserDecks        []suite.UserDeck   `json:"userDecks"`
 	UserCards        []suite.UserCard   `json:"userCards"`
 	UserMusicResults []userMusicResult  `json:"userMusicResults"`
+	Achievements     []musicAchievement `json:"userMusicAchievements"`
 }
+
+type musicProgressProfile = musicOverviewProfile
+type musicRewardProfile = musicOverviewProfile
 
 type userMusicResult struct {
 	MusicID             int    `json:"musicId"`
@@ -33,20 +40,35 @@ type userMusicResult struct {
 }
 
 type musicProgressCount struct {
+	Total      int
 	Played     int
 	Clear      int
 	FullCombo  int
 	AllPerfect int
 }
 
-func musicProgressFields() []string {
-	return []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMusicResults}
+type musicAchievement struct {
+	MusicID            int `json:"musicId"`
+	MusicAchievementID int `json:"musicAchievementId"`
 }
 
-func RegisterMusicProgress(deps *Deps) {
+type musicRewardRow struct {
+	MusicID int
+	Count   int
+}
+
+func musicOverviewFields() []string {
+	return []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMusicResults, suite.FieldUserMusicAchievements}
+}
+
+func musicProgressFields() []string { return musicOverviewFields() }
+func musicRewardFields() []string   { return musicOverviewFields() }
+
+func RegisterMusicOverview(deps *Deps) {
 	for _, cmd := range parserCommands(deps, "打歌进度") {
 		commandName := cmd.Name
 		forcedRegion := cmd.Region
+		baseCommand := cmd.Base
 		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, user := runtimeForCommand(deps, ctx, forcedRegion)
@@ -75,70 +97,81 @@ func RegisterMusicProgress(deps *Deps) {
 				ctx.SendChain(message.Text(fmt.Sprintf("你已隐藏%s抓包信息，发送 /%s展示抓包 可重新展示", runtime.Label, runtime.Region)))
 				return
 			}
-			var profile musicProgressProfile
-			if err := runtime.Suite.GetUserData(user.GameID, "", musicProgressFields(), &profile); err != nil {
+			var profile musicOverviewProfile
+			if err := runtime.Suite.GetUserData(user.GameID, "", musicOverviewFields(), &profile); err != nil {
 				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%s Haruki Suite 公开数据失败\n%s", runtime.Label, err.Error())))
 				return
 			}
-			payload := buildSuitePanel(runtime, suitePanelTitle(runtime, "打歌进度"), "", profile)
+			payload := buildSuitePanel(runtime, suitePanelTitle(runtime, "打歌进度 / 歌曲奖励"), "", profile)
 			payload.Subtitle = suitePanelSubtitle(profile.BaseProfile)
-			rows, stats := rowsFromMusicProgress(profile)
+			sections, stats := sectionsFromMusicOverview(profile, runtime.Store, musicOverviewDefaultLimit)
 			payload.Stats = append(suiteBasicStats(profile.commonSuiteProfile()), stats...)
-			payload.Sections = []renderer.SuiteSectionPayload{{Title: "难度进度", Rows: rows}}
-			sendSuitePanelOrText(ctx, deps, payload, formatMusicProgressText(runtime.Region, profile))
-			bot.RecordCommandRegion(deps.DB, "打歌进度", runtime.Region, ctx, start)
+			payload.Sections = sections
+			sendSuitePanelOrText(ctx, deps, payload, formatMusicOverviewText(runtime.Region, profile, runtime.Store, musicOverviewDefaultLimit))
+			bot.RecordCommandRegion(deps.DB, musicOverviewRecordName(baseCommand), runtime.Region, ctx, start)
 		})
 	}
 }
 
-func formatMusicProgressText(region string, profile musicProgressProfile) string {
+func musicOverviewRecordName(base string) string {
+	switch strings.TrimSpace(base) {
+	case "歌曲奖励", "打歌奖励", "歌曲挖矿", "打歌挖矿":
+		return "歌曲奖励"
+	default:
+		return "打歌进度"
+	}
+}
+
+func formatMusicOverviewText(region string, profile musicOverviewProfile, store *masterdata.Store, limit int) string {
 	name := profile.UserGamedata.Name
 	if name == "" {
 		name = "未知玩家"
 	}
-	source := suiteSourceText(profile.BaseProfile)
-	updateText := suiteUpdateText(profile.UploadTime)
-	counts := map[string]*musicProgressCount{}
-	for _, result := range profile.UserMusicResults {
-		diff := musicResultDifficulty(result)
-		if diff == "" {
-			continue
-		}
-		count := counts[diff]
-		if count == nil {
-			count = &musicProgressCount{}
-			counts[diff] = count
-		}
-		count.Played++
-		if musicResultCleared(result) {
-			count.Clear++
-		}
-		if musicResultFullCombo(result) {
-			count.FullCombo++
-		}
-		if musicResultAllPerfect(result) {
-			count.AllPerfect++
-		}
-	}
+	counts := musicProgressCounts(profile)
+	summary := musicRewardSummaryFromProfile(profile, store, limit)
 	lines := []string{
-		fmt.Sprintf("%s 打歌进度", strings.ToUpper(config.NormalizeRegion(region))),
+		fmt.Sprintf("%s 打歌进度 / 歌曲奖励", strings.ToUpper(config.NormalizeRegion(region))),
 		fmt.Sprintf("玩家: %s", name),
-		fmt.Sprintf("更新时间: %s", updateText),
-		fmt.Sprintf("数据来源: %s", source),
+		fmt.Sprintf("更新时间: %s", suiteUpdateText(profile.UploadTime)),
+		fmt.Sprintf("数据来源: %s", suiteSourceText(profile.BaseProfile)),
 	}
-	if len(counts) == 0 {
-		lines = append(lines, "暂无打歌数据")
+	if len(counts) == 0 && len(profile.Achievements) == 0 && summary.ValidMusicCount == 0 {
+		lines = append(lines, "暂无打歌数据 / 歌曲奖励数据")
 		return strings.Join(lines, "\n")
 	}
-	lines = append(lines, "---")
-	for _, diff := range []string{"easy", "normal", "hard", "expert", "master", "append"} {
-		count := counts[diff]
-		if count == nil {
-			continue
+	if len(counts) > 0 {
+		lines = append(lines, "---", "打歌进度")
+		for _, diff := range musicDifficultyOrder() {
+			count := counts[diff]
+			if count == nil {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("%s: 游玩 %d | Clear %d | FC %d | AP %d", strings.ToUpper(diff), count.Played, count.Clear, count.FullCombo, count.AllPerfect))
 		}
-		lines = append(lines, fmt.Sprintf("%s: 游玩 %d | Clear %d | FC %d | AP %d", strings.ToUpper(diff), count.Played, count.Clear, count.FullCombo, count.AllPerfect))
+	}
+	lines = append(lines, "---", "歌曲奖励")
+	lines = append(lines, fmt.Sprintf("剩余总量: 水晶 %d | 碎片 %d", summary.TotalJewelRemain, summary.TotalShardRemain))
+	lines = append(lines, fmt.Sprintf("S评级剩余: %d水晶（%d/%d首未达成）", summary.RankJewelRemain, summary.RankRemainCount, summary.ValidMusicCount))
+	lines = append(lines, fmt.Sprintf("连击奖励剩余: %s", formatRewardTotal(summary.ComboRows)))
+	lines = append(lines, fmt.Sprintf("已达成奖励数: %d | 涉及歌曲数: %d", summary.AchievementTotal, summary.AchievedMusicCount))
+	if len(summary.TopRows) > 0 {
+		lines = append(lines, "---", "已达成奖励 TOP")
+		for i, row := range summary.TopRows {
+			if i >= clampLimit(limit, len(summary.TopRows)) {
+				break
+			}
+			lines = append(lines, fmt.Sprintf("%d. %s: %s", i+1, row.Label, row.Value))
+		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatMusicProgressText(region string, profile musicProgressProfile) string {
+	return formatMusicOverviewText(region, profile, nil, musicOverviewDefaultLimit)
+}
+
+func formatMusicRewardText(region string, profile musicRewardProfile, limit int) string {
+	return formatMusicOverviewText(region, profile, nil, limit)
 }
 
 func musicResultDifficulty(result userMusicResult) string {

@@ -680,20 +680,21 @@ function createPreviewElement(id: string) {
 					deckCards={createDeckPreviewCards()}
 					sections={[
 						{
+							title: "羁绊 TOP",
+							kind: "bond_list",
+							note: "角色头像来自本地 assets/characters。",
+							rows: [
+								{ rank: 1, label: "穗波 × 镜音连", value: "Lv.55", meta: "EXP 820", extra: { characterId1: 3, characterId2: 23, characterName1: "穗波", characterName2: "镜音连", rankLevel: 55, exp: 820 } },
+								{ rank: 2, label: "咲希 × 镜音铃", value: "Lv.48", meta: "EXP 360", extra: { characterId1: 2, characterId2: 22, characterName1: "咲希", characterName2: "镜音铃", rankLevel: 48, exp: 360 } },
+								{ rank: 3, label: "瑞希 × 绘名", value: "Lv.42", meta: "EXP 120", extra: { characterId1: 20, characterId2: 19, characterName1: "瑞希", characterName2: "绘名", rankLevel: 42, exp: 120 } },
+							],
+						},
+						{
 							title: "资源概览",
 							items: [
 								{ label: "水晶", value: 45320 },
 								{ label: "想法碎片", value: 1288 },
 								{ label: "技能书", value: 42 },
-							],
-						},
-						{
-							title: "近期记录",
-							columns: ["时间", "类型", "内容", "变化"],
-							rows: [
-								["05-05", "抽卡", "Birthday Gift", "+1 NEW"],
-								["05-04", "升级", "初音未来", "CR 58"],
-								["05-03", "活动", "TOP 5000", "完成"],
 							],
 						},
 					]}

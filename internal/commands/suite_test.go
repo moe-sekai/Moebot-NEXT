@@ -169,6 +169,19 @@ func TestBondFieldsUsesUserBonds(t *testing.T) {
 	}
 }
 
+func TestRowsFromBondsIncludeCharacterAvatarMetadata(t *testing.T) {
+	rows, _ := rowsFromBonds(bondProfile{UserBonds: []userBond{{CharacterID1: 3, CharacterID2: 23, Rank: 20, Exp: 50}}}, 10)
+	if len(rows) != 1 {
+		t.Fatalf("rows len = %d, want 1", len(rows))
+	}
+	if rows[0].Extra["characterId1"] != 3 || rows[0].Extra["characterId2"] != 23 {
+		t.Fatalf("bond row should include character ids for avatar rendering, row = %#v", rows[0])
+	}
+	if rows[0].Extra["rankLevel"] != 20 || rows[0].Extra["exp"] != 50 {
+		t.Fatalf("bond row should include rank/exp metadata, row = %#v", rows[0])
+	}
+}
+
 func TestFormatBondTextSortsTopBonds(t *testing.T) {
 	profile := bondProfile{
 		BaseProfile:  suite.BaseProfile{UploadTime: 1700000000000, Source: "moesekai"},
@@ -206,7 +219,7 @@ func TestFormatBondTextHandlesEmptyBonds(t *testing.T) {
 
 func TestMusicProgressFieldsUsesMusicResults(t *testing.T) {
 	fields := musicProgressFields()
-	want := []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMusicResults}
+	want := []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMusicResults, suite.FieldUserMusicAchievements}
 	if len(fields) != len(want) {
 		t.Fatalf("fields len = %d, want %d: %#v", len(fields), len(want), fields)
 	}
@@ -242,8 +255,53 @@ func TestFormatMusicProgressTextHandlesEmptyResults(t *testing.T) {
 		BaseProfile:  suite.BaseProfile{Source: "local"},
 		UserGamedata: suite.UserGamedata{Name: "测试玩家"},
 	})
-	if !strings.Contains(text, "暂无打歌数据") {
+	if !strings.Contains(text, "暂无打歌数据 / 歌曲奖励数据") {
 		t.Fatalf("empty music progress should be explained, got:\n%s", text)
+	}
+}
+
+func TestSectionsFromMusicOverviewIncludeProgressAndReward(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Musics: []masterdata.MusicInfo{{ID: 1, Title: "歌曲A"}, {ID: 2, Title: "歌曲B"}},
+		MusicDifficulties: []masterdata.MusicDifficulty{
+			{MusicID: 1, MusicDifficulty: "expert", PlayLevel: 27},
+			{MusicID: 2, MusicDifficulty: "expert", PlayLevel: 28},
+		},
+	})
+	profile := musicOverviewProfile{
+		UserMusicResults: []userMusicResult{
+			{MusicID: 1, MusicDifficultyType: "expert", PlayResult: "clear"},
+			{MusicID: 1, MusicDifficultyType: "expert", PlayResult: "full_combo", FullComboFlg: true},
+		},
+		Achievements: []musicAchievement{{MusicID: 1, MusicAchievementID: musicRewardRankRewardID}},
+	}
+	sections, stats := sectionsFromMusicOverview(profile, store, 10)
+	if len(sections) < 3 {
+		t.Fatalf("sections len = %d, want progress + level + reward", len(sections))
+	}
+	if sections[0].Kind != "music_progress_summary" || sections[1].Kind != "music_progress_level" {
+		t.Fatalf("unexpected leading sections: %#v", sections[:2])
+	}
+	if sections[0].Rows[0].Extra["played"] != 1 {
+		t.Fatalf("duplicate music result should be deduped, row = %#v", sections[0].Rows[0])
+	}
+	levelRow := sections[1].Rows[0]
+	if sections[1].Rows[1].Extra["level"] == 28 {
+		levelRow = sections[1].Rows[1]
+	}
+	if levelRow.Extra["total"] != 1 || levelRow.Extra["notPlayed"] != 1 {
+		t.Fatalf("level chart row should include total/notPlayed, row = %#v", levelRow)
+	}
+	if sections[2].Extra["rankJewelRemain"] != 50 || sections[2].Extra["totalJewelRemain"] != 190 {
+		t.Fatalf("reward summary should include rank/total jewel remain, extra = %#v", sections[2].Extra)
+	}
+	joined := ""
+	for _, stat := range stats {
+		joined += stat.Label + ":" + stat.Value + "\n"
+	}
+	if !strings.Contains(joined, "S评级剩余:50") {
+		t.Fatalf("stats should include reward summary, got:\n%s", joined)
 	}
 }
 
@@ -344,6 +402,72 @@ func TestFormatChallengeTextHandlesEmptyData(t *testing.T) {
 	}
 }
 
+func TestChallengeRowsIncludeRemainTotals(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		ChallengeLiveHighScoreRewards: []masterdata.ChallengeLiveHighScoreReward{
+			{ID: 1, CharacterID: 1, HighScore: 100, ResourceBoxID: 10},
+			{ID: 2, CharacterID: 1, HighScore: 200, ResourceBoxID: 20},
+			{ID: 3, CharacterID: 1, HighScore: 300, ResourceBoxID: 30},
+		},
+		ResourceBoxes: []masterdata.ResourceBox{
+			{ResourceBoxPurpose: "challenge_live_high_score", ID: 10},
+			{ResourceBoxPurpose: "challenge_live_high_score", ID: 20},
+			{ResourceBoxPurpose: "challenge_live_high_score", ID: 30, Details: []masterdata.ResourceBoxDetail{{ResourceType: "resource_box", ResourceID: 40, ResourceQuantity: 1}}},
+			{ResourceBoxPurpose: "challenge_live_high_score", ID: 40, Details: []masterdata.ResourceBoxDetail{{ResourceType: "jewel", ResourceQuantity: 25}}},
+		},
+		ResourceBoxDetails: []masterdata.ResourceBoxDetail{
+			{ResourceBoxPurpose: "challenge_live_high_score", ResourceBoxID: 10, ResourceType: "jewel", ResourceQuantity: 50},
+			{ResourceBoxPurpose: "challenge_live_high_score", ResourceBoxID: 20, ResourceType: "material", ResourceID: 15, ResourceQuantity: 2},
+		},
+	})
+	profile := challengeProfile{
+		Results: []challengeResult{{CharacterID: 1, HighScore: 12345}},
+		Stages:  []challengeStage{{CharacterID: 1, Rank: 7}},
+		Rewards: []challengeReward{{ChallengeLiveSoloHighScoreRewardID: 1}},
+	}
+	rows, stats, extra := rowsFromChallenge(profile, store, 26)
+	if len(rows) != 26 {
+		t.Fatalf("rows len = %d, want 26", len(rows))
+	}
+	if extra["totalRemainJewel"] != 25 || extra["totalRemainFragment"] != 2 || extra["totalRemainRewards"] != 2 {
+		t.Fatalf("unexpected challenge extra: %#v", extra)
+	}
+	joined := ""
+	for _, stat := range stats {
+		joined += stat.Label + ":" + stat.Value + "\n"
+	}
+	if !strings.Contains(joined, "剩余水晶:25") || !strings.Contains(joined, "剩余碎片:2") || !strings.Contains(joined, "剩余奖励档:2") {
+		t.Fatalf("challenge stats missing totals:\n%s", joined)
+	}
+	text := formatChallengeTextWithStore(config.RegionCN, profile, store, 1)
+	if rows[0].Extra["remainJewel"] != 25 || rows[0].Extra["remainFragment"] != 2 || rows[0].Extra["rewardRemain"] != 2 {
+		t.Fatalf("challenge row extra should include remain resources, row = %#v", rows[0])
+	}
+	for _, want := range []string{"剩余总量", "水晶 25", "碎片 2", "奖励档 2", "挑战等级分布", "剩余档 2"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("challenge text missing %q in:\n%s", want, text)
+		}
+	}
+}
+
+func TestChallengeRowsAcceptRewardIDAlias(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		ChallengeLiveHighScoreRewards: []masterdata.ChallengeLiveHighScoreReward{{ID: 9, CharacterID: 2, HighScore: 100, ResourceBoxID: 10}},
+		ResourceBoxes:                 []masterdata.ResourceBox{{ResourceBoxPurpose: "challenge_live_high_score", ID: 10}},
+		ResourceBoxDetails:            []masterdata.ResourceBoxDetail{{ResourceBoxPurpose: "challenge_live_high_score", ResourceBoxID: 10, ResourceType: "jewel", ResourceQuantity: 100}},
+	})
+	profile := challengeProfile{Rewards: []challengeReward{{GameCharacterID: 2, RewardIDAlias: 9}}}
+	rows, _, extra := rowsFromChallenge(profile, store, 26)
+	if extra["totalRemainJewel"] != 0 || extra["totalRemainRewards"] != 0 {
+		t.Fatalf("rewardId alias should mark reward completed, extra = %#v", extra)
+	}
+	if rows[1].Extra["rewardCount"] != 1 {
+		t.Fatalf("gameCharacterId alias should count claimed reward for character 2, row = %#v", rows[1])
+	}
+}
+
 func TestEventRecordFieldsUsesEventData(t *testing.T) {
 	fields := eventRecordFields()
 	want := suite.Fields(suite.FieldUserEvents, suite.FieldUserWorldBlooms)
@@ -436,9 +560,50 @@ func TestFormatLeaderCountTextHandlesEmptyData(t *testing.T) {
 	}
 }
 
+func TestLeaderRowsIncludeRemainAndMissionLevels(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{CharacterMissionV2ParameterGroups: []masterdata.CharacterMissionV2ParameterGroup{
+		{ID: 1, Seq: 1, Requirement: 100},
+		{ID: 1, Seq: 2, Requirement: 300},
+		{ID: 101, Seq: 1, Requirement: 10},
+		{ID: 101, Seq: 2, Requirement: 20},
+	}})
+	profile := leaderCountProfile{
+		Missions: []characterMissionV2{
+			{CharacterID: 1, CharacterMissionType: "play_live", Progress: 120},
+			{CharacterID: 1, CharacterMissionType: "play_live_ex", Progress: 5},
+		},
+		Statuses: []characterMissionV2Status{{CharacterID: 1, ParameterGroupID: 101, Seq: 1}},
+	}
+	rows, stats, extra := rowsFromLeaderCount(profile, store, 26)
+	if len(rows) != 26 {
+		t.Fatalf("rows len = %d, want 26", len(rows))
+	}
+	first := rows[0].Extra
+	if first["playLiveRemain"] != 180 || first["missionLevel"] != 1 || first["missionLevelRemain"] != 1 || first["playLiveEx"] != 15 {
+		t.Fatalf("unexpected leader row extra: %#v", first)
+	}
+	if extra["totalMissionMax"] != 52 || extra["totalEx"] != 15 {
+		t.Fatalf("unexpected leader extra: %#v", extra)
+	}
+	joined := ""
+	for _, stat := range stats {
+		joined += stat.Label + ":" + stat.Value + "\n"
+	}
+	if !strings.Contains(joined, "剩余总次数") || !strings.Contains(joined, "普通档位") || !strings.Contains(joined, "EX总次数:15") {
+		t.Fatalf("leader stats missing totals:\n%s", joined)
+	}
+	text := formatLeaderCountTextWithStore(config.RegionCN, profile, store, 1)
+	for _, want := range []string{"剩余总次数", "普通档位", "EX总次数", "档位 1/2", "EX 15"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("leader text missing %q in:\n%s", want, text)
+		}
+	}
+}
+
 func TestMusicRewardFieldsUsesAchievements(t *testing.T) {
 	fields := musicRewardFields()
-	want := []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMusicAchievements}
+	want := []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserMusicResults, suite.FieldUserMusicAchievements}
 	if len(fields) != len(want) {
 		t.Fatalf("fields len = %d, want %d: %#v", len(fields), len(want), fields)
 	}
@@ -460,7 +625,7 @@ func TestFormatMusicRewardTextSummarizesAchievements(t *testing.T) {
 		},
 	}
 	text := formatMusicRewardText(config.RegionCN, profile, 5)
-	for _, want := range []string{"CN 歌曲奖励", "测试玩家", "已达成奖励数: 3", "涉及歌曲数: 2", "歌曲 #1: 2", "歌曲 #2: 1"} {
+	for _, want := range []string{"CN 打歌进度 / 歌曲奖励", "测试玩家", "歌曲奖励", "已达成奖励数: 3", "涉及歌曲数: 2", "歌曲 #1: 2", "歌曲 #2: 1"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("music reward missing %q in:\n%s", want, text)
 		}
@@ -472,7 +637,7 @@ func TestFormatMusicRewardTextHandlesEmptyData(t *testing.T) {
 		BaseProfile:  suite.BaseProfile{Source: "local"},
 		UserGamedata: suite.UserGamedata{Name: "测试玩家"},
 	}, 10)
-	if !strings.Contains(text, "暂无歌曲奖励数据") {
+	if !strings.Contains(text, "暂无打歌数据 / 歌曲奖励数据") {
 		t.Fatalf("empty music reward should be explained, got:\n%s", text)
 	}
 }

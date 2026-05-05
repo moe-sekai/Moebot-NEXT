@@ -52,3 +52,8 @@ export function getLocalFrameAssetDataUri(fileName: string): string | undefined 
 export function getLocalMusicAssetDataUri(fileName: string): string | undefined {
   return getLocalAssetDataUri('music', fileName)
 }
+
+export function getLocalCharacterIconAssetDataUri(characterId: number): string | undefined {
+  if (!Number.isFinite(characterId) || characterId <= 0) return undefined
+  return getLocalAssetDataUri('characters', `chr_ts_${Math.round(characterId)}.png`)
+}

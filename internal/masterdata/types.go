@@ -17,20 +17,24 @@ import (
 // MasterData is the aggregate container for a full masterdata snapshot.
 // It is passed to Store.SetAll to atomically swap all data.
 type MasterData struct {
-	Cards             []CardInfo          `json:"cards"`
-	Musics            []MusicInfo         `json:"musics"`
-	MusicDifficulties []MusicDifficulty   `json:"musicDifficulties"`
-	Events            []EventInfo         `json:"events"`
-	EventDeckBonuses  []EventDeckBonus    `json:"eventDeckBonuses"`
-	EventCards        []EventCard         `json:"eventCards"`
-	EventMusics       []EventMusic        `json:"eventMusics"`
-	VirtualLives      []VirtualLive       `json:"virtualLives"`
-	Gachas            []GachaInfo         `json:"gachas"`
-	CardSupplies      []CardSupplyInfo    `json:"cardSupplies"`
-	Skills            []SkillInfo         `json:"skills"`
-	CharacterUnits    []GameCharacterUnit `json:"gameCharacterUnits"`
-	Honors            []HonorInfo         `json:"honors"`
-	MusicVocals       []MusicVocal        `json:"musicVocals"`
+	Cards                             []CardInfo                         `json:"cards"`
+	Musics                            []MusicInfo                        `json:"musics"`
+	MusicDifficulties                 []MusicDifficulty                  `json:"musicDifficulties"`
+	Events                            []EventInfo                        `json:"events"`
+	EventDeckBonuses                  []EventDeckBonus                   `json:"eventDeckBonuses"`
+	EventCards                        []EventCard                        `json:"eventCards"`
+	EventMusics                       []EventMusic                       `json:"eventMusics"`
+	VirtualLives                      []VirtualLive                      `json:"virtualLives"`
+	Gachas                            []GachaInfo                        `json:"gachas"`
+	CardSupplies                      []CardSupplyInfo                   `json:"cardSupplies"`
+	Skills                            []SkillInfo                        `json:"skills"`
+	CharacterUnits                    []GameCharacterUnit                `json:"gameCharacterUnits"`
+	Honors                            []HonorInfo                        `json:"honors"`
+	MusicVocals                       []MusicVocal                       `json:"musicVocals"`
+	ChallengeLiveHighScoreRewards     []ChallengeLiveHighScoreReward     `json:"challengeLiveHighScoreRewards"`
+	ResourceBoxes                     []ResourceBox                      `json:"resourceBoxes"`
+	ResourceBoxDetails                []ResourceBoxDetail                `json:"resourceBoxDetails"`
+	CharacterMissionV2ParameterGroups []CharacterMissionV2ParameterGroup `json:"characterMissionV2ParameterGroups"`
 }
 
 // ----------------------------- Card types ----------------------------------
@@ -391,6 +395,44 @@ type SkillEffectDetail struct {
 	Level                  int     `json:"level"`
 	ActivateEffectDuration float64 `json:"activateEffectDuration"`
 	ActivateEffectValue    int     `json:"activateEffectValue"`
+}
+
+// ----------------------------- Challenge & Mission --------------------------
+
+// ChallengeLiveHighScoreReward defines one challenge-live score threshold reward.
+type ChallengeLiveHighScoreReward struct {
+	ID            int `json:"id"`
+	CharacterID   int `json:"characterId"`
+	HighScore     int `json:"highScore"`
+	ResourceBoxID int `json:"resourceBoxId"`
+}
+
+// ResourceBox groups one or more resources under a specific purpose/id pair.
+type ResourceBox struct {
+	ResourceBoxPurpose string              `json:"resourceBoxPurpose"`
+	ID                 int                 `json:"id"`
+	ResourceBoxType    string              `json:"resourceBoxType"`
+	Description        string              `json:"description"`
+	Details            []ResourceBoxDetail `json:"details"`
+}
+
+// ResourceBoxDetail is a concrete resource in an expanded resource box.
+type ResourceBoxDetail struct {
+	ResourceBoxPurpose string `json:"resourceBoxPurpose"`
+	ResourceBoxID      int    `json:"resourceBoxId"`
+	Seq                int    `json:"seq"`
+	ResourceType       string `json:"resourceType"`
+	ResourceID         int    `json:"resourceId"`
+	ResourceQuantity   int    `json:"resourceQuantity"`
+}
+
+// CharacterMissionV2ParameterGroup defines requirement/exp rows for character missions.
+type CharacterMissionV2ParameterGroup struct {
+	ID          int `json:"id"`
+	Seq         int `json:"seq"`
+	Requirement int `json:"requirement"`
+	Exp         int `json:"exp"`
+	Quantity    int `json:"quantity"`
 }
 
 // ----------------------------- Character & Honor ----------------------------

@@ -85,7 +85,7 @@ func RegisterEventRecord(deps *Deps) {
 			}
 			payload := buildSuitePanel(runtime, suitePanelTitle(runtime, "活动记录"), "", profile)
 			payload.Subtitle = suitePanelSubtitle(profile.BaseProfile)
-			sections, stats := rowsFromEventRecord(profile, runtime.Store, eventRecordDefaultLimit)
+			sections, stats := rowsFromEventRecord(profile, runtime.Store, runtime.Assets, eventRecordDefaultLimit)
 			payload.Stats = append(suiteBasicStats(profile.commonSuiteProfile()), stats...)
 			payload.Sections = sections
 			sendSuitePanelOrText(ctx, deps, payload, formatEventRecordText(runtime.Region, profile, runtime.Store, eventRecordDefaultLimit))

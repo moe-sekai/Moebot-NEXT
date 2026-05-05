@@ -90,6 +90,36 @@ func TestSuiteVisibilityCommandsAreActionOnly(t *testing.T) {
 	}
 }
 
+func TestParseMusicRewardAliasesUseMusicProgressDefinition(t *testing.T) {
+	service := NewService("/", nil, nil, nil, nil)
+	for _, input := range []string{"/打歌进度", "/歌曲奖励", "/cn歌曲奖励", "/打歌挖矿"} {
+		parsed := service.Parse(input)
+		if parsed.Definition == nil || parsed.Definition.ID != "music-progress" {
+			t.Fatalf("%s parsed definition = %#v, want music-progress", input, parsed.Definition)
+		}
+	}
+}
+
+func TestRemovedSuiteCommandsDoNotParse(t *testing.T) {
+	service := NewService("/", nil, nil, nil, nil)
+	for _, input := range []string{"/抽卡记录", "/cn抽卡统计", "/材料信息", "/jp素材", "/materials"} {
+		parsed := service.Parse(input)
+		if parsed.Definition != nil {
+			t.Fatalf("%s parsed definition = %#v, want nil", input, parsed.Definition)
+		}
+	}
+}
+
+func TestParseEventRecordRankingAlias(t *testing.T) {
+	service := NewService("/", nil, nil, nil, nil)
+	for _, input := range []string{"/冲榜记录", "/cn冲榜记录"} {
+		parsed := service.Parse(input)
+		if parsed.Definition == nil || parsed.Definition.ID != "event-record" {
+			t.Fatalf("%s parsed definition = %#v, want event-record", input, parsed.Definition)
+		}
+	}
+}
+
 func TestParseInlineRankingTargetArgument(t *testing.T) {
 	service := NewService("/", nil, nil, nil, nil)
 	parsed := service.Parse("/cnsk1-10")

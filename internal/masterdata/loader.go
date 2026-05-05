@@ -47,6 +47,10 @@ var masterFiles = []struct {
 	{"gameCharacterUnits", func(d *MasterData) any { return &d.CharacterUnits }},
 	{"honors", func(d *MasterData) any { return &d.Honors }},
 	{"musicVocals", func(d *MasterData) any { return &d.MusicVocals }},
+	{"challengeLiveHighScoreRewards", func(d *MasterData) any { return &d.ChallengeLiveHighScoreRewards }},
+	{"resourceBoxes", func(d *MasterData) any { return &d.ResourceBoxes }},
+	{"resourceBoxDetails", func(d *MasterData) any { return &d.ResourceBoxDetails }},
+	{"characterMissionV2ParameterGroups", func(d *MasterData) any { return &d.CharacterMissionV2ParameterGroups }},
 }
 
 // Loader handles fetching and refreshing masterdata from remote servers.

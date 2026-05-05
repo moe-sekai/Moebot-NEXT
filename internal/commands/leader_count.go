@@ -8,6 +8,7 @@ import (
 
 	"moebot-next/internal/bot"
 	"moebot-next/internal/config"
+	"moebot-next/internal/masterdata"
 	"moebot-next/internal/renderer"
 	"moebot-next/internal/suite"
 
@@ -89,47 +90,48 @@ func RegisterLeaderCount(deps *Deps) {
 			}
 			payload := buildSuitePanel(runtime, suitePanelTitle(runtime, "队长次数"), "", profile)
 			payload.Subtitle = suitePanelSubtitle(profile.BaseProfile)
-			rows, stats := rowsFromLeaderCount(profile, leaderCountDefaultLimit)
+			rows, stats, sectionExtra := rowsFromLeaderCount(profile, runtime.Store, leaderCountDefaultLimit)
 			payload.Stats = append(suiteBasicStats(profile.commonSuiteProfile()), stats...)
-			payload.Sections = []renderer.SuiteSectionPayload{{Title: "角色队长次数", Rows: rows}}
-			sendSuitePanelOrText(ctx, deps, payload, formatLeaderCountText(runtime.Region, profile, leaderCountDefaultLimit))
+			payload.Sections = []renderer.SuiteSectionPayload{{Title: "角色队长次数", Kind: "leader_count", Note: "参考 lunabot：普通档位读取 parameterGroupId=1；EX 等级/次数读取 parameterGroupId=101 并累计已完成轮次。", Rows: rows, Extra: sectionExtra}}
+			sendSuitePanelOrText(ctx, deps, payload, formatLeaderCountTextWithStore(runtime.Region, profile, runtime.Store, leaderCountDefaultLimit))
 			bot.RecordCommandRegion(deps.DB, "队长次数", runtime.Region, ctx, start)
 		})
 	}
 }
 
 func formatLeaderCountText(region string, profile leaderCountProfile, limit int) string {
+	return formatLeaderCountTextWithStore(region, profile, nil, limit)
+}
+
+func formatLeaderCountTextWithStore(region string, profile leaderCountProfile, store *masterdata.Store, limit int) string {
 	name := profile.UserGamedata.Name
 	if name == "" {
 		name = "未知玩家"
 	}
-	rowsByCharacter := map[int]*leaderCountRow{}
-	for _, mission := range profile.Missions {
-		if mission.CharacterID <= 0 {
-			continue
-		}
-		row := rowsByCharacter[mission.CharacterID]
-		if row == nil {
-			row = &leaderCountRow{CharacterID: mission.CharacterID}
-			rowsByCharacter[mission.CharacterID] = row
-		}
-		switch mission.CharacterMissionType {
-		case "play_live":
-			row.PlayLive = max(row.PlayLive, mission.Progress)
-		case "play_live_ex":
-			row.PlayLiveEx = max(row.PlayLiveEx, mission.Progress)
-		}
-	}
+	rowsByCharacter := leaderRows(profile)
+	exLevels := leaderExLevels(profile.Statuses)
+	exTotals := leaderExTotals(rowsByCharacter, exLevels, store)
+	progressMax := leaderProgressMax(store)
+	groups := leaderNormalGroups(store)
+	maxLevel := len(groups)
+	totalRemain, totalMissionLevel, totalEx := 0, 0, 0
 	rows := make([]leaderCountRow, 0, len(rowsByCharacter))
-	for _, row := range rowsByCharacter {
-		if row.PlayLive == 0 && row.PlayLiveEx == 0 {
+	for cid := 1; cid <= 26; cid++ {
+		row := rowsByCharacter[cid]
+		if row == nil {
+			row = &leaderCountRow{CharacterID: cid}
+		}
+		totalRemain += max(progressMax-row.PlayLive, 0)
+		totalMissionLevel += leaderMissionLevel(groups, row.PlayLive)
+		totalEx += exTotals[cid]
+		if row.PlayLive == 0 && row.PlayLiveEx == 0 && exTotals[cid] == 0 {
 			continue
 		}
 		rows = append(rows, *row)
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		if rows[i].PlayLive == rows[j].PlayLive {
-			return rows[i].PlayLiveEx > rows[j].PlayLiveEx
+			return exTotals[rows[i].CharacterID] > exTotals[rows[j].CharacterID]
 		}
 		return rows[i].PlayLive > rows[j].PlayLive
 	})
@@ -142,6 +144,13 @@ func formatLeaderCountText(region string, profile leaderCountProfile, limit int)
 		fmt.Sprintf("更新时间: %s", suiteUpdateText(profile.UploadTime)),
 		fmt.Sprintf("数据来源: %s", suiteSourceText(profile.BaseProfile)),
 	}
+	if store != nil {
+		lines = append(lines,
+			fmt.Sprintf("剩余总次数: %d", totalRemain),
+			fmt.Sprintf("普通档位: %d/%d", totalMissionLevel, maxLevel*26),
+			fmt.Sprintf("EX总次数: %d", totalEx),
+		)
+	}
 	if len(rows) == 0 {
 		lines = append(lines, "暂无队长次数数据")
 		return strings.Join(lines, "\n")
@@ -149,7 +158,9 @@ func formatLeaderCountText(region string, profile leaderCountProfile, limit int)
 	lines = append(lines, "---")
 	for i := 0; i < limit; i++ {
 		row := rows[i]
-		lines = append(lines, fmt.Sprintf("%d. %s: %d | EX %d", i+1, characterDisplayName(row.CharacterID), row.PlayLive, row.PlayLiveEx))
+		missionLevel := leaderMissionLevel(groups, row.PlayLive)
+		remain := max(progressMax-row.PlayLive, 0)
+		lines = append(lines, fmt.Sprintf("%d. %s: %d | 剩余 %d | 档位 %d/%d | EX等级 x%d | EX %d", i+1, characterDisplayName(row.CharacterID), row.PlayLive, remain, missionLevel, maxLevel, exLevels[row.CharacterID], exTotals[row.CharacterID]))
 	}
 	return strings.Join(lines, "\n")
 }
