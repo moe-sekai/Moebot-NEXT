@@ -159,8 +159,10 @@ export interface PublicAssetsConfig {
 
 export interface PublicSekaiAPIConfig {
 	enabled: boolean;
+	base_url: string;
 	base_url_configured: boolean;
 	region: string;
+	headers: Record<string, string>;
 	headers_configured: boolean;
 	timeout?: number;
 	rate_limit?: number;
@@ -168,8 +170,10 @@ export interface PublicSekaiAPIConfig {
 
 export interface PublicSuiteAPIConfig {
 	enabled: boolean;
+	url: string;
 	url_configured: boolean;
-	token_set: boolean;
+	headers: Record<string, string>;
+	headers_configured: boolean;
 	timeout: number;
 }
 
@@ -259,7 +263,9 @@ export interface UpdateAssetsPayload {
 
 export interface UpdateSekaiAPIPayload {
 	enabled: boolean;
+	base_url: string;
 	region: string;
+	headers?: Record<string, string>;
 	timeout: number;
 	rate_limit: number;
 }
@@ -267,13 +273,27 @@ export interface UpdateSekaiAPIPayload {
 export interface UpdateSuiteAPIPayload {
 	enabled: boolean;
 	url: string;
-	token: string;
+	headers?: Record<string, string>;
 	timeout: number;
 }
 
 export interface UpdateRankingAPIPayload {
-	region: string;
 	timeout: number;
+}
+
+export interface SekaiSystemTestPayload {
+	base_url: string;
+	region: string;
+	headers?: Record<string, string>;
+	timeout?: number;
+}
+
+export interface SekaiSystemTestResponse {
+	ok: boolean;
+	url: string;
+	status_code?: number;
+	duration_ms: number;
+	message: string;
 }
 
 export interface UpdateServerProfilePayload {

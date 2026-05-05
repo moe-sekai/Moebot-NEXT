@@ -128,6 +128,60 @@ func TestDefaultGameServerProfiles(t *testing.T) {
 	}
 }
 
+func TestGlobalSekaiAPIAppliesToAllGameServerRegions(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Server.Region = RegionJP
+	cfg.SekaiAPI.Enabled = true
+	cfg.SekaiAPI.BaseURL = "https://sekai.example.test/api/{region}"
+	cfg.SekaiAPI.Headers = map[string]string{"x-moe-sekai-token": "secret-token"}
+	cfg.GameServers = map[string]GameServerConfig{
+		RegionCN: {
+			Enabled: EnabledPtr(true),
+			SekaiAPI: SekaiAPIConfig{
+				BaseURL: DefaultSekaiAPIURL,
+				Region:  RegionCN,
+				Headers: map[string]string{},
+			},
+		},
+	}
+	NormalizeConfig(cfg)
+
+	cn := ResolveGameServerProfile(cfg, RegionCN)
+	if !cn.SekaiAPI.Enabled {
+		t.Fatal("cn sekai api should inherit global enabled flag")
+	}
+	if cn.SekaiAPI.BaseURL != "https://sekai.example.test/api/{region}" {
+		t.Fatalf("cn sekai api base url = %q", cn.SekaiAPI.BaseURL)
+	}
+	if cn.SekaiAPI.Headers["x-moe-sekai-token"] != "secret-token" {
+		t.Fatalf("cn sekai api headers = %+v", cn.SekaiAPI.Headers)
+	}
+}
+
+func TestRankingRegionAlwaysFollowsGameServerRegion(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Server.Region = RegionJP
+	cfg.RankingAPI.Region = RegionCN
+	cfg.GameServers = map[string]GameServerConfig{
+		RegionCN: {
+			Enabled: EnabledPtr(true),
+			RankingAPI: RankingAPIConfig{
+				Region: RegionJP,
+			},
+		},
+	}
+	NormalizeConfig(cfg)
+
+	jp := ResolveGameServerProfile(cfg, RegionJP)
+	if jp.RankingAPI.Region != RegionJP {
+		t.Fatalf("jp ranking region = %q, want %q", jp.RankingAPI.Region, RegionJP)
+	}
+	cn := ResolveGameServerProfile(cfg, RegionCN)
+	if cn.RankingAPI.Region != RegionCN {
+		t.Fatalf("cn ranking region = %q, want %q", cn.RankingAPI.Region, RegionCN)
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(substr) == 0 || (len(s) >= len(substr) && stringContains(s, substr))
 }

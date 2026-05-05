@@ -92,19 +92,19 @@ type MasterdataConfig struct {
 type SekaiAPIConfig struct {
 	Enabled   bool              `yaml:"enabled"`
 	BaseURL   string            `yaml:"base_url"`
-	Region    string            `yaml:"region"`     // "jp" or "cn"
+	Region    string            `yaml:"region"`     // cn / jp / tw / kr / en
 	Headers   map[string]string `yaml:"headers"`    // optional API request headers
 	Timeout   int               `yaml:"timeout"`    // seconds
 	RateLimit int               `yaml:"rate_limit"` // requests per minute
 }
 
 type SuiteAPIConfig struct {
-	Enabled     bool   `yaml:"enabled"`
-	EnabledSet  bool   `yaml:"-"`
-	URL         string `yaml:"url"`
-	Token       string `yaml:"token"`
-	Timeout     int    `yaml:"timeout"`
-	DefaultMode string `yaml:"default_mode"`
+	Enabled     bool              `yaml:"enabled"`
+	EnabledSet  bool              `yaml:"-"`
+	URL         string            `yaml:"url"`
+	Headers     map[string]string `yaml:"headers"`
+	Timeout     int               `yaml:"timeout"`
+	DefaultMode string            `yaml:"default_mode"`
 }
 
 func (c *SuiteAPIConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -197,7 +197,7 @@ func DefaultConfig() *Config {
 			RefreshInterval: 3600,
 		},
 		SekaiAPI: SekaiAPIConfig{
-			BaseURL:   "https://seka-api.exmeaning.com",
+			BaseURL:   DefaultSekaiAPIURL,
 			Region:    "cn",
 			Headers:   map[string]string{},
 			Timeout:   10,
@@ -205,13 +205,13 @@ func DefaultConfig() *Config {
 		},
 		SuiteAPI: SuiteAPIConfig{
 			Enabled:     true,
-			EnabledSet:  true,
 			URL:         DefaultSuiteAPIURL,
+			Headers:     map[string]string{},
 			Timeout:     10,
 			DefaultMode: SuiteModeHaruki,
 		},
 		RankingAPI: RankingAPIConfig{
-			BaseURL: "https://rks.exmeaning.com",
+			BaseURL: DefaultRankingAPIURL,
 			Region:  "cn",
 			Timeout: 10,
 		},

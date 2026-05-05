@@ -29,7 +29,7 @@ func NewClient(cfg Config) *Client {
 	}
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	if baseURL == "" {
-		baseURL = "https://rks.exmeaning.com"
+		baseURL = config.DefaultRankingAPIURL
 	}
 	region := config.NormalizeRegion(strings.Trim(strings.ToLower(cfg.Region), "/"))
 	if region == "" {

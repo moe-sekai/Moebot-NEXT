@@ -17,7 +17,7 @@ func TestPublicConfigIncludesMaskedSuiteAPI(t *testing.T) {
 	cfg.SuiteAPI = config.SuiteAPIConfig{
 		Enabled:     true,
 		URL:         "https://suite.example.test/api/cn/user/{uid}/suite",
-		Token:       "secret-token",
+		Headers:     map[string]string{"X-Suite-Header": "suite-value"},
 		Timeout:     8,
 		DefaultMode: config.SuiteModeMoeSekai,
 	}
@@ -44,10 +44,17 @@ func TestPublicConfigIncludesMaskedSuiteAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	suiteAPI := body["suite_api"].(map[string]any)
-	if suiteAPI["url"] != nil || suiteAPI["token"] != nil {
-		t.Fatalf("suite api leaked sensitive fields: %+v", suiteAPI)
+	if suiteAPI["token"] != nil {
+		t.Fatalf("suite api leaked deprecated token field: %+v", suiteAPI)
 	}
-	if suiteAPI["enabled"] != true || suiteAPI["url_configured"] != true || suiteAPI["token_set"] != true {
+	suiteHeaders := suiteAPI["headers"].(map[string]any)
+	if suiteHeaders["X-Suite-Header"] != "suite-value" {
+		t.Fatalf("suite api headers = %+v", suiteHeaders)
+	}
+	if suiteAPI["url"] != "https://suite.example.test/api/cn/user/{uid}/suite" {
+		t.Fatalf("suite api url = %+v", suiteAPI["url"])
+	}
+	if suiteAPI["enabled"] != true || suiteAPI["url_configured"] != true || suiteAPI["headers_configured"] != true {
 		t.Fatalf("suite api flags = %+v", suiteAPI)
 	}
 	if suiteAPI["timeout"].(float64) != 8 || suiteAPI["default_mode"] != config.SuiteModeMoeSekai {
@@ -56,7 +63,7 @@ func TestPublicConfigIncludesMaskedSuiteAPI(t *testing.T) {
 	servers := body["servers"].(map[string]any)
 	cn := servers[config.RegionCN].(map[string]any)
 	cnSuite := cn["suite_api"].(map[string]any)
-	if cnSuite["enabled"] != true || cnSuite["url_configured"] != true || cnSuite["token_set"] != true {
+	if cnSuite["enabled"] != true || cnSuite["url_configured"] != true || cnSuite["headers_configured"] != true {
 		t.Fatalf("cn suite api = %+v", cnSuite)
 	}
 }
@@ -85,7 +92,7 @@ func TestUpdatePublicConfigSavesSuiteAPISettings(t *testing.T) {
 				"suite_api": {
 					"enabled": true,
 					"url": "https://suite.example.test/api/cn/user/{uid}/suite",
-					"token": "secret-token",
+					"headers": {"X-Suite-Header": "suite-value"},
 					"timeout": 9,
 					"default_mode": "haruki"
 				}
@@ -114,8 +121,8 @@ func TestUpdatePublicConfigSavesSuiteAPISettings(t *testing.T) {
 	if profile.SuiteAPI.URL != "https://suite.example.test/api/cn/user/{uid}/suite" {
 		t.Fatalf("url = %q", profile.SuiteAPI.URL)
 	}
-	if profile.SuiteAPI.Token != "secret-token" {
-		t.Fatalf("token = %q", profile.SuiteAPI.Token)
+	if profile.SuiteAPI.Headers["X-Suite-Header"] != "suite-value" {
+		t.Fatalf("headers = %+v", profile.SuiteAPI.Headers)
 	}
 	if profile.SuiteAPI.Timeout != 9 || profile.SuiteAPI.DefaultMode != config.SuiteModeHaruki {
 		t.Fatalf("suite api = %+v", profile.SuiteAPI)

@@ -10,6 +10,17 @@
     <UiAlert v-if="success" variant="info" title="操作完成">{{ success }}</UiAlert>
     <UiAlert v-if="error" variant="destructive" title="配置操作失败">{{ error }}</UiAlert>
 
+    <div v-if="!loading" class="settings-save-bar">
+      <div>
+        <strong>{{ dirty ? '有未保存设置' : '设置已同步' }}</strong>
+        <span>{{ canSave ? '保存设置会写入当前表单配置。' : '请先修正无效配置。' }}</span>
+      </div>
+      <div class="settings-save-bar__actions">
+        <UiButton variant="outline" size="sm" :loading="loading" @click="loadConfig">刷新配置</UiButton>
+        <UiButton size="sm" :loading="saving" :disabled="!dirty || !canSave" @click="saveSettings">保存设置</UiButton>
+      </div>
+    </div>
+
     <div v-if="loading" class="settings-function-stack">
       <UiSkeleton v-for="item in 5" :key="item" height="260px" />
     </div>
@@ -209,12 +220,13 @@
                   <div class="settings-row-header">
                     <div>
                       <h3>接口功能</h3>
-                      <p>玩家资料查询 (SEKAI API) 与排名接口 (Ranking API)。</p>
+                      <p>SEKAI / Suite 均通过端点与自定义请求头配置；Suite 使用 Haruki 公开 API；Ranking 自动使用 MoeSekai 公开榜线。</p>
                     </div>
                     <div class="settings-row-badges">
                       <UiBadge :variant="entry.form.sekai_api.enabled ? 'success' : 'outline'">SEKAI API {{ entry.form.sekai_api.enabled ? '启用' : '关闭' }}</UiBadge>
-                      <UiBadge :variant="entry.form.suite_api.enabled ? 'success' : 'outline'">Suite {{ entry.form.suite_api.enabled ? '启用' : '关闭' }}</UiBadge>
-                      <UiBadge variant="secondary">Ranking {{ entry.form.ranking_api.region.toUpperCase() }}</UiBadge>
+                      <UiBadge variant="secondary">Suite · Haruki 公开 API</UiBadge>
+                      <UiBadge variant="secondary">Ranking 自动 · MoeSekai</UiBadge>
+                      <UiButton variant="outline" size="sm" :loading="Boolean(sekaiTesting[entry.option.key])" @click="() => testSekaiConnectivity(entry)">测试连通性</UiButton>
                     </div>
                   </div>
 
@@ -226,36 +238,36 @@
                         <option :value="false">关闭</option>
                       </select>
                     </label>
-                    <label class="settings-field">
-                      <span>SEKAI API 区服</span>
-                      <select v-model="entry.form.sekai_api.region" class="ui-select">
-                        <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key.toUpperCase() }}</option>
-                      </select>
-                    </label>
-                    <label class="settings-field">
-                      <span>Suite API</span>
-                      <select v-model="entry.form.suite_api.enabled" class="ui-select">
-                        <option :value="true">启用</option>
-                        <option :value="false">关闭</option>
-                      </select>
+                    <label class="settings-field settings-field--full">
+                      <span>SEKAI API Base URL</span>
+                      <input v-model.trim="entry.form.sekai_api.base_url" class="ui-input" placeholder="https://seka-api.exmeaning.com 或 https://example.com/api/{region}" />
                     </label>
                     <label class="settings-field settings-field--full">
-                      <span>Suite URL</span>
+                      <span>SEKAI API Headers（JSON）</span>
+                      <textarea v-model.trim="entry.form.sekai_api.headers_text" class="ui-input ui-textarea" placeholder='留空保持现有请求头；如需 token 请写请求头，例如 { "x-moe-sekai-token": "..." }（值不加引号也可）；{} 清空'></textarea>
+                    </label>
+                    <div class="settings-field settings-field--readonly settings-field--full">
+                      <span>System 测试 URL</span>
+                      <strong>测试 {{ sekaiSystemPreview(entry) }} 的连通性</strong>
+                    </div>
+                    <UiAlert v-if="sekaiTestResults[entry.option.key]" class="settings-field--full" :variant="sekaiTestResults[entry.option.key]?.ok ? 'info' : 'warning'" :title="sekaiTestResults[entry.option.key]?.ok ? 'SEKAI API 连通正常' : 'SEKAI API 不可用'">
+                      {{ sekaiTestResults[entry.option.key]?.message }} · {{ sekaiTestResults[entry.option.key]?.status_code ? `HTTP ${sekaiTestResults[entry.option.key]?.status_code}` : '无 HTTP 状态' }} · {{ sekaiTestResults[entry.option.key]?.duration_ms ?? 0 }}ms
+                    </UiAlert>
+                    <label class="settings-field">
+                      <span>Suite URL（Haruki 公开 API）</span>
                       <input v-model.trim="entry.form.suite_api.url" class="ui-input" placeholder="https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}" />
                     </label>
                     <label class="settings-field">
-                      <span>Suite Token</span>
-                      <input v-model.trim="entry.form.suite_api.token" class="ui-input" type="password" placeholder="留空则保持现有 token" autocomplete="new-password" />
-                    </label>
-                    <label class="settings-field">
-                      <span>Ranking 区服</span>
-                      <select v-model="entry.form.ranking_api.region" class="ui-select">
-                        <option v-for="option in regionOptions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.key.toUpperCase() }}</option>
-                      </select>
+                      <span>Suite Headers（JSON）</span>
+                      <textarea v-model.trim="entry.form.suite_api.headers_text" class="ui-input ui-textarea" placeholder='留空保持现有请求头；填写 { "Authorization": "Bearer ..." } 更新（值不加引号也可）；{} 清空'></textarea>
                     </label>
                     <div class="settings-field settings-field--readonly">
+                      <span>Ranking API</span>
+                      <strong>MoeSekai 公开榜线 API，区服自动跟随当前标签：{{ entry.option.label }} · {{ entry.option.key.toUpperCase() }}</strong>
+                    </div>
+                    <div class="settings-field settings-field--readonly">
                       <span>请求限制</span>
-                      <strong>SEKAI {{ entry.form.sekai_api.timeout }}s · {{ entry.form.sekai_api.rate_limit }}/min · Suite {{ entry.form.suite_api.timeout }}s</strong>
+                      <strong>SEKAI {{ entry.form.sekai_api.timeout }}s · {{ entry.form.sekai_api.rate_limit }}/min · Suite {{ entry.form.suite_api.timeout }}s · Ranking {{ entry.form.ranking_api.timeout }}s</strong>
                     </div>
                   </div>
                 </div>
@@ -336,6 +348,7 @@ import {
 	getRendererCardThumbnailCacheStatus,
 	preloadRendererCardThumbnails,
 	reloadMasterdata,
+	testSekaiSystem,
 	updatePublicConfig,
 } from "../api/client";
 import type {
@@ -344,6 +357,7 @@ import type {
 	PublicConfig,
 	PublicServerProfile,
 	RendererCardThumbnailCacheStatus,
+	SekaiSystemTestResponse,
 	UpdatePublicConfigPayload,
 } from "../api/types";
 import SvgIcon, { type IconName } from "../components/icons/SvgIcon.vue";
@@ -388,18 +402,19 @@ interface ServerProfileForm {
 	assets: AssetsForm;
 	sekai_api: {
 		enabled: boolean;
+		base_url: string;
 		region: string;
+		headers_text: string;
 		timeout: number;
 		rate_limit: number;
 	};
 	suite_api: {
 		enabled: boolean;
 		url: string;
-		token: string;
+		headers_text: string;
 		timeout: number;
 	};
 	ranking_api: {
-		region: string;
 		timeout: number;
 	};
 }
@@ -458,6 +473,8 @@ const saving = ref(false);
 const reloading = ref("");
 const error = ref("");
 const success = ref("");
+const sekaiTesting = ref<Record<string, boolean>>({});
+const sekaiTestResults = ref<Record<string, SekaiSystemTestResponse>>({});
 const thumbnailCache = ref<RendererCardThumbnailCacheStatus | null>(null);
 const thumbnailCacheLoading = ref(false);
 const thumbnailCachePreloading = ref(false);
@@ -491,7 +508,12 @@ const serverProfilesSupported = computed(() =>
 	serverEntries.value.every((entry) => serverProfileSupported(entry.form)),
 );
 const canSave = computed(
-	() => serverProfilesSupported.value && form.value.renderer.precision > 0,
+	() => serverProfilesSupported.value && headersJSONValid.value && form.value.renderer.precision > 0,
+);
+const headersJSONValid = computed(() =>
+	Object.values(form.value.servers).every(
+		(profile) => parseHeadersText(profile.sekai_api.headers_text).ok && parseHeadersText(profile.suite_api.headers_text).ok,
+	),
 );
 const rendererOutputScaleText = computed(
 	() => `${formatNumber(form.value.renderer.precision)}x`,
@@ -623,24 +645,18 @@ const masterdataItems = computed<ConfigItem[]>(() => [
 
 const sekaiApiItems = computed<ConfigItem[]>(() => [
 	{
-		label: "启用",
+		label: "SEKAI 启用",
 		value: Boolean(config.value?.sekai_api.enabled),
 		badge: true,
 	},
 	{
-		label: "Base URL 已配置",
+		label: "端点已配置",
 		value: Boolean(config.value?.sekai_api.base_url_configured),
 		badge: true,
 	},
-	{ label: "区服", value: config.value?.sekai_api.region ?? "-" },
 	{
 		label: "请求头已配置",
 		value: Boolean(config.value?.sekai_api.headers_configured),
-		badge: true,
-	},
-	{
-		label: "Suite API",
-		value: Boolean(config.value?.suite_api?.enabled),
 		badge: true,
 	},
 	{
@@ -648,7 +664,13 @@ const sekaiApiItems = computed<ConfigItem[]>(() => [
 		value: Boolean(config.value?.suite_api?.url_configured),
 		badge: true,
 	},
-	{ label: "Ranking 区服", value: config.value?.ranking_api?.region ?? "-" },
+	{
+		label: "Suite 请求头已配置",
+		value: Boolean(config.value?.suite_api?.headers_configured),
+		badge: true,
+	},
+	{ label: "Ranking 来源", value: "MoeSekai 公开榜线" },
+	{ label: "Ranking 自动区服", value: config.value?.ranking_api?.region ?? "-" },
 ]);
 
 function aliasCount(aliases?: Record<string, string[]>) {
@@ -749,6 +771,12 @@ async function loadConfig() {
 }
 
 async function saveSettings() {
+	const invalidHeaders = firstInvalidHeadersEntry();
+	if (invalidHeaders) {
+		error.value = `${regionLabel(invalidHeaders.region)} 的 ${invalidHeaders.api} Headers JSON 无效：${invalidHeaders.message}`;
+		success.value = "";
+		return;
+	}
 	saving.value = true;
 	error.value = "";
 	success.value = "";
@@ -761,6 +789,45 @@ async function saveSettings() {
 		error.value = getErrorMessage(err, "保存设置失败。");
 	} finally {
 		saving.value = false;
+	}
+}
+
+async function testSekaiConnectivity(entry: ServerEntry) {
+	const region = entry.option.key;
+	const headers = parseHeadersText(entry.form.sekai_api.headers_text);
+	if (!headers.ok) {
+		sekaiTestResults.value = {
+			...sekaiTestResults.value,
+			[region]: {
+				ok: false,
+				url: sekaiSystemPreview(entry),
+				duration_ms: 0,
+				message: `Headers JSON 无效：${headers.message || "JSON 解析失败"}`,
+			},
+		};
+		return;
+	}
+	sekaiTesting.value = { ...sekaiTesting.value, [region]: true };
+	try {
+		const result = await testSekaiSystem({
+			base_url: entry.form.sekai_api.base_url,
+			region,
+			headers: headers.headers,
+			timeout: Number(entry.form.sekai_api.timeout) || 10,
+		});
+		sekaiTestResults.value = { ...sekaiTestResults.value, [region]: result };
+	} catch (err) {
+		sekaiTestResults.value = {
+			...sekaiTestResults.value,
+			[region]: {
+				ok: false,
+				url: sekaiSystemPreview(entry),
+				duration_ms: 0,
+				message: getErrorMessage(err, "SEKAI API /system 连通性测试失败。"),
+			},
+		};
+	} finally {
+		sekaiTesting.value = { ...sekaiTesting.value, [region]: false };
 	}
 }
 
@@ -953,18 +1020,19 @@ function createServerForm(
 		},
 		sekai_api: {
 			enabled: server?.sekai_api?.enabled ?? false,
+			base_url: server?.sekai_api?.base_url || "https://seka-api.exmeaning.com",
 			region: server?.sekai_api?.region || region,
+			headers_text: formatHeadersText(server?.sekai_api?.headers),
 			timeout: server?.sekai_api?.timeout ?? 10,
 			rate_limit: server?.sekai_api?.rate_limit ?? 30,
 		},
 		suite_api: {
-			enabled: server?.suite_api?.enabled ?? false,
-			url: "",
-			token: "",
+			enabled: true,
+			url: server?.suite_api?.url || "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}",
+			headers_text: formatHeadersText(server?.suite_api?.headers),
 			timeout: server?.suite_api?.timeout ?? 10,
 		},
 		ranking_api: {
-			region: server?.ranking_api?.region || region,
 			timeout: server?.ranking_api?.timeout ?? 10,
 		},
 	};
@@ -985,18 +1053,23 @@ function buildServerPayload(region: string) {
 		assets: buildAssetsPayload(profile.assets),
 		sekai_api: {
 			enabled: profile.sekai_api.enabled,
-			region: profile.sekai_api.region,
+			base_url: profile.sekai_api.base_url,
+			region,
+			...(profile.sekai_api.headers_text.trim()
+				? { headers: parseHeadersText(profile.sekai_api.headers_text).headers }
+				: {}),
 			timeout: Number(profile.sekai_api.timeout) || 10,
 			rate_limit: Number(profile.sekai_api.rate_limit) || 30,
 		},
 		suite_api: {
-			enabled: profile.suite_api.enabled,
+			enabled: true,
 			url: profile.suite_api.url,
-			token: profile.suite_api.token,
+			...(profile.suite_api.headers_text.trim()
+				? { headers: parseHeadersText(profile.suite_api.headers_text).headers }
+				: {}),
 			timeout: Number(profile.suite_api.timeout) || 10,
 		},
 		ranking_api: {
-			region: profile.ranking_api.region,
 			timeout: Number(profile.ranking_api.timeout) || 10,
 		},
 	};
@@ -1082,6 +1155,75 @@ function isRegionLocked(region: string) {
 	return region === "jp" || region === form.value.server.region;
 }
 
+function formatHeadersText(headers?: Record<string, string>) {
+	return headers && Object.keys(headers).length > 0 ? JSON.stringify(headers, null, 2) : "";
+}
+
+function parseHeadersText(raw: string): { ok: boolean; headers: Record<string, string>; message?: string } {
+	const text = raw.trim();
+	if (!text) return { ok: true, headers: {} };
+	try {
+		const parsed = JSON.parse(text) as unknown;
+		if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+			return { ok: false, headers: {}, message: "必须是对象" };
+		}
+		return normalizeHeadersRecord(parsed as Record<string, unknown>);
+	} catch {
+		return parseLooseHeadersText(text);
+	}
+}
+
+function normalizeHeadersRecord(input: Record<string, unknown>): { ok: boolean; headers: Record<string, string>; message?: string } {
+	const headers: Record<string, string> = {};
+	for (const [key, value] of Object.entries(input)) {
+		const headerKey = key.trim();
+		if (!headerKey) continue;
+		if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+			return { ok: false, headers: {}, message: `${headerKey} 的值必须是字符串、数字或布尔值` };
+		}
+		const headerValue = String(value).trim();
+		if (headerValue) headers[headerKey] = headerValue;
+	}
+	return { ok: true, headers };
+}
+
+function parseLooseHeadersText(text: string): { ok: boolean; headers: Record<string, string>; message?: string } {
+	const body = text.replace(/^\s*\{/, "").replace(/\}\s*$/, "").trim();
+	if (!body) return { ok: true, headers: {} };
+	const entries = body.split(/,?\r?\n/).map((line) => line.trim()).filter(Boolean);
+	if (!entries.length) return { ok: true, headers: {} };
+	const headers: Record<string, string> = {};
+	for (const entry of entries) {
+		const line = entry.replace(/,$/, "").trim();
+		const colon = line.indexOf(":");
+		if (colon <= 0) {
+			return { ok: false, headers: {}, message: "每一项都需要写成 header: value" };
+		}
+		const headerKey = stripHeaderQuotes(line.slice(0, colon).trim());
+		const headerValue = stripHeaderQuotes(line.slice(colon + 1).trim());
+		if (headerKey && headerValue) headers[headerKey] = headerValue;
+	}
+	return { ok: true, headers };
+}
+
+function stripHeaderQuotes(value: string) {
+	const cleaned = value.replace(/,$/, "").trim();
+	if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+		return cleaned.slice(1, -1).trim();
+	}
+	return cleaned;
+}
+
+function firstInvalidHeadersEntry() {
+	for (const [region, profile] of Object.entries(form.value.servers)) {
+		const sekai = parseHeadersText(profile.sekai_api.headers_text);
+		if (!sekai.ok) return { region, api: "SEKAI API", message: sekai.message || "JSON 解析失败" };
+		const suite = parseHeadersText(profile.suite_api.headers_text);
+		if (!suite.ok) return { region, api: "Suite API", message: suite.message || "JSON 解析失败" };
+	}
+	return null;
+}
+
 function countsText(counts?: MasterdataCounts) {
 	return `卡 ${counts?.cards ?? 0} / 曲 ${counts?.musics ?? 0} / 活 ${counts?.events ?? 0} / 池 ${counts?.gachas ?? 0} / 演 ${counts?.virtual_lives ?? 0}`;
 }
@@ -1105,6 +1247,14 @@ function formatCacheMaxSize(value?: number) {
 function formatCacheTTL(value?: number) {
 	if (typeof value !== "number") return "-";
 	return value <= 0 ? "永久有效" : `${value} 小时`;
+}
+
+function sekaiSystemPreview(entry: ServerEntry) {
+	const baseURL = (entry.form.sekai_api.base_url || "https://seka-api.exmeaning.com").trim().replace(/\/+$/, "");
+	const region = entry.option.key;
+	const replaced = baseURL.replaceAll("{region}", region);
+	if (baseURL.includes("{region}")) return `${replaced}/system`;
+	return `${replaced}/api/${region}/system`;
 }
 
 function masterdataPreview(entry: ServerEntry, kind: "primary" | "fallback") {

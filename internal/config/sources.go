@@ -20,7 +20,9 @@ const (
 	SuiteModeLocal    = SuiteModeHaruki
 	SuiteModeMoeSekai = SuiteModeHaruki
 
-	DefaultSuiteAPIURL = "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
+	DefaultSuiteAPIURL   = "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
+	DefaultSekaiAPIURL   = "https://seka-api.exmeaning.com"
+	DefaultRankingAPIURL = "https://rks.exmeaning.com"
 
 	MasterdataSourceMoeSekai = "moesekai"
 	MasterdataSourceHaruki   = "haruki"
@@ -632,8 +634,17 @@ func NormalizeConfig(cfg *Config) {
 	if cfg.Renderer.Precision <= 0 {
 		cfg.Renderer.Precision = DefaultRendererPrecision
 	}
+	if cfg.SekaiAPI.BaseURL == "" {
+		cfg.SekaiAPI.BaseURL = DefaultSekaiAPIURL
+	}
+	if cfg.SekaiAPI.Headers == nil {
+		cfg.SekaiAPI.Headers = map[string]string{}
+	}
 	if cfg.SuiteAPI.URL == "" {
 		cfg.SuiteAPI.URL = DefaultSuiteAPIURL
+	}
+	if cfg.SuiteAPI.Headers == nil {
+		cfg.SuiteAPI.Headers = map[string]string{}
 	}
 	if cfg.SuiteAPI.Timeout <= 0 {
 		cfg.SuiteAPI.Timeout = 10
@@ -664,16 +675,17 @@ func NormalizeConfig(cfg *Config) {
 		jp.Assets = mergeAssetsProfile(jp.Assets, cfg.Assets, RegionJP)
 		jp.SekaiAPI = mergeSekaiAPIProfile(jp.SekaiAPI, cfg.SekaiAPI, RegionJP)
 		jp.SuiteAPI = mergeSuiteAPIProfile(jp.SuiteAPI, cfg.SuiteAPI)
-		jp.RankingAPI = mergeRankingAPIProfile(jp.RankingAPI, cfg.RankingAPI, RegionJP)
+		jp.RankingAPI = mergeGlobalRankingAPIProfile(jp.RankingAPI, cfg.RankingAPI, RegionJP)
 		cfg.GameServers[RegionJP] = jp
 	}
 
 	if cfg.Server.Region != RegionJP {
 		profile := cfg.GameServers[cfg.Server.Region]
+		profile.RankingAPI = mergeGlobalRankingAPIProfile(profile.RankingAPI, cfg.RankingAPI, cfg.Server.Region)
 		if profile.Enabled == nil || !*profile.Enabled {
 			profile.Enabled = EnabledPtr(true)
-			cfg.GameServers[cfg.Server.Region] = profile
 		}
+		cfg.GameServers[cfg.Server.Region] = profile
 	}
 	if profile := cfg.GameServers[RegionJP]; profile.Enabled == nil || !*profile.Enabled {
 		profile = mergeGameServerProfile(defaults[RegionJP], profile, RegionJP)
@@ -696,6 +708,9 @@ func ResolveGameServerProfile(cfg *Config, region string) GameServerConfig {
 	defaults := DefaultGameServerProfiles()
 	profile := defaults[region]
 	if cfg != nil {
+		// SEKAI API is shared by default across all regions so {region} templates work for quick multi-server operations.
+		profile.SekaiAPI = mergeSekaiAPIProfile(profile.SekaiAPI, cfg.SekaiAPI, region)
+		profile.RankingAPI = mergeGlobalRankingAPIProfile(profile.RankingAPI, cfg.RankingAPI, region)
 		if cfg.GameServers != nil {
 			if configured, ok := cfg.GameServers[region]; ok {
 				profile = mergeGameServerProfile(profile, configured, region)
@@ -704,9 +719,7 @@ func ResolveGameServerProfile(cfg *Config, region string) GameServerConfig {
 		if region == cfg.Server.Region || (region == RegionJP && cfg.Server.Region == "") {
 			profile.Masterdata = mergeMasterdataProfile(profile.Masterdata, cfg.Masterdata, region)
 			profile.Assets = mergeAssetsProfile(profile.Assets, cfg.Assets, region)
-			profile.SekaiAPI = mergeSekaiAPIProfile(profile.SekaiAPI, cfg.SekaiAPI, region)
 			profile.SuiteAPI = mergeSuiteAPIProfile(profile.SuiteAPI, cfg.SuiteAPI)
-			profile.RankingAPI = mergeRankingAPIProfile(profile.RankingAPI, cfg.RankingAPI, region)
 		}
 	}
 	return profile
@@ -722,7 +735,7 @@ func defaultGameServerProfile(region string, enabled bool) GameServerConfig {
 		},
 		SekaiAPI: SekaiAPIConfig{
 			Enabled:   false,
-			BaseURL:   "https://seka-api.exmeaning.com",
+			BaseURL:   DefaultSekaiAPIURL,
 			Region:    region,
 			Headers:   map[string]string{},
 			Timeout:   10,
@@ -732,11 +745,12 @@ func defaultGameServerProfile(region string, enabled bool) GameServerConfig {
 			Enabled:     true,
 			EnabledSet:  true,
 			URL:         DefaultSuiteAPIURL,
+			Headers:     map[string]string{},
 			Timeout:     10,
 			DefaultMode: SuiteModeHaruki,
 		},
 		RankingAPI: RankingAPIConfig{
-			BaseURL: "https://rks.exmeaning.com",
+			BaseURL: DefaultRankingAPIURL,
 			Region:  region,
 			Timeout: 10,
 		},
@@ -771,7 +785,7 @@ func hasGameServerOverrides(cfg *Config) bool {
 		return false
 	}
 	for _, profile := range cfg.GameServers {
-		if profile.Enabled != nil || profile.Masterdata.Source != "" || profile.Masterdata.Region != "" || profile.Masterdata.URL != "" || profile.Masterdata.LocalPath != "" || profile.Assets.Source != "" || profile.Assets.Region != "" || profile.Assets.BaseURL != "" || profile.Assets.MusicAliasURL != "" || profile.SekaiAPI.Region != "" || profile.SekaiAPI.BaseURL != "" || profile.SuiteAPI.URL != "" || profile.SuiteAPI.EnabledSet || profile.RankingAPI.Region != "" || profile.RankingAPI.BaseURL != "" {
+		if profile.Enabled != nil || profile.Masterdata.Source != "" || profile.Masterdata.Region != "" || profile.Masterdata.URL != "" || profile.Masterdata.LocalPath != "" || profile.Assets.Source != "" || profile.Assets.Region != "" || profile.Assets.BaseURL != "" || profile.Assets.MusicAliasURL != "" || profile.SekaiAPI.Region != "" || profile.SekaiAPI.BaseURL != "" || len(profile.SekaiAPI.Headers) > 0 || profile.SuiteAPI.URL != "" || len(profile.SuiteAPI.Headers) > 0 || profile.SuiteAPI.EnabledSet || profile.RankingAPI.Region != "" || profile.RankingAPI.BaseURL != "" {
 			return true
 		}
 	}
@@ -856,8 +870,11 @@ func mergeSekaiAPIProfile(base SekaiAPIConfig, override SekaiAPIConfig, region s
 	if override.Enabled {
 		base.Enabled = true
 	}
-	if override.BaseURL != "" {
+	if override.BaseURL != "" && !(base.BaseURL != "" && base.BaseURL != DefaultSekaiAPIURL && override.BaseURL == DefaultSekaiAPIURL) {
 		base.BaseURL = override.BaseURL
+	}
+	if base.BaseURL == "" {
+		base.BaseURL = DefaultSekaiAPIURL
 	}
 	if override.Region != "" {
 		base.Region = NormalizeRegion(override.Region)
@@ -865,8 +882,11 @@ func mergeSekaiAPIProfile(base SekaiAPIConfig, override SekaiAPIConfig, region s
 	if base.Region == "" {
 		base.Region = region
 	}
-	if override.Headers != nil {
+	if len(override.Headers) > 0 {
 		base.Headers = override.Headers
+	}
+	if base.Headers == nil {
+		base.Headers = map[string]string{}
 	}
 	if override.Timeout != 0 {
 		base.Timeout = override.Timeout
@@ -885,8 +905,11 @@ func mergeSuiteAPIProfile(base SuiteAPIConfig, override SuiteAPIConfig) SuiteAPI
 	if override.URL != "" {
 		base.URL = strings.TrimSpace(override.URL)
 	}
-	if override.Token != "" {
-		base.Token = override.Token
+	if override.Headers != nil {
+		base.Headers = override.Headers
+	}
+	if base.Headers == nil {
+		base.Headers = map[string]string{}
 	}
 	if override.Timeout != 0 {
 		base.Timeout = override.Timeout
@@ -908,14 +931,25 @@ func mergeSuiteAPIProfile(base SuiteAPIConfig, override SuiteAPIConfig) SuiteAPI
 }
 
 func mergeRankingAPIProfile(base RankingAPIConfig, override RankingAPIConfig, region string) RankingAPIConfig {
+	return mergeRankingAPIProfileWithRegion(base, override, region, true)
+}
+
+func mergeGlobalRankingAPIProfile(base RankingAPIConfig, override RankingAPIConfig, region string) RankingAPIConfig {
+	return mergeRankingAPIProfileWithRegion(base, override, region, false)
+}
+
+func mergeRankingAPIProfileWithRegion(base RankingAPIConfig, override RankingAPIConfig, region string, _ bool) RankingAPIConfig {
 	if override.BaseURL != "" {
 		base.BaseURL = override.BaseURL
 	}
-	if override.Region != "" {
-		base.Region = NormalizeRegion(override.Region)
+	if base.BaseURL == "" {
+		base.BaseURL = DefaultRankingAPIURL
 	}
-	if base.Region == "" {
-		base.Region = region
+	// Ranking 使用 MoeSekai 公开榜线 API，区服固定跟随当前 game server；忽略历史配置中的手动 region。
+	if normalized := NormalizeRegion(region); IsValidRegion(normalized) {
+		base.Region = normalized
+	} else if base.Region == "" {
+		base.Region = RegionJP
 	}
 	if override.Timeout != 0 {
 		base.Timeout = override.Timeout

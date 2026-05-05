@@ -13,9 +13,11 @@ import (
 func TestClientGetProfileUsesRegionPathAndConfiguredHeaders(t *testing.T) {
 	var gotPath string
 	var gotHeader string
+	var gotAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotHeader = r.Header.Get("X-Test-Header")
+		gotAuth = r.Header.Get("Authorization")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"user": map[string]any{
 				"userId": "7485966462906096424",
@@ -33,7 +35,7 @@ func TestClientGetProfileUsesRegionPathAndConfiguredHeaders(t *testing.T) {
 		Enabled: true,
 		BaseURL: server.URL,
 		Region:  "cn",
-		Headers: map[string]string{"X-Test-Header": "test-value"},
+		Headers: map[string]string{"X-Test-Header": "test-value", "Authorization": "Bearer secret-token"},
 		Timeout: 1,
 	})
 
@@ -47,11 +49,106 @@ func TestClientGetProfileUsesRegionPathAndConfiguredHeaders(t *testing.T) {
 	if gotHeader != "test-value" {
 		t.Fatalf("header = %q", gotHeader)
 	}
+	if gotAuth != "Bearer secret-token" {
+		t.Fatalf("authorization = %q", gotAuth)
+	}
 	if profile.Name != "测试用户" || profile.Rank != 321 || profile.UserID != "7485966462906096424" {
 		t.Fatalf("profile = %+v", profile)
 	}
 	if profile.Signature != "你好 SEKAI" {
 		t.Fatalf("signature = %q", profile.Signature)
+	}
+}
+
+func TestClientGetProfileWarmsSystemAndRetriesOnNotFound(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch len(paths) {
+		case 1:
+			http.NotFound(w, r)
+		case 2:
+			if r.URL.Path != "/api/cn/system" {
+				t.Fatalf("warmup path = %q", r.URL.Path)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user": map[string]any{"userId": "123", "name": "重试玩家", "rank": 102},
+			})
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(config.SekaiAPIConfig{
+		Enabled: true,
+		BaseURL: server.URL,
+		Region:  "cn",
+		Timeout: 1,
+	})
+	profile, err := client.GetProfile("123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Name != "重试玩家" {
+		t.Fatalf("profile = %+v", profile)
+	}
+	want := []string{"/api/cn/123/profile", "/api/cn/system", "/api/cn/123/profile"}
+	if len(paths) != len(want) {
+		t.Fatalf("paths = %+v", paths)
+	}
+	for i := range want {
+		if paths[i] != want[i] {
+			t.Fatalf("paths = %+v, want %+v", paths, want)
+		}
+	}
+}
+
+func TestClientGetProfileSupportsRegionPlaceholderInBaseURL(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"user": map[string]any{"userId": "123", "name": "区域玩家", "rank": 100},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(config.SekaiAPIConfig{
+		Enabled: true,
+		BaseURL: server.URL + "/api/{region}",
+		Region:  "jp",
+		Timeout: 1,
+	})
+	if _, err := client.GetProfile("123"); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/jp/123/profile" {
+		t.Fatalf("path = %q", gotPath)
+	}
+}
+
+func TestClientGetProfileSupportsEndpointTemplate(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"user": map[string]any{"userId": "456", "name": "模板玩家", "rank": 101},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(config.SekaiAPIConfig{
+		Enabled: true,
+		BaseURL: server.URL + "/sekai/{region}/profile/{uid}",
+		Region:  "tw",
+		Timeout: 1,
+	})
+	if _, err := client.GetProfile("456"); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/sekai/tw/profile/456" {
+		t.Fatalf("path = %q", gotPath)
 	}
 }
 

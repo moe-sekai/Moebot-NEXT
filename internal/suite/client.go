@@ -17,7 +17,7 @@ import (
 type Client struct {
 	enabled    bool
 	urlPattern string
-	token      string
+	headers    map[string]string
 	timeout    time.Duration
 	region     string
 	httpClient *http.Client
@@ -45,10 +45,16 @@ func NewClient(cfg config.SuiteAPIConfig, regions ...string) *Client {
 	if len(regions) > 0 {
 		region = config.NormalizeRegion(regions[0])
 	}
+	headers := make(map[string]string, len(cfg.Headers))
+	for key, value := range cfg.Headers {
+		if strings.TrimSpace(key) != "" && value != "" {
+			headers[key] = value
+		}
+	}
 	return &Client{
 		enabled:    cfg.Enabled,
 		urlPattern: strings.TrimSpace(firstNonEmpty(cfg.URL, config.DefaultSuiteAPIURL)),
-		token:      cfg.Token,
+		headers:    headers,
 		timeout:    timeout,
 		region:     region,
 		httpClient: &http.Client{Timeout: timeout},
@@ -93,10 +99,9 @@ func (c *Client) GetUserData(uid string, mode string, filter []string, out any) 
 	if err != nil {
 		return fmt.Errorf("build suite request: %w", err)
 	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
+	for key, value := range c.headers {
+		req.Header.Set(key, value)
 	}
-
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("suite request failed: %w", err)

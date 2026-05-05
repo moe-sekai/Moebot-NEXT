@@ -10,7 +10,7 @@ import (
 	"moebot-next/internal/config"
 )
 
-func TestClientGetStatusUsesHarukiKeyAndBearerToken(t *testing.T) {
+func TestClientGetStatusUsesHarukiKeyAndConfiguredHeaders(t *testing.T) {
 	var gotPath string
 	var gotKey string
 	var gotMode string
@@ -36,7 +36,7 @@ func TestClientGetStatusUsesHarukiKeyAndBearerToken(t *testing.T) {
 	client := NewClient(config.SuiteAPIConfig{
 		Enabled:     true,
 		URL:         server.URL + "/api/cn/user/{uid}/suite",
-		Token:       "secret-token",
+		Headers:     map[string]string{"Authorization": "Bearer secret-token"},
 		Timeout:     1,
 		DefaultMode: config.SuiteModeLatest,
 	})

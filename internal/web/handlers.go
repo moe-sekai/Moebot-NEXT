@@ -2,6 +2,8 @@ package web
 
 import (
 	"fmt"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -271,23 +273,31 @@ type assetsSettingsRequest struct {
 }
 
 type sekaiAPISettingsRequest struct {
-	Enabled   *bool  `json:"enabled"`
-	Region    string `json:"region"`
-	Timeout   int    `json:"timeout"`
-	RateLimit int    `json:"rate_limit"`
+	Enabled   *bool              `json:"enabled"`
+	BaseURL   string             `json:"base_url"`
+	Region    string             `json:"region"`
+	Headers   *map[string]string `json:"headers"`
+	Timeout   int                `json:"timeout"`
+	RateLimit int                `json:"rate_limit"`
 }
 
 type suiteAPISettingsRequest struct {
-	Enabled     *bool  `json:"enabled"`
-	URL         string `json:"url"`
-	Token       string `json:"token"`
-	Timeout     int    `json:"timeout"`
-	DefaultMode string `json:"default_mode"`
+	Enabled     *bool              `json:"enabled"`
+	URL         string             `json:"url"`
+	Headers     *map[string]string `json:"headers"`
+	Timeout     int                `json:"timeout"`
+	DefaultMode string             `json:"default_mode"`
 }
 
 type rankingAPISettingsRequest struct {
-	Region  string `json:"region"`
-	Timeout int    `json:"timeout"`
+	Timeout int `json:"timeout"`
+}
+
+type sekaiSystemTestRequest struct {
+	BaseURL string            `json:"base_url"`
+	Region  string            `json:"region"`
+	Headers map[string]string `json:"headers"`
+	Timeout int               `json:"timeout"`
 }
 
 // handleUpdatePublicConfig saves the editable non-sensitive settings.
@@ -309,7 +319,6 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 		next.Server.Region = region
 		if req.SyncClientRegions {
 			next.SekaiAPI.Region = region
-			next.RankingAPI.Region = region
 		}
 	}
 	if next.Server.Region == "" {
@@ -363,6 +372,9 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 			profile.Assets.CustomBaseURL = assetResolved.CustomBaseURL
 			if serverReq.SekaiAPI != nil {
 				applySekaiAPISettings(&profile.SekaiAPI, serverReq.SekaiAPI)
+				if region == next.Server.Region {
+					applySekaiAPISettings(&next.SekaiAPI, serverReq.SekaiAPI)
+				}
 			}
 			if serverReq.SuiteAPI != nil {
 				applySuiteAPISettings(&profile.SuiteAPI, serverReq.SuiteAPI)
@@ -532,8 +544,20 @@ func applySekaiAPISettings(target *config.SekaiAPIConfig, req *sekaiAPISettingsR
 	if req.Enabled != nil {
 		target.Enabled = *req.Enabled
 	}
+	target.BaseURL = fallbackString(req.BaseURL, target.BaseURL, config.DefaultSekaiAPIURL)
 	if req.Region != "" {
 		target.Region = config.NormalizeRegion(req.Region)
+	}
+	if req.Headers != nil {
+		headers := make(map[string]string, len(*req.Headers))
+		for key, value := range *req.Headers {
+			key = strings.TrimSpace(key)
+			value = strings.TrimSpace(value)
+			if key != "" && value != "" {
+				headers[key] = value
+			}
+		}
+		target.Headers = headers
 	}
 	if req.Timeout > 0 {
 		target.Timeout = req.Timeout
@@ -554,8 +578,16 @@ func applySuiteAPISettings(target *config.SuiteAPIConfig, req *suiteAPISettingsR
 	if strings.TrimSpace(req.URL) != "" {
 		target.URL = strings.TrimSpace(req.URL)
 	}
-	if req.Token != "" {
-		target.Token = req.Token
+	if req.Headers != nil {
+		headers := make(map[string]string, len(*req.Headers))
+		for key, value := range *req.Headers {
+			key = strings.TrimSpace(key)
+			value = strings.TrimSpace(value)
+			if key != "" && value != "" {
+				headers[key] = value
+			}
+		}
+		target.Headers = headers
 	}
 	if req.Timeout > 0 {
 		target.Timeout = req.Timeout
@@ -572,12 +604,88 @@ func applyRankingAPISettings(target *config.RankingAPIConfig, req *rankingAPISet
 	if req == nil || target == nil {
 		return
 	}
-	if req.Region != "" {
-		target.Region = config.NormalizeRegion(req.Region)
-	}
 	if req.Timeout > 0 {
 		target.Timeout = req.Timeout
 	}
+}
+
+func (s *Server) handleTestSekaiSystem(c *fiber.Ctx) error {
+	var req sekaiSystemTestRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	region := config.NormalizeRegion(req.Region)
+	if region == "" {
+		region = config.NormalizeRegion(s.Config.Server.Region)
+	}
+	if region == "" {
+		region = config.RegionJP
+	}
+	systemURL, err := sekaiSystemURL(fallbackString(req.BaseURL, config.DefaultSekaiAPIURL), region)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	timeout := time.Duration(req.Timeout) * time.Second
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	httpReq, err := http.NewRequest(http.MethodGet, systemURL, nil)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("build system request: %v", err))
+	}
+	for key, value := range req.Headers {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key != "" && value != "" {
+			httpReq.Header.Set(key, value)
+		}
+	}
+	started := time.Now()
+	resp, err := (&http.Client{Timeout: timeout}).Do(httpReq)
+	duration := time.Since(started)
+	if err != nil {
+		return c.JSON(fiber.Map{
+			"ok":          false,
+			"url":         systemURL,
+			"duration_ms": duration.Milliseconds(),
+			"message":     err.Error(),
+		})
+	}
+	defer resp.Body.Close()
+	ok := resp.StatusCode >= 200 && resp.StatusCode < 300
+	message := "SEKAI API /system 连通正常"
+	if !ok {
+		message = fmt.Sprintf("SEKAI API /system 返回 HTTP %d", resp.StatusCode)
+	}
+	return c.JSON(fiber.Map{
+		"ok":          ok,
+		"url":         systemURL,
+		"status_code": resp.StatusCode,
+		"duration_ms": duration.Milliseconds(),
+		"message":     message,
+	})
+}
+
+func sekaiSystemURL(baseURL string, region string) (string, error) {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if base == "" {
+		base = config.DefaultSekaiAPIURL
+	}
+	region = config.NormalizeRegion(region)
+	if region == "" {
+		region = config.RegionJP
+	}
+	base = strings.ReplaceAll(base, "{region}", region)
+	if strings.Contains(base, "{uid}") || strings.Contains(base, "{user_id}") {
+		return "", fmt.Errorf("SEKAI API Base URL 用于 /system 测试时不能包含 {uid} 或 {user_id}")
+	}
+	if _, err := url.ParseRequestURI(base); err != nil {
+		return "", fmt.Errorf("invalid sekai api base url: %w", err)
+	}
+	if strings.Contains(baseURL, "{region}") {
+		return strings.TrimRight(base, "/") + "/system", nil
+	}
+	return url.JoinPath(base, "api", region, "system")
 }
 
 // handleReloadMasterdata forces a full reload from the currently configured source.
@@ -687,19 +795,10 @@ func (s *Server) publicConfigMap() fiber.Map {
 			"url_configured":  s.Config.Bot.Driver.URL != "",
 			"token_set":       s.Config.Bot.Driver.Token != "",
 		},
-		"masterdata": masterMap,
-		"sekai_api": fiber.Map{
-			"enabled":             s.Config.SekaiAPI.Enabled,
-			"base_url_configured": s.Config.SekaiAPI.BaseURL != "",
-			"region":              s.Config.SekaiAPI.Region,
-			"headers_configured":  len(s.Config.SekaiAPI.Headers) > 0,
-		},
-		"suite_api": publicSuiteAPIMap(s.Config.SuiteAPI),
-		"ranking_api": fiber.Map{
-			"base_url_configured": s.Config.RankingAPI.BaseURL != "",
-			"region":              s.Config.RankingAPI.Region,
-			"timeout":             s.Config.RankingAPI.Timeout,
-		},
+		"masterdata":  masterMap,
+		"sekai_api":   publicSekaiAPIMap(s.Config.SekaiAPI),
+		"suite_api":   publicSuiteAPIMap(s.Config.SuiteAPI),
+		"ranking_api": publicRankingAPIMap(s.Config.RankingAPI),
 		"renderer": fiber.Map{
 			"base_url":  rendererBaseURL(s.Renderer),
 			"host":      s.Config.Renderer.Host,
@@ -818,8 +917,10 @@ func (s *Server) publicServerProfilesMap(defaultRegion string) fiber.Map {
 func publicSekaiAPIMap(cfg config.SekaiAPIConfig) fiber.Map {
 	return fiber.Map{
 		"enabled":             cfg.Enabled,
+		"base_url":            fallbackString(cfg.BaseURL, config.DefaultSekaiAPIURL),
 		"base_url_configured": strings.TrimSpace(cfg.BaseURL) != "",
 		"region":              config.NormalizeRegion(cfg.Region),
+		"headers":             copyHeadersMap(cfg.Headers),
 		"headers_configured":  len(cfg.Headers) > 0,
 		"timeout":             cfg.Timeout,
 		"rate_limit":          cfg.RateLimit,
@@ -828,11 +929,13 @@ func publicSekaiAPIMap(cfg config.SekaiAPIConfig) fiber.Map {
 
 func publicSuiteAPIMap(cfg config.SuiteAPIConfig) fiber.Map {
 	return fiber.Map{
-		"enabled":        cfg.Enabled,
-		"url_configured": strings.TrimSpace(cfg.URL) != "",
-		"token_set":      strings.TrimSpace(cfg.Token) != "",
-		"timeout":        cfg.Timeout,
-		"default_mode":   config.NormalizeSuiteMode(cfg.DefaultMode),
+		"enabled":            cfg.Enabled,
+		"url":                fallbackString(cfg.URL, config.DefaultSuiteAPIURL),
+		"url_configured":     strings.TrimSpace(cfg.URL) != "",
+		"headers":            copyHeadersMap(cfg.Headers),
+		"headers_configured": len(cfg.Headers) > 0,
+		"timeout":            cfg.Timeout,
+		"default_mode":       config.NormalizeSuiteMode(cfg.DefaultMode),
 	}
 }
 
@@ -842,6 +945,21 @@ func publicRankingAPIMap(cfg config.RankingAPIConfig) fiber.Map {
 		"region":              config.NormalizeRegion(cfg.Region),
 		"timeout":             cfg.Timeout,
 	}
+}
+
+func copyHeadersMap(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(headers))
+	for key, value := range headers {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key != "" && value != "" {
+			out[key] = value
+		}
+	}
+	return out
 }
 
 // handleListGroups returns paginated group list.

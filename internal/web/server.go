@@ -98,6 +98,7 @@ func (s *Server) registerRoutes() {
 	api.Post("/commands/aliases/import", s.handleImportCommandAliases)
 	api.Get("/config/public", s.handlePublicConfig)
 	api.Put("/config/public", s.handleUpdatePublicConfig)
+	api.Post("/config/sekai/test-system", s.handleTestSekaiSystem)
 	api.Post("/masterdata/reload", s.handleReloadMasterdata)
 
 	// Dashboard

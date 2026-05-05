@@ -14,7 +14,8 @@ func TestSuiteAPIConfigLoadedAndMergedIntoGameServer(t *testing.T) {
 suite_api:
   enabled: true
   url: "https://suite.example.test/api/cn/user/{uid}/suite"
-  token: "secret-token"
+  headers:
+    X-Suite-Header: "suite-value"
   timeout: 7
   default_mode: "moesekai"
 game_servers:
@@ -44,8 +45,8 @@ game_servers:
 	if profile.SuiteAPI.URL != "https://suite.example.test/api/cn/user/{uid}/suite" {
 		t.Fatalf("url = %q", profile.SuiteAPI.URL)
 	}
-	if profile.SuiteAPI.Token != "secret-token" {
-		t.Fatalf("token = %q", profile.SuiteAPI.Token)
+	if profile.SuiteAPI.Headers["X-Suite-Header"] != "suite-value" {
+		t.Fatalf("headers = %+v", profile.SuiteAPI.Headers)
 	}
 	if profile.SuiteAPI.Timeout != 7 {
 		t.Fatalf("timeout = %d", profile.SuiteAPI.Timeout)

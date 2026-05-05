@@ -23,6 +23,8 @@ import type {
 	RuntimeStatus,
 	SearchResponse,
 	SearchType,
+	SekaiSystemTestPayload,
+	SekaiSystemTestResponse,
 	UserRow,
 } from "./types";
 
@@ -198,6 +200,15 @@ export async function updatePublicConfig(payload: UpdatePublicConfigPayload) {
 	const { data } = await api.put<ConfigUpdateResponse>(
 		"/config/public",
 		payload,
+	);
+	return data;
+}
+
+export async function testSekaiSystem(payload: SekaiSystemTestPayload) {
+	const { data } = await api.post<SekaiSystemTestResponse>(
+		"/config/sekai/test-system",
+		payload,
+		{ timeout: 0 },
 	);
 	return data;
 }

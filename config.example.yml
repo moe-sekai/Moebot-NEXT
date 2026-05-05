@@ -41,6 +41,8 @@ masterdata:
 
 sekai_api:
   enabled: false
+  # SEKAI API 需要配置端点和请求头；Base URL 支持 {region}，完整端点模板也支持 {region}/{uid}。
+  # 如需 token，请写入 headers，例如 x-moe-sekai-token / Authorization。
   base_url: "https://seka-api.exmeaning.com"
   region: "cn"
   headers: {}
@@ -49,15 +51,15 @@ sekai_api:
 
 suite_api:
   enabled: true
-  # Suite 公开数据接口，{uid} 会替换为绑定的游戏 ID，{region} 会替换为区服。
-  # 默认仅使用 Haruki 公开 API，并通过 key 参数请求公开字段。
+  # Suite 使用 Haruki 公开数据接口；{uid} 会替换为绑定的游戏 ID，{region} 会替换为区服。
+  # 默认通过 key 参数请求公开字段；如需自定义鉴权，也写入 headers。
   url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
-  token: ""
+  headers: {}
   timeout: 10
 
 ranking_api:
-  # 公开实时榜 API；普通榜/查房/WL 支持 cn / jp / tw / kr / en。
-  # 预测 API 固定使用 https://rk.exmeaning.com/public，当前仅支持 cn / jp。
+  # MoeSekai 公开实时榜 API；普通榜/查房/WL 支持 cn / jp / tw / kr / en。
+  # 区服默认自动跟随对应 game server；预测 API 固定使用 https://rk.exmeaning.com/public，当前仅支持 cn / jp。
   base_url: "https://rks.exmeaning.com"
   region: "cn"
   timeout: 10
@@ -112,7 +114,7 @@ game_servers:
     suite_api:
       enabled: true
       url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
-      token: ""
+      headers: {}
       timeout: 10
     ranking_api:
       base_url: "https://rks.exmeaning.com"
@@ -141,7 +143,7 @@ game_servers:
     suite_api:
       enabled: true
       url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
-      token: ""
+      headers: {}
       timeout: 10
     ranking_api:
       base_url: "https://rks.exmeaning.com"
