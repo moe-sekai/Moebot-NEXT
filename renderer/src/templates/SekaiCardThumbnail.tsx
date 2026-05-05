@@ -10,6 +10,7 @@ export interface SekaiCardThumbnailProps {
   isTrained?: boolean
   mastery?: number
   characterName?: string
+  supplyType?: string
 }
 
 export function getRarityNumber(rarityType: string): number {
@@ -46,6 +47,7 @@ export function SekaiCardThumbnail({
   isTrained = false,
   mastery = 0,
   characterName,
+  supplyType,
 }: SekaiCardThumbnailProps) {
   const attrColor = getAttributeColor(attr)
   const starCount = getRarityNumber(rarity)
@@ -56,6 +58,7 @@ export function SekaiCardThumbnail({
   const starUrl = getSekaiCardUiAssetDataUri(birthday ? 'rare_birthday.png' : isTrained ? 'rare_star_after_training.png' : 'rare_star_normal.png')
   const masteryUrl = mastery > 0 ? getSekaiCardUiAssetDataUri(`train_rank_${mastery}.png`) : undefined
   const scale = size / 156
+  const supplyBadge = supplyType ? getSupplyBadgeStyle(supplyType) : undefined
 
   return (
     <div
@@ -123,6 +126,33 @@ export function SekaiCardThumbnail({
         />
       )}
 
+      {supplyBadge && (
+        <div
+          style={{
+            display: 'flex',
+            position: 'absolute',
+            right: 6 * scale,
+            top: (label ? 28 : 7) * scale,
+            maxWidth: 94 * scale,
+            minHeight: 18 * scale,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: supplyBadge.backgroundColor,
+            color: supplyBadge.color,
+            border: `1px solid ${supplyBadge.borderColor}`,
+            borderRadius: theme.borderRadius.round,
+            padding: `${2 * scale}px ${7 * scale}px`,
+            fontSize: supplyBadge.fontSize * scale,
+            lineHeight: 1,
+            fontWeight: 900,
+            letterSpacing: supplyBadge.letterSpacing ?? '0px',
+            overflow: 'hidden',
+          }}
+        >
+          {supplyBadge.label}
+        </div>
+      )}
+
       {label && (
         <div
           style={{
@@ -145,6 +175,94 @@ export function SekaiCardThumbnail({
 
     </div>
   )
+}
+
+interface SupplyBadgeStyle {
+  label: string
+  color: string
+  backgroundColor: string
+  borderColor: string
+  fontSize: number
+  letterSpacing?: string
+}
+
+const SUPPLY_BADGES: Record<string, SupplyBadgeStyle> = {
+  常驻: {
+    label: '常驻',
+    color: theme.colors.textSecondary,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderColor: theme.colors.borderStrong,
+    fontSize: 10,
+  },
+  生日: {
+    label: '生日',
+    color: '#ffffff',
+    backgroundColor: '#ff7eb6',
+    borderColor: '#ffb3d2',
+    fontSize: 10,
+  },
+  期间限定: {
+    label: '期间限定',
+    color: '#ffffff',
+    backgroundColor: '#ff8f3f',
+    borderColor: '#ffc08a',
+    fontSize: 9.5,
+  },
+  CFES限定: {
+    label: 'CFES限定',
+    color: '#ffffff',
+    backgroundColor: '#7c5cff',
+    borderColor: '#b7a7ff',
+    fontSize: 9.5,
+    letterSpacing: '0.1px',
+  },
+  BFES限定: {
+    label: 'BFES限定',
+    color: '#ffffff',
+    backgroundColor: '#00a6d6',
+    borderColor: '#7bdcf4',
+    fontSize: 9.5,
+    letterSpacing: '0.1px',
+  },
+  WorldLink限定: {
+    label: 'WorldLink限定',
+    color: '#ffffff',
+    backgroundColor: '#2f6df6',
+    borderColor: '#9fbdff',
+    fontSize: 8.5,
+    letterSpacing: '-0.15px',
+  },
+  联动限定: {
+    label: '联动限定',
+    color: '#ffffff',
+    backgroundColor: '#e84b6b',
+    borderColor: '#ff9caf',
+    fontSize: 9.5,
+  },
+}
+
+const SUPPLY_TYPE_ALIASES: Record<string, string> = {
+  normal: '常驻',
+  birthday: '生日',
+  term_limited: '期间限定',
+  colorful_festival_limited: 'CFES限定',
+  bloom_festival_limited: 'BFES限定',
+  unit_event_limited: 'WorldLink限定',
+  collaboration_limited: '联动限定',
+  CFes限定: 'CFES限定',
+  BFes限定: 'BFES限定',
+  WL限定: 'WorldLink限定',
+}
+
+function getSupplyBadgeStyle(supplyType: string): SupplyBadgeStyle {
+  const normalized = SUPPLY_TYPE_ALIASES[supplyType] ?? supplyType
+  return SUPPLY_BADGES[normalized] ?? {
+    label: normalized,
+    color: theme.colors.text,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderColor: theme.colors.borderStrong,
+    fontSize: normalized.length > 7 ? 8.5 : 9.5,
+  }
 }
 
 function placeholderCardImage(label: string, color: string): string {

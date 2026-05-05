@@ -256,7 +256,7 @@ function createPreviewElement(id: string) {
 						power: 33956,
 						skillName: "5秒内得分提升 120%",
 						gachaPhrase: "要把这份心情，传达到舞台的每一个角落。",
-						supplyType: "限定招募",
+						supplyType: "CFES限定",
 					}}
 				/>
 			);
@@ -278,6 +278,7 @@ function createPreviewElement(id: string) {
 							cardRarityType: "rarity_4",
 							attr: "cute",
 							assetbundleName: "res001_no003",
+							supplyType: "常驻",
 						},
 						{
 							id: 1301,
@@ -287,6 +288,7 @@ function createPreviewElement(id: string) {
 							cardRarityType: "rarity_4",
 							attr: "happy",
 							assetbundleName: "res002_no003",
+							supplyType: "CFES限定",
 						},
 						{
 							id: 1310,
@@ -296,6 +298,7 @@ function createPreviewElement(id: string) {
 							cardRarityType: "rarity_4",
 							attr: "cool",
 							assetbundleName: "res003_no003",
+							supplyType: "WorldLink限定",
 						},
 					]}
 				/>

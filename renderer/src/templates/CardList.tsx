@@ -17,6 +17,7 @@ export interface CardListProps {
 		thumbnailUrl?: string;
 		normalThumbnailUrl?: string;
 		trainedThumbnailUrl?: string;
+		supplyType?: string;
 	}>;
 	page?: number;
 	totalPages?: number;
@@ -107,6 +108,7 @@ export function CardList({
 										attr={card.attr ?? "cute"}
 										isTrained={trained}
 										characterName={card.characterName}
+										supplyType={card.supplyType}
 										size={112}
 									/>
 								</div>

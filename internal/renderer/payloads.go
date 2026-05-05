@@ -1061,14 +1061,16 @@ func CardSupplyType(store *masterdata.Store, card masterdata.CardInfo) string {
 // CardSupplyTypeDisplayName converts an upstream cardSupplyType into a label.
 func CardSupplyTypeDisplayName(supplyType string) string {
 	switch supplyType {
+	case "birthday":
+		return "生日"
 	case "term_limited":
 		return "期间限定"
 	case "colorful_festival_limited":
-		return "CFes限定"
+		return "CFES限定"
 	case "bloom_festival_limited":
-		return "BFes限定"
+		return "BFES限定"
 	case "unit_event_limited":
-		return "WL限定"
+		return "WorldLink限定"
 	case "collaboration_limited":
 		return "联动限定"
 	case "normal", "":

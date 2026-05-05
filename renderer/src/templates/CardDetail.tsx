@@ -70,6 +70,7 @@ export function CardDetail({ card }: CardDetailProps) {
               attr={card.attr}
               isTrained={false}
               characterName={card.characterName}
+              supplyType={card.supplyType}
               size={128}
             />
             {showTrained && (
@@ -79,6 +80,7 @@ export function CardDetail({ card }: CardDetailProps) {
                 attr={card.attr}
                 isTrained
                 characterName={card.characterName}
+                supplyType={card.supplyType}
                 size={128}
               />
             )}
