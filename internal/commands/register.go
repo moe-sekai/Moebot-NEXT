@@ -44,6 +44,7 @@ func RegisterAll(deps *Deps) {
 	RegisterCharacterRankMission(deps)
 	RegisterAnvo(deps)
 	RegisterSuiteCardBox(deps)
+	RegisterDeckRecommend(deps)
 	RegisterRanking(deps)
 	RegisterBirthday()
 	// RegisterSticker(deps)  // Phase 2

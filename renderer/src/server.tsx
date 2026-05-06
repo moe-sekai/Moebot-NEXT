@@ -1,11 +1,13 @@
 import { getAssetBaseUrl } from "../shared";
 import { rendererAssetCache } from "./asset-cache";
 import { getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, startCardThumbnailCompositePreload, statusForCardThumbnailComposites, type CardThumbnailCompositeLayer, type CardThumbnailCompositeRequest } from "./card-thumbnail-composites";
+import { calculateDeckRecommend } from "./deck-recommend/calculate";
 import { renderWithTrace } from "./engine";
 import { renderChartSvg } from "./chart-svg-renderer";
 import { preloadFixedChartNoteAssets } from "./svg-assets";
 import { listRenderPreviews, renderPreviewTemplate } from "./preview";
 import {
+	DeckRecommend,
 	AnvoList,
 	Best30,
 	CardDetail,
@@ -439,6 +441,33 @@ function normalizeGachaList(data: any) {
 	};
 }
 
+function normalizeDeckRecommend(data: any) {
+	return {
+		title: data.title ?? data.Title ?? "活动组卡推荐",
+		subtitle: data.subtitle ?? data.Subtitle,
+		regionLabel: data.regionLabel ?? data.RegionLabel,
+		profile: normalizeSuiteProfile(data.profile ?? data.Profile),
+		event: data.event ?? data.Event,
+		music: data.music ?? data.Music,
+		options: data.options ?? data.Options,
+		algorithm: data.algorithm ?? data.Algorithm,
+		costMs: data.costMs ?? data.CostMS,
+		warnings: data.warnings ?? data.Warnings ?? [],
+		decks: data.decks ?? data.Decks ?? [],
+		assetSource: data.assetSource ?? data.AssetSource,
+	};
+}
+
+async function prepareDeckRecommend(data: ReturnType<typeof normalizeDeckRecommend>) {
+	const cards = (data.decks ?? []).flatMap((deck: any) => (deck.cards ?? []).map((entry: any) => entry.card ?? entry));
+	await hydrateCardCompositeLayersForCards(cards, {
+		assetSource: data.assetSource,
+		sizes: [112],
+		allowDownload: true,
+	});
+	return data;
+}
+
 function normalizeSuitePanel(data: any) {
 	return {
 		title: data.title ?? data.Title ?? "Suite 数据面板",
@@ -862,6 +891,9 @@ async function createElement(req: RenderRequest) {
 		case "character_rank_mission":
 		case "cr_mission":
 			return <CharacterRankMission {...(data ?? {})} />;
+		case "deck_recommend":
+		case "deck-recommend":
+			return <DeckRecommend {...(await prepareDeckRecommend(normalizeDeckRecommend(data ?? {})))} />;
 		case "ranking_list":
 		case "ranking":
 			return <RankingList {...(await prepareRankingList(normalizeRankingList(data)))} />;
@@ -1042,6 +1074,24 @@ Bun.serve({
 				console.error("[renderer] chart render failed:", error);
 				return Response.json(
 					{
+						error: true,
+						message: error instanceof Error ? error.message : String(error),
+					},
+					{ status: 500 },
+				);
+			}
+		}
+
+		if (url.pathname === "/deck-recommend/calculate" && request.method === "POST") {
+			try {
+				const body = await request.json();
+				const result = await calculateDeckRecommend(body as any);
+				return Response.json(result, { status: result.ok ? 200 : 400 });
+			} catch (error) {
+				console.error("[renderer] deck recommend calculation failed:", error);
+				return Response.json(
+					{
+						ok: false,
 						error: true,
 						message: error instanceof Error ? error.message : String(error),
 					},

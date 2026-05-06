@@ -28,6 +28,8 @@ export { AnvoList } from "./AnvoList";
 export type { AnvoListProps } from "./AnvoList";
 export { CharacterRankMission } from "./CharacterRankMission";
 export type { CharacterRankMissionProps } from "./CharacterRankMission";
+export { DeckRecommend } from "./DeckRecommend";
+export type { DeckRecommendProps } from "./DeckRecommend";
 export {
 	SekaiCardThumbnail,
 	canUseTrainedArt,

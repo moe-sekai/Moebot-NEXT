@@ -315,6 +315,22 @@ func (c *Client) CardThumbnailPreloadStatusWithCards(urls []string, cards []Card
 	return &result, err
 }
 
+// CalculateDeckRecommend runs the embedded TypeScript deck recommender in the renderer service.
+func (c *Client) CalculateDeckRecommend(req DeckRecommendCalculateRequest) (*DeckRecommendCalculateResponse, error) {
+	var result DeckRecommendCalculateResponse
+	err := c.postJSON("/deck-recommend/calculate", req, &result)
+	if err != nil {
+		return nil, err
+	}
+	if !result.OK {
+		if result.Error != "" {
+			return &result, fmt.Errorf("%s", result.Error)
+		}
+		return &result, fmt.Errorf("deck recommend failed")
+	}
+	return &result, nil
+}
+
 func (c *Client) postJSON(path string, payload interface{}, out interface{}) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
