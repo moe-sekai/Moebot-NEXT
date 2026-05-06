@@ -2,7 +2,8 @@ import { getAssetBaseUrl } from "../shared";
 import { rendererAssetCache } from "./asset-cache";
 import { getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, startCardThumbnailCompositePreload, statusForCardThumbnailComposites, type CardThumbnailCompositeLayer, type CardThumbnailCompositeRequest } from "./card-thumbnail-composites";
 import { renderWithTrace } from "./engine";
-import { renderChartWithBrowser } from "./chart-browser-renderer";
+import { renderChartSvg } from "./chart-svg-renderer";
+import { preloadFixedChartNoteAssets } from "./svg-assets";
 import { listRenderPreviews, renderPreviewTemplate } from "./preview";
 import {
 	AnvoList,
@@ -52,6 +53,10 @@ interface ChartRenderRequest {
 
 const port = Number(process.env.PORT ?? 3001);
 const defaultPrecision = parsePositiveNumber(process.env.RENDER_PRECISION, 1.5);
+
+void preloadFixedChartNoteAssets().catch((error) => {
+	console.warn("[renderer] fixed chart note asset preload failed:", error);
+});
 
 function parsePositiveNumber(value: unknown, fallback = 0): number {
 	const numberValue = typeof value === "number" ? value : Number(value);
@@ -972,7 +977,7 @@ Bun.serve({
 		if (url.pathname === "/render/chart" && request.method === "POST") {
 			try {
 				const body = (await request.json()) as ChartRenderRequest;
-				const trace = await renderChartWithBrowser({
+				const trace = await renderChartSvg({
 					url: body.url,
 					svg: body.svg,
 					width: body.width,
@@ -983,7 +988,7 @@ Bun.serve({
 						"content-type": "image/png",
 						"cache-control": "no-store",
 						"x-render-total-ms": String(trace.timings.totalMs),
-						"x-render-chrome-ms": String(trace.timings.chromeMs),
+						"x-render-resvg-ms": String(trace.timings.resvgMs),
 						"x-render-size-bytes": String(trace.sizeBytes),
 						"x-render-width": String(trace.width),
 						"x-render-height": String(trace.height),

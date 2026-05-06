@@ -74,7 +74,6 @@ type PreviewRenderResult struct {
 	ImagesMS         string
 	SatoriMS         string
 	ResvgMS          string
-	ChromeMS         string
 	SizeBytes        string
 	ImageTotal       string
 	ImageRemote      string
@@ -251,7 +250,7 @@ func (c *Client) RenderWithTrace(req RenderRequest) (*PreviewRenderResult, error
 	}, nil
 }
 
-// RenderChartURL converts a chart SVG URL to PNG through the renderer's browser screenshot pipeline.
+// RenderChartURL converts a chart SVG URL to PNG through the renderer's resvg pipeline.
 func (c *Client) RenderChartURL(chartURL string) ([]byte, error) {
 	result, err := c.RenderChartURLWithTrace(chartURL, 0)
 	if err != nil {
@@ -287,7 +286,6 @@ func (c *Client) RenderChartURLWithTrace(chartURL string, width int) (*PreviewRe
 		PNG:        png,
 		TotalMS:    resp.Header.Get("x-render-total-ms"),
 		ResvgMS:    resp.Header.Get("x-render-resvg-ms"),
-		ChromeMS:   resp.Header.Get("x-render-chrome-ms"),
 		SizeBytes:  resp.Header.Get("x-render-size-bytes"),
 		StatusCode: resp.StatusCode,
 	}, nil

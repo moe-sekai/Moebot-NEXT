@@ -20,6 +20,13 @@ export interface CachedImageResult {
   error?: string
 }
 
+export interface CachedBytesResult {
+  hit: boolean
+  data?: Buffer
+  skipped?: boolean
+  error?: string
+}
+
 export interface ImageHydrationStats {
   total: number
   remote: number
@@ -123,22 +130,30 @@ export class RendererAssetCache {
     return typeof value === 'string' && /^https?:\/\//i.test(value)
   }
 
-  async getDataUri(url: string): Promise<CachedImageResult> {
+  async getBytes(url: string): Promise<CachedBytesResult> {
     if (!this.options.enabled) return { hit: false, skipped: true }
     if (!this.isRemoteUrl(url)) return { hit: false, skipped: true }
 
     try {
       const data = await this.readFresh(url)
       if (!data) return { hit: false }
-      return {
-        hit: true,
-        dataUri: `data:${mimeFromUrl(url)};base64,${data.toString('base64')}`,
-      }
+      return { hit: true, data }
     } catch (error) {
       return {
         hit: false,
         error: error instanceof Error ? error.message : String(error),
       }
+    }
+  }
+
+  async getDataUri(url: string): Promise<CachedImageResult> {
+    const cached = await this.getBytes(url)
+    if (!cached.hit || !cached.data) {
+      return { hit: false, skipped: cached.skipped, error: cached.error }
+    }
+    return {
+      hit: true,
+      dataUri: `data:${mimeFromUrl(url)};base64,${cached.data.toString('base64')}`,
     }
   }
 

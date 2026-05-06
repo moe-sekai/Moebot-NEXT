@@ -9,7 +9,7 @@ import (
 	"moebot-next/internal/config"
 )
 
-func TestRenderChartURLUsesDefaultOutputWidthAndChromeHeader(t *testing.T) {
+func TestRenderChartURLUsesDefaultOutputWidthAndResvgHeader(t *testing.T) {
 	var req ChartRenderRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/render/chart" {
@@ -19,7 +19,7 @@ func TestRenderChartURLUsesDefaultOutputWidthAndChromeHeader(t *testing.T) {
 			t.Fatal(err)
 		}
 		w.Header().Set("x-render-total-ms", "12")
-		w.Header().Set("x-render-chrome-ms", "9")
+		w.Header().Set("x-render-resvg-ms", "9")
 		w.Header().Set("x-render-size-bytes", "4")
 		_, _ = w.Write([]byte("png"))
 	}))
@@ -38,11 +38,8 @@ func TestRenderChartURLUsesDefaultOutputWidthAndChromeHeader(t *testing.T) {
 	if req.Precision != 4 {
 		t.Fatalf("precision = %v", req.Precision)
 	}
-	if result.ChromeMS != "9" {
-		t.Fatalf("chrome ms = %q", result.ChromeMS)
-	}
-	if result.ResvgMS != "" {
-		t.Fatalf("resvg ms should be empty for chart browser render, got %q", result.ResvgMS)
+	if result.ResvgMS != "9" {
+		t.Fatalf("resvg ms = %q", result.ResvgMS)
 	}
 }
 

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { rendererAssetCache } from './asset-cache'
 
 export interface SvgAssetFetchResult {
   data: Buffer
@@ -17,16 +18,47 @@ export type RequestHeaders = Record<string, string>
 const SVG_ASSET_REF_RE = /\b(href|xlink:href)=(['"])([^'"]+)\2/g
 const DEFAULT_SVG_ASSET_TIMEOUT_MS = 12_000
 
+const defaultChartReferer = 'https://charts-new.unipjsk.com/'
+
 export const chartSvgRequestHeaders = {
   accept: 'image/svg+xml,text/plain;q=0.9,*/*;q=0.8',
   'user-agent': 'Mozilla/5.0 (compatible; Moebot-NEXT Renderer)',
-  referer: 'https://charts-new.unipjsk.com/',
+  referer: defaultChartReferer,
 }
 
 export const chartAssetRequestHeaders = {
   accept: 'image/avif,image/webp,image/png,image/jpeg,image/svg+xml,*/*;q=0.8',
   'user-agent': chartSvgRequestHeaders['user-agent'],
-  referer: chartSvgRequestHeaders.referer,
+  referer: defaultChartReferer,
+}
+
+export function chartSvgRequestHeadersFor(baseUrl: string): RequestHeaders {
+  return requestHeadersWithReferer(chartSvgRequestHeaders, refererForSvgBase(baseUrl))
+}
+
+export function chartAssetRequestHeadersFor(baseUrl: string): RequestHeaders {
+  return requestHeadersWithReferer(chartAssetRequestHeaders, refererForSvgBase(baseUrl))
+}
+
+export function svgAssetFetcherForBase(baseUrl: string): SvgAssetFetcher {
+  return async (url: string) => {
+    const cached = await rendererAssetCache.getBytes(url)
+    if (cached.hit && cached.data) {
+      return { data: cached.data, mime: mimeFromResponse(url, null) }
+    }
+
+    const result = await fetchRemoteBytes(url, chartAssetRequestHeadersFor(baseUrl))
+    void rendererAssetCache.prefetch(url).catch((error) => {
+      console.warn(`[renderer] failed to persist svg asset cache ${url}:`, error)
+    })
+    return { data: result.data, mime: mimeFromResponse(url, result.contentType) }
+  }
+}
+
+export const fixedChartNoteAssetUrls = buildFixedChartNoteAssetUrls()
+
+export async function preloadFixedChartNoteAssets(): Promise<void> {
+  await rendererAssetCache.startPreload(fixedChartNoteAssetUrls, { concurrency: 8 })
 }
 
 export async function hydrateSvgAssets(
@@ -37,13 +69,7 @@ export async function hydrateSvgAssets(
   if (!svg || !baseUrl) return svg
 
   const replacements = new Map<string, string>()
-  const refsByRaw = new Map<string, string>()
-  for (const match of svg.matchAll(SVG_ASSET_REF_RE)) {
-    const raw = match[3]
-    if (!raw || shouldSkipSvgAssetRef(raw)) continue
-    const absoluteUrl = resolveSvgAssetUrl(raw, baseUrl)
-    if (absoluteUrl) refsByRaw.set(raw, absoluteUrl)
-  }
+  const refsByRaw = collectSvgAssetRefs(svg, baseUrl)
 
   await Promise.all(Array.from(refsByRaw.entries()).map(async ([raw, absoluteUrl]) => {
     try {
@@ -61,6 +87,18 @@ export async function hydrateSvgAssets(
     const replacement = replacements.get(raw)
     return replacement ? `${attr}=${quote}${replacement}${quote}` : full
   })
+}
+
+export function collectSvgAssetRefs(svg: string, baseUrl: string): Map<string, string> {
+  const refsByRaw = new Map<string, string>()
+  if (!svg || !baseUrl) return refsByRaw
+  for (const match of svg.matchAll(SVG_ASSET_REF_RE)) {
+    const raw = match[3]
+    if (!raw || shouldSkipSvgAssetRef(raw)) continue
+    const absoluteUrl = resolveSvgAssetUrl(raw, baseUrl)
+    if (absoluteUrl) refsByRaw.set(raw, absoluteUrl)
+  }
+  return refsByRaw
 }
 
 function shouldSkipSvgAssetRef(value: string): boolean {
@@ -82,8 +120,44 @@ function resolveSvgAssetUrl(value: string, baseUrl: string): string | null {
 }
 
 async function fetchSvgAsset(url: string): Promise<SvgAssetFetchResult> {
+  const cached = await rendererAssetCache.getBytes(url)
+  if (cached.hit && cached.data) {
+    return { data: cached.data, mime: mimeFromResponse(url, null) }
+  }
+
   const result = await fetchRemoteBytes(url, chartAssetRequestHeaders)
+  void rendererAssetCache.prefetch(url).catch((error) => {
+    console.warn(`[renderer] failed to persist svg asset cache ${url}:`, error)
+  })
   return { data: result.data, mime: mimeFromResponse(url, result.contentType) }
+}
+
+function buildFixedChartNoteAssetUrls(): string[] {
+  const base = `${defaultChartReferer}moe/notes_new/custom01`
+  const names = [
+    ...Array.from({ length: 7 }, (_, index) => `notes_${index}.png`),
+    'notes_long_among.png',
+    'notes_friction_among_long.png',
+    'notes_friction_among_crtcl.png',
+    ...Array.from({ length: 7 }, (_, index) => `notes_flick_arrow_${String(index).padStart(2, '0')}.png`),
+    ...Array.from({ length: 7 }, (_, index) => `notes_flick_arrow_${String(index).padStart(2, '0')}_diagonal.png`),
+    ...Array.from({ length: 7 }, (_, index) => `notes_flick_arrow_crtcl_${String(index).padStart(2, '0')}.png`),
+    ...Array.from({ length: 7 }, (_, index) => `notes_flick_arrow_crtcl_${String(index).padStart(2, '0')}_diagonal.png`),
+  ]
+  return Array.from(new Set(names.map((name) => `${base}/${name}`)))
+}
+
+function requestHeadersWithReferer(headers: RequestHeaders, referer: string): RequestHeaders {
+  return { ...headers, referer }
+}
+
+function refererForSvgBase(baseUrl: string): string {
+  try {
+    const url = new URL(baseUrl)
+    return `${url.protocol}//${url.host}/`
+  } catch {
+    return defaultChartReferer
+  }
 }
 
 export async function fetchRemoteBytes(

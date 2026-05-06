@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { chartAssetRequestHeaders, chartSvgRequestHeaders, fetchRemoteBytes, hydrateSvgAssets } from './svg-assets'
+import { chartAssetRequestHeaders, chartAssetRequestHeadersFor, chartSvgRequestHeaders, chartSvgRequestHeadersFor, collectSvgAssetRefs, fetchRemoteBytes, fixedChartNoteAssetUrls, hydrateSvgAssets } from './svg-assets'
 
 const onePixelPng = Buffer.from('iVBORw0KGgo=', 'base64')
 
@@ -36,6 +36,8 @@ describe('hydrateSvgAssets', () => {
     expect(chartSvgRequestHeaders.referer).toBe('https://charts-new.unipjsk.com/')
     expect(chartAssetRequestHeaders['user-agent']).toContain('Mozilla/5.0')
     expect(chartAssetRequestHeaders.referer).toBe('https://charts-new.unipjsk.com/')
+    expect(chartSvgRequestHeadersFor('https://charts.example.test/moe/svg/739/master.svg').referer).toBe('https://charts.example.test/')
+    expect(chartAssetRequestHeadersFor('https://charts.example.test/moe/svg/739/master.svg').referer).toBe('https://charts.example.test/')
   })
 
   test('fetchRemoteBytes falls back when primary fetch fails', async () => {
@@ -67,5 +69,21 @@ describe('hydrateSvgAssets', () => {
 
     expect(requested).toEqual(['https://charts.example.test/moe/svg/1/notes.png'])
     expect(hydrated.match(/data:image\/png;base64/g)?.length).toBe(3)
+  })
+
+  test('resolves unipjsk note assets relative to the source svg url', () => {
+    const refs = collectSvgAssetRefs(
+      '<svg><image xlink:href="../../notes_new/custom01/notes_0.png"/><use href="#notes-0"/></svg>',
+      'https://charts-new.unipjsk.com/moe/svg/739/master.svg',
+    )
+
+    expect(refs.get('../../notes_new/custom01/notes_0.png')).toBe('https://charts-new.unipjsk.com/moe/notes_new/custom01/notes_0.png')
+    expect(refs.has('#notes-0')).toBe(false)
+  })
+
+  test('predefines fixed unipjsk note assets for local preload cache', () => {
+    expect(fixedChartNoteAssetUrls).toContain('https://charts-new.unipjsk.com/moe/notes_new/custom01/notes_2.png')
+    expect(fixedChartNoteAssetUrls).toContain('https://charts-new.unipjsk.com/moe/notes_new/custom01/notes_flick_arrow_crtcl_06_diagonal.png')
+    expect(new Set(fixedChartNoteAssetUrls).size).toBe(fixedChartNoteAssetUrls.length)
   })
 })
