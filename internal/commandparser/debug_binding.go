@@ -1,11 +1,13 @@
 package commandparser
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
+	"moebot-next/internal/b30"
 	"moebot-next/internal/cardquery"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
@@ -154,7 +156,7 @@ func (s *Service) buildSuiteDebugPayload(def Definition, region string, gameID s
 		return debugBindingResult{Region: runtime.Region, Message: fmt.Sprintf("%s Haruki 公开 API 未配置，无法拉取 Suite 数据。", runtime.Label), Warnings: []string{"Haruki 公开 API 不可用，将使用静态预览兜底。"}}
 	}
 
-	payload, selected, rows, err := buildSuiteDebugPayloadForDefinition(def, runtime, gameID, argument)
+	payload, selected, rows, err := s.buildSuiteDebugPayloadForDefinition(def, runtime, gameID, argument)
 	if err != nil {
 		return debugBindingResult{Region: runtime.Region, Message: "Suite 调试数据获取失败：" + err.Error(), Warnings: []string{"真实 Suite 公开数据获取失败，将使用静态预览兜底。"}}
 	}
@@ -174,7 +176,7 @@ func (s *Service) buildSuiteDebugPayload(def Definition, region string, gameID s
 	}
 }
 
-func buildSuiteDebugPayloadForDefinition(def Definition, runtime *servers.Runtime, gameID string, argument string) (any, *EntityResult, []EntityResult, error) {
+func (s *Service) buildSuiteDebugPayloadForDefinition(def Definition, runtime *servers.Runtime, gameID string, argument string) (any, *EntityResult, []EntityResult, error) {
 	definitionID := def.ID
 	if definitionID == "music-reward" {
 		definitionID = "music-progress"
@@ -218,6 +220,25 @@ func buildSuiteDebugPayloadForDefinition(def Definition, runtime *servers.Runtim
 		payload.Stats = append(suiteDebugBasicStats(profile.commonSuiteProfile()), stats...)
 		payload.Sections = sections
 		return payload, suiteDebugSelected(def, runtime, profile.UserGamedata, "suite_panel"), suiteDebugRowsFromSections(payload.Sections), nil
+	case "best30":
+		var profile suiteDebugBest30Profile
+		if err := runtime.Suite.GetUserData(gameID, "", suite.Fields(suite.FieldUserMusicResults, suite.FieldUserMusics), &profile); err != nil {
+			return nil, nil, nil, err
+		}
+		client := s.best30Client()
+		table, err := client.Get(context.Background())
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		results := b30.MergeLegacyResults(profile.UserMusicResults, profile.UserMusics)
+		result := b30.Calculate(results, table, renderer.Best30MusicMetaResolver(runtime.Store, runtime.Assets))
+		payload := renderer.BuildBest30Payload(suiteDebugPanelTitle(runtime, "Best30"), runtime.Region, profile.BaseProfile, profile.UserGamedata, result, runtime.Store, runtime.Assets, client.URL())
+		selected := suiteDebugSelected(def, runtime, profile.UserGamedata, "best30")
+		rows := suiteDebugRowsFromBest30(result)
+		if len(rows) == 0 {
+			rows = []EntityResult{{ID: 0, Title: "Best30", Subtitle: "暂无可计入 AP/FC 谱面", Type: "best30"}}
+		}
+		return payload, selected, rows, nil
 	case "challenge-info":
 		var profile suiteDebugChallengeProfile
 		if err := runtime.Suite.GetUserData(gameID, "", suite.Fields(suite.FieldUserChallengeLiveSoloResults, suite.FieldUserChallengeLiveSoloStages, suite.FieldUserChallengeLiveSoloHighScoreRewards), &profile); err != nil {
@@ -327,6 +348,15 @@ type suiteDebugMusicProgressProfile struct {
 	UserCards        []suite.UserCard             `json:"userCards"`
 	UserMusicResults []suiteDebugMusicResult      `json:"userMusicResults"`
 	Achievements     []suiteDebugMusicAchievement `json:"userMusicAchievements"`
+}
+
+type suiteDebugBest30Profile struct {
+	suite.BaseProfile
+	UserGamedata     suite.UserGamedata    `json:"userGamedata"`
+	UserDecks        []suite.UserDeck      `json:"userDecks"`
+	UserCards        []suite.UserCard      `json:"userCards"`
+	UserMusicResults []b30.UserMusicResult `json:"userMusicResults"`
+	UserMusics       []b30.LegacyUserMusic `json:"userMusics"`
 }
 
 type suiteDebugMusicResult struct {
@@ -492,6 +522,10 @@ func (p suiteDebugMusicProgressProfile) commonSuiteProfile() renderer.SuiteCommo
 	return renderer.SuiteCommonProfile{BaseProfile: p.BaseProfile, UserGamedata: p.UserGamedata, UserDecks: p.UserDecks, UserCards: p.UserCards}
 }
 
+func (p suiteDebugBest30Profile) commonSuiteProfile() renderer.SuiteCommonProfile {
+	return renderer.SuiteCommonProfile{BaseProfile: p.BaseProfile, UserGamedata: p.UserGamedata, UserDecks: p.UserDecks, UserCards: p.UserCards}
+}
+
 func (p suiteDebugMaterialProfile) commonSuiteProfile() renderer.SuiteCommonProfile {
 	return renderer.SuiteCommonProfile{BaseProfile: p.BaseProfile, UserGamedata: p.UserGamedata, UserDecks: p.UserDecks, UserCards: p.UserCards}
 }
@@ -587,6 +621,29 @@ func suiteDebugSelected(def Definition, runtime *servers.Runtime, game suite.Use
 		uid = "临时 UID"
 	}
 	return &EntityResult{ID: 0, Title: name, Subtitle: fmt.Sprintf("%s · UID %s · Haruki 公开 API", runtime.Label, uid), Type: resultType}
+}
+
+func (s *Service) best30Client() *b30.Client {
+	if s != nil && s.B30 != nil {
+		return s.B30
+	}
+	return b30.DefaultClient()
+}
+
+func suiteDebugRowsFromBest30(result b30.Result) []EntityResult {
+	rows := make([]EntityResult, 0, minDebug(len(result.Entries), 12))
+	for _, entry := range result.Entries {
+		if len(rows) >= 12 {
+			break
+		}
+		rows = append(rows, EntityResult{
+			ID:       entry.Rank,
+			Title:    fmt.Sprintf("#%02d %.1f %s", entry.Rank, entry.UserRating, entry.Title),
+			Subtitle: fmt.Sprintf("%s %s · 定数 %.1f · %s", strings.ToUpper(entry.Difficulty), entry.PlayResult, entry.Constant, suiteDebugMusicName(nil, entry.MusicID)),
+			Type:     "best30",
+		})
+	}
+	return rows
 }
 
 func suiteDebugRowsFromSections(sections []renderer.SuiteSectionPayload) []EntityResult {

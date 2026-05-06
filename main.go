@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"moebot-next/internal/assets"
+	"moebot-next/internal/b30"
 	"moebot-next/internal/bot"
 	"moebot-next/internal/commandparser"
 	"moebot-next/internal/commands"
@@ -55,6 +56,7 @@ func main() {
 	serverManager.StartPeriodicRefresh()
 	defer serverManager.StopPeriodicRefresh()
 
+	b30Client := b30.NewClient(cfg.B30)
 	rendererClient := renderer.New(cfg.Renderer)
 	if err := rendererClient.StartProcess("renderer", cfg.Renderer.Port); err != nil {
 		log.Warn().Err(err).Msg("Renderer process failed to start; commands will fallback to text")
@@ -68,6 +70,7 @@ func main() {
 		DB:          db,
 		Renderer:    rendererClient,
 		Servers:     serverManager,
+		B30:         b30Client,
 		Definitions: commandDefinitions,
 	})
 

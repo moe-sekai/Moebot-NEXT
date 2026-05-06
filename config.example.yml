@@ -64,6 +64,12 @@ ranking_api:
   region: "cn"
   timeout: 10
 
+b30:
+  # Best30 使用社区定数表；AP=定数，FC=定数-1(≥33) / 定数-1.5(<33)。
+  constants_url: "https://moe.exmeaning.com/data/pjskb30/merged_chart.csv"
+  timeout: 10
+  refresh_interval: 21600
+
 renderer:
   host: "127.0.0.1"
   port: 3001

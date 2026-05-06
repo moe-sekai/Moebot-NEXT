@@ -13,7 +13,9 @@ import (
 )
 
 func (s *Server) commandParserService() *commandparser.Service {
-	return commandparser.NewService(s.Config.Bot.CommandPrefix, s.Config.Bot.CommandAliases, s.Servers, s.Store, s.Renderer)
+	service := commandparser.NewService(s.Config.Bot.CommandPrefix, s.Config.Bot.CommandAliases, s.Servers, s.Store, s.Renderer)
+	service.B30 = s.B30
+	return service
 }
 
 func (s *Server) handleCommandDefinitions(c *fiber.Ctx) error {

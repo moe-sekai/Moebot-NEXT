@@ -4,6 +4,8 @@ export { CardDetail } from "./CardDetail";
 export { CardList } from "./CardList";
 export { MusicDetail } from "./MusicDetail";
 export { MusicList } from "./MusicList";
+export { Best30 } from "./Best30";
+export type { Best30Props } from "./Best30";
 export { ChartDetail } from "./ChartDetail";
 export { EventInfo } from "./EventInfo";
 export { EventList } from "./EventList";

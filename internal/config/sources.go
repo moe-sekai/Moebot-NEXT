@@ -20,10 +20,11 @@ const (
 	SuiteModeLocal    = SuiteModeHaruki
 	SuiteModeMoeSekai = SuiteModeHaruki
 
-	DefaultSuiteAPIURL    = "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
-	DefaultSekaiAPIURL    = "https://seka-api.exmeaning.com"
-	DefaultRankingAPIURL  = "https://rks.exmeaning.com"
-	DefaultChartSourceURL = "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
+	DefaultSuiteAPIURL     = "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
+	DefaultSekaiAPIURL     = "https://seka-api.exmeaning.com"
+	DefaultRankingAPIURL   = "https://rks.exmeaning.com"
+	DefaultChartSourceURL  = "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
+	DefaultB30ConstantsURL = "https://moe.exmeaning.com/data/pjskb30/merged_chart.csv"
 
 	MasterdataSourceMoeSekai = "moesekai"
 	MasterdataSourceHaruki   = "haruki"
@@ -654,6 +655,15 @@ func NormalizeConfig(cfg *Config) {
 		cfg.SuiteAPI.Timeout = 10
 	}
 	cfg.SuiteAPI.DefaultMode = SuiteModeHaruki
+	if strings.TrimSpace(cfg.B30.ConstantsURL) == "" {
+		cfg.B30.ConstantsURL = DefaultB30ConstantsURL
+	}
+	if cfg.B30.Timeout <= 0 {
+		cfg.B30.Timeout = 10
+	}
+	if cfg.B30.RefreshInterval <= 0 {
+		cfg.B30.RefreshInterval = 21600
+	}
 	if strings.TrimSpace(cfg.Assets.ChartSourceURL) == "" {
 		cfg.Assets.ChartSourceURL = DefaultChartSourceURL
 	}

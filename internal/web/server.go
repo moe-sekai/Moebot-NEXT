@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"moebot-next/internal/b30"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
 	"moebot-next/internal/masterdata"
@@ -29,6 +30,7 @@ type Server struct {
 	Loader     *masterdata.Loader
 	Servers    *servers.Manager
 	Renderer   *renderer.Client
+	B30        *b30.Client
 	startedAt  time.Time
 }
 
@@ -65,6 +67,7 @@ func New(cfg *config.Config, db *database.DB, store *masterdata.Store, rendererC
 		Store:      store,
 		Loader:     loader,
 		Renderer:   rendererClient,
+		B30:        b30.NewClient(cfg.B30),
 		startedAt:  time.Now(),
 	}
 

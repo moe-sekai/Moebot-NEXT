@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"moebot-next/internal/assets"
+	"moebot-next/internal/b30"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/musicsearch"
@@ -474,6 +475,7 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 	*s.Config = next
+	s.B30 = b30.NewClient(s.Config.B30)
 	if s.Renderer != nil {
 		s.Renderer.SetPrecision(s.Config.Renderer.Precision)
 		s.Renderer.SetChartPrecision(s.Config.Renderer.ChartPrecision)

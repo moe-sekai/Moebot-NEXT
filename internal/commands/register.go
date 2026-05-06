@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"moebot-next/internal/b30"
 	"moebot-next/internal/commandparser"
 	"moebot-next/internal/database"
 	"moebot-next/internal/renderer"
@@ -14,6 +15,7 @@ type Deps struct {
 	DB          *database.DB
 	Renderer    *renderer.Client
 	Servers     *servers.Manager
+	B30         *b30.Client
 	Definitions []commandparser.Definition
 }
 
@@ -35,6 +37,7 @@ func RegisterAll(deps *Deps) {
 	RegisterSuite(deps)
 	RegisterBond(deps)
 	RegisterMusicOverview(deps)
+	RegisterBest30(deps)
 	RegisterChallengeInfo(deps)
 	RegisterEventRecord(deps)
 	RegisterLeaderCount(deps)

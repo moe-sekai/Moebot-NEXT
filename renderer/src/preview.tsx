@@ -8,6 +8,7 @@ import {
 	type RenderOptions,
 	type RenderTrace,
 } from "./engine";
+import { Best30 } from "./templates/Best30";
 import { CardDetail } from "./templates/CardDetail";
 import { CardList } from "./templates/CardList";
 import { MusicDetail } from "./templates/MusicDetail";
@@ -213,6 +214,17 @@ const PREVIEW_META: RenderPreviewMeta[] = [
 		status: "ready",
 		width: 800,
 		height: 760,
+	},
+	{
+		id: "best30",
+		name: "Best30 / b30",
+		description: "基于 Haruki Suite AP/FC 成绩与社区定数表的 Best30 分享图。",
+		command: "/b30",
+		templatePath: "packages/renderer/src/templates/Best30.tsx",
+		viewerSource: "pjsk.moe /my-musics Best30ShareImage + Moebot Renderer",
+		status: "ready",
+		width: 800,
+		height: 1320,
 	},
 	{
 		id: "suite-card-box",
@@ -742,6 +754,25 @@ function createPreviewElement(id: string) {
 					]}
 				/>
 			);
+		case "best30":
+			return (
+				<Best30
+					title="JP Best30"
+					subtitle="社区定数 · 仅供参考"
+					regionLabel="日服"
+					updateText="2026-05-06 12:30:00"
+					assetSource="main-jp"
+					profile={{ name: "Moebot Tester", rank: 398, userId: "1234567890", source: "Haruki Suite" }}
+					average={32.84}
+					candidateCount={74}
+					apCount={28}
+					fcCount={46}
+					missingConstantsCount={2}
+					totalResultCount={512}
+					entries={createBest30PreviewEntries()}
+					constantsSource="https://moe.exmeaning.com/data/pjskb30/merged_chart.csv"
+				/>
+			);
 		case "suite-card-box":
 			return (
 				<SuiteCardBox
@@ -850,6 +881,41 @@ function createPickupPreviewCards() {
 			weight: 1200,
 		},
 	];
+}
+
+function createBest30PreviewEntries() {
+	const titles = [
+		"Hatsune Creation Myth",
+		"What's up? Pop!",
+		"the EmpErroR",
+		"Yaminabe!!!!",
+		"Don't Fight The Music",
+		"嬢王",
+		"六兆年と一夜物語",
+		"Brand New Day",
+		"初音ミクの消失",
+		"ÅMARA(大未来電脳)",
+	];
+	const diffs = ["append", "master", "master", "master", "master"];
+	return Array.from({ length: 30 }, (_, index) => {
+		const diff = diffs[index % diffs.length];
+		const constant = 35.2 - index * 0.12;
+		const ap = index % 4 === 0;
+		return {
+			rank: index + 1,
+			musicId: 100 + index,
+			title: titles[index % titles.length],
+			difficulty: diff,
+			difficultyLabel: diff === "append" ? "APD" : "MAS",
+			level: Math.max(29, Math.round(constant)),
+			constant,
+			userRating: ap ? constant : constant >= 33 ? constant - 1 : constant - 1.5,
+			playResult: ap ? "AP" : "FC",
+			noteCount: 980 + index * 23,
+			assetbundleName: `jacket_s_${String((index % 20) + 1).padStart(3, "0")}`,
+			jacketUrl: getMusicJacketUrl(`jacket_s_${String((index % 20) + 1).padStart(3, "0")}`, "main-jp"),
+		};
+	});
 }
 
 function createDeckPreviewCards() {

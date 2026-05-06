@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"moebot-next/internal/assets"
+	"moebot-next/internal/b30"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/ranking"
@@ -298,6 +299,41 @@ type MusicListPayload struct {
 	TotalPages  int                  `json:"totalPages,omitempty"`
 	Total       int                  `json:"total,omitempty"`
 	AssetSource string               `json:"assetSource,omitempty"`
+}
+
+type Best30Payload struct {
+	Title                 string               `json:"title"`
+	Subtitle              string               `json:"subtitle,omitempty"`
+	Profile               SuiteProfilePayload  `json:"profile"`
+	Average               float64              `json:"average"`
+	Entries               []Best30EntryPayload `json:"entries"`
+	CandidateCount        int                  `json:"candidateCount"`
+	APCount               int                  `json:"apCount"`
+	FCCount               int                  `json:"fcCount"`
+	MissingConstantsCount int                  `json:"missingConstantsCount,omitempty"`
+	TotalResultCount      int                  `json:"totalResultCount,omitempty"`
+	Region                string               `json:"region,omitempty"`
+	RegionLabel           string               `json:"regionLabel,omitempty"`
+	UpdatedAt             int64                `json:"updatedAt,omitempty"`
+	UpdateText            string               `json:"updateText,omitempty"`
+	Formula               string               `json:"formula,omitempty"`
+	ConstantsSource       string               `json:"constantsSource,omitempty"`
+	AssetSource           string               `json:"assetSource,omitempty"`
+}
+
+type Best30EntryPayload struct {
+	Rank            int     `json:"rank"`
+	MusicID         int     `json:"musicId"`
+	Title           string  `json:"title"`
+	Difficulty      string  `json:"difficulty"`
+	DifficultyLabel string  `json:"difficultyLabel"`
+	Level           int     `json:"level,omitempty"`
+	Constant        float64 `json:"constant"`
+	UserRating      float64 `json:"userRating"`
+	PlayResult      string  `json:"playResult"`
+	NoteCount       int     `json:"noteCount,omitempty"`
+	AssetbundleName string  `json:"assetbundleName,omitempty"`
+	JacketURL       string  `json:"jacketUrl,omitempty"`
 }
 
 type EventListPayload struct {
@@ -774,6 +810,129 @@ func BuildSuiteProfilePayload(region string, mode string, base suite.BaseProfile
 		UploadTime:  normalizeSuiteTimestamp(base.UploadTime),
 		UpdateText:  formatSuiteTimestamp(base.UploadTime),
 		Coin:        game.Coin,
+	}
+}
+
+func Best30MusicMetaResolver(store *masterdata.Store, resolver *assets.Resolver) b30.MetaResolver {
+	assetResolver := resolverOrDefault(resolver)
+	return func(musicID int, difficulty string, constant b30.ChartConstant) b30.MusicMeta {
+		meta := b30.MusicMeta{MusicID: musicID, Level: constant.Level, NoteCount: constant.NoteCount}
+		if store != nil {
+			if music := store.GetMusic(musicID); music != nil {
+				meta.Title = firstNonEmptyString(music.Title, meta.Title)
+				meta.AssetbundleName = music.AssetbundleName
+				meta.PublishedAt = music.PublishedAt
+				if music.AssetbundleName != "" {
+					meta.JacketURL = assetResolver.GetMusicJacketURL(music.AssetbundleName)
+				}
+			}
+			for _, diff := range store.GetMusicDifficulties(musicID) {
+				if strings.EqualFold(diff.MusicDifficulty, difficulty) {
+					if diff.PlayLevel > 0 {
+						meta.Level = diff.PlayLevel
+					}
+					if diff.TotalNoteCount > 0 {
+						meta.NoteCount = diff.TotalNoteCount
+					}
+					break
+				}
+			}
+		}
+		return meta
+	}
+}
+
+func BuildBest30Payload(title string, region string, base suite.BaseProfile, game suite.UserGamedata, result b30.Result, store *masterdata.Store, resolver *assets.Resolver, constantsSource string) Best30Payload {
+	assetResolver := resolverOrDefault(resolver)
+	region = config.NormalizeRegion(region)
+	if region == "" {
+		region = config.RegionJP
+	}
+	if strings.TrimSpace(title) == "" {
+		title = fmt.Sprintf("%s Best30", strings.ToUpper(region))
+	}
+	updatedAt := normalizeSuiteTimestamp(base.UploadTime)
+	payload := Best30Payload{
+		Title:                 title,
+		Subtitle:              fmt.Sprintf("%s · 社区定数 · 仅供参考", config.RegionLabel(region)),
+		Profile:               BuildSuiteProfilePayload(region, "", base, game),
+		Average:               result.Average,
+		CandidateCount:        result.CandidateCount,
+		APCount:               result.APCount,
+		FCCount:               result.FCCount,
+		MissingConstantsCount: result.MissingConstantsCount,
+		TotalResultCount:      result.TotalResultCount,
+		Region:                region,
+		RegionLabel:           config.RegionLabel(region),
+		UpdatedAt:             updatedAt,
+		UpdateText:            formatSuiteTimestamp(updatedAt),
+		Formula:               "AP=定数；FC=定数-1(≥33) / 定数-1.5(<33)",
+		ConstantsSource:       strings.TrimSpace(constantsSource),
+		AssetSource:           assetSourceForResolver(assetResolver),
+	}
+	for _, entry := range result.Entries {
+		payload.Entries = append(payload.Entries, best30EntryPayload(entry, store, assetResolver))
+	}
+	return payload
+}
+
+func best30EntryPayload(entry b30.Entry, store *masterdata.Store, resolver *assets.Resolver) Best30EntryPayload {
+	assetResolver := resolverOrDefault(resolver)
+	payload := Best30EntryPayload{
+		Rank:            entry.Rank,
+		MusicID:         entry.MusicID,
+		Title:           firstNonEmptyString(entry.Title, fmt.Sprintf("歌曲 #%d", entry.MusicID)),
+		Difficulty:      b30.NormalizeDifficulty(entry.Difficulty),
+		DifficultyLabel: best30DifficultyLabel(entry.Difficulty),
+		Level:           entry.Level,
+		Constant:        entry.Constant,
+		UserRating:      entry.UserRating,
+		PlayResult:      string(entry.PlayResult),
+		NoteCount:       entry.NoteCount,
+		AssetbundleName: entry.AssetbundleName,
+		JacketURL:       entry.JacketURL,
+	}
+	if store != nil {
+		if music := store.GetMusic(entry.MusicID); music != nil {
+			payload.Title = firstNonEmptyString(music.Title, payload.Title)
+			if payload.AssetbundleName == "" {
+				payload.AssetbundleName = music.AssetbundleName
+			}
+		}
+		for _, diff := range store.GetMusicDifficulties(entry.MusicID) {
+			if strings.EqualFold(diff.MusicDifficulty, payload.Difficulty) {
+				if payload.Level <= 0 {
+					payload.Level = diff.PlayLevel
+				}
+				if payload.NoteCount <= 0 {
+					payload.NoteCount = diff.TotalNoteCount
+				}
+				break
+			}
+		}
+	}
+	if payload.JacketURL == "" && payload.AssetbundleName != "" {
+		payload.JacketURL = assetResolver.GetMusicJacketURL(payload.AssetbundleName)
+	}
+	return payload
+}
+
+func best30DifficultyLabel(diff string) string {
+	switch b30.NormalizeDifficulty(diff) {
+	case "easy":
+		return "EAS"
+	case "normal":
+		return "NOR"
+	case "hard":
+		return "HRD"
+	case "expert":
+		return "EXP"
+	case "master":
+		return "MAS"
+	case "append":
+		return "APD"
+	default:
+		return strings.ToUpper(diff)
 	}
 }
 
@@ -1633,6 +1792,15 @@ func cleanDash(value string) string {
 		return ""
 	}
 	return value
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func firstNonZero(value int, fallback int) int {

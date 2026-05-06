@@ -20,6 +20,7 @@ type Config struct {
 	SekaiAPI    SekaiAPIConfig              `yaml:"sekai_api"`
 	SuiteAPI    SuiteAPIConfig              `yaml:"suite_api"`
 	RankingAPI  RankingAPIConfig            `yaml:"ranking_api"`
+	B30         B30Config                   `yaml:"b30"`
 	Renderer    RendererConfig              `yaml:"renderer"`
 	Assets      AssetsConfig                `yaml:"assets"`
 	GameServers map[string]GameServerConfig `yaml:"game_servers"`
@@ -130,6 +131,13 @@ type RankingAPIConfig struct {
 	Timeout int    `yaml:"timeout"`
 }
 
+// B30Config controls Best30 community constants loading.
+type B30Config struct {
+	ConstantsURL    string `yaml:"constants_url"`
+	Timeout         int    `yaml:"timeout"`          // seconds
+	RefreshInterval int    `yaml:"refresh_interval"` // seconds; non-positive means 6 hours
+}
+
 // RendererConfig holds the Bun renderer service settings.
 type RendererConfig struct {
 	Host           string      `yaml:"host"`            // renderer listen host
@@ -217,6 +225,11 @@ func DefaultConfig() *Config {
 			BaseURL: DefaultRankingAPIURL,
 			Region:  "cn",
 			Timeout: 10,
+		},
+		B30: B30Config{
+			ConstantsURL:    DefaultB30ConstantsURL,
+			Timeout:         10,
+			RefreshInterval: 21600,
 		},
 		Renderer: RendererConfig{
 			Host:           "127.0.0.1",

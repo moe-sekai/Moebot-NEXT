@@ -102,6 +102,19 @@ func TestParseMusicRewardAliasesUseMusicProgressDefinition(t *testing.T) {
 	}
 }
 
+func TestParseBest30Aliases(t *testing.T) {
+	service := NewService("/", nil, nil, nil, nil)
+	for _, input := range []string{"/b30", "/best30", "/B30", "/最佳30", "/cnb30"} {
+		parsed := service.Parse(input)
+		if parsed.Definition == nil || parsed.Definition.ID != "best30" {
+			t.Fatalf("%s parsed definition = %#v, want best30", input, parsed.Definition)
+		}
+		if !parsed.RequiresBinding || parsed.BindingKind != "suite" || parsed.PreviewFallbackAvailable != true {
+			t.Fatalf("%s binding/render flags = requires %v kind %q preview %v", input, parsed.RequiresBinding, parsed.BindingKind, parsed.PreviewFallbackAvailable)
+		}
+	}
+}
+
 func TestRemovedSuiteCommandsDoNotParse(t *testing.T) {
 	service := NewService("/", nil, nil, nil, nil)
 	for _, input := range []string{"/抽卡记录", "/cn抽卡统计", "/材料信息", "/jp素材", "/materials"} {

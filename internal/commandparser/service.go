@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"moebot-next/internal/assets"
+	"moebot-next/internal/b30"
 	"moebot-next/internal/cardquery"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
@@ -99,6 +100,7 @@ type Service struct {
 	Servers       *servers.Manager
 	Store         *masterdata.Store
 	Renderer      *renderer.Client
+	B30           *b30.Client
 }
 
 // NewService creates a parser service with merged definitions.
@@ -112,6 +114,7 @@ func NewService(prefix string, customAliases map[string][]string, manager *serve
 		Servers:       manager,
 		Store:         store,
 		Renderer:      rendererClient,
+		B30:           b30.DefaultClient(),
 	}
 }
 
@@ -738,6 +741,8 @@ func templateForPayload(fallback string, payload any) string {
 		return "card_list"
 	case renderer.MusicListPayload:
 		return "music_list"
+	case renderer.Best30Payload:
+		return "best30"
 	case renderer.EventListPayload:
 		return "event_list"
 	case renderer.GachaListPayload:
@@ -756,6 +761,9 @@ func templateForPayload(fallback string, payload any) string {
 func precisionForCommandTemplate(template string) float64 {
 	if template == "suite_card_box" || template == "suite_cards" {
 		return 1
+	}
+	if template == "best30" || template == "b30" {
+		return 1.2
 	}
 	return 0
 }

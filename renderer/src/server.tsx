@@ -7,6 +7,7 @@ import { preloadFixedChartNoteAssets } from "./svg-assets";
 import { listRenderPreviews, renderPreviewTemplate } from "./preview";
 import {
 	AnvoList,
+	Best30,
 	CardDetail,
 	CharacterRankMission,
 	CardList,
@@ -371,6 +372,46 @@ function normalizeMusicList(data: any) {
 		totalPages: data.totalPages ?? data.TotalPages,
 		total: data.total ?? data.Total,
 		assetSource: data.assetSource ?? data.AssetSource,
+	};
+}
+
+function normalizeBest30(data: any) {
+	return {
+		title: data.title ?? data.Title ?? "Best30",
+		subtitle: data.subtitle ?? data.Subtitle,
+		profile: normalizeSuiteProfile(data.profile ?? data.Profile),
+		average: data.average ?? data.Average,
+		entries: (data.entries ?? data.Entries ?? []).map(normalizeBest30Entry),
+		candidateCount: data.candidateCount ?? data.CandidateCount,
+		apCount: data.apCount ?? data.APCount,
+		fcCount: data.fcCount ?? data.FCCount,
+		missingConstantsCount: data.missingConstantsCount ?? data.MissingConstantsCount,
+		totalResultCount: data.totalResultCount ?? data.TotalResultCount,
+		region: data.region ?? data.Region,
+		regionLabel: data.regionLabel ?? data.RegionLabel,
+		updatedAt: data.updatedAt ?? data.UpdatedAt,
+		updateText: data.updateText ?? data.UpdateText,
+		formula: data.formula ?? data.Formula,
+		constantsSource: data.constantsSource ?? data.ConstantsSource,
+		assetSource: data.assetSource ?? data.AssetSource,
+	};
+}
+
+function normalizeBest30Entry(entry: any) {
+	entry = entry ?? {};
+	return {
+		rank: entry.rank ?? entry.Rank,
+		musicId: entry.musicId ?? entry.MusicID,
+		title: entry.title ?? entry.Title,
+		difficulty: entry.difficulty ?? entry.Difficulty,
+		difficultyLabel: entry.difficultyLabel ?? entry.DifficultyLabel,
+		level: entry.level ?? entry.Level,
+		constant: entry.constant ?? entry.Constant,
+		userRating: entry.userRating ?? entry.UserRating,
+		playResult: entry.playResult ?? entry.PlayResult,
+		noteCount: entry.noteCount ?? entry.NoteCount,
+		assetbundleName: entry.assetbundleName ?? entry.AssetbundleName,
+		jacketUrl: toPngImageUrl(entry.jacketUrl ?? entry.JacketURL),
 	};
 }
 
@@ -781,6 +822,9 @@ async function createElement(req: RenderRequest) {
 		case "music_list":
 		case "musics":
 			return <MusicList {...normalizeMusicList(data)} />;
+		case "best30":
+		case "b30":
+			return <Best30 {...normalizeBest30(data ?? {})} />;
 		case "chart_detail":
 		case "chart":
 			return <ChartDetail music={normalizeMusic(data)} />;
