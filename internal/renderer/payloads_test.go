@@ -19,6 +19,82 @@ func TestBuildMusicDetailPayloadIncludesDuration(t *testing.T) {
 	}
 }
 
+func TestBuildCardDetailPayloadIncludesRelatedEvents(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Cards: []masterdata.CardInfo{{
+			ID:              1001,
+			CharacterID:     1,
+			CardRarityType:  "rarity_4",
+			Attr:            "cute",
+			Prefix:          "测试卡牌",
+			AssetbundleName: "card_test",
+		}},
+		Events: []masterdata.EventInfo{{
+			ID:          2001,
+			Name:        "测试活动",
+			EventType:   "marathon",
+			StartAt:     1700000000000,
+			AggregateAt: 1700100000000,
+			ClosedAt:    1700200000000,
+			Unit:        "light_sound",
+		}},
+		EventCards: []masterdata.EventCard{{ID: 1, EventID: 2001, CardID: 1001}},
+	})
+
+	card := store.GetCard(1001)
+	if card == nil {
+		t.Fatal("test card not found")
+	}
+
+	payload := BuildCardDetailPayloadWithAssets(store, *card, nil)
+
+	if len(payload.Events) != 1 {
+		t.Fatalf("len(payload.Events) = %d, want 1", len(payload.Events))
+	}
+	if payload.Events[0].ID != 2001 || payload.Events[0].Name != "测试活动" {
+		t.Fatalf("payload.Events[0] = %#v, want test event", payload.Events[0])
+	}
+}
+
+func TestBuildEventInfoPayloadIncludesBonusCards(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Cards: []masterdata.CardInfo{{
+			ID:              1001,
+			CharacterID:     1,
+			CardRarityType:  "rarity_4",
+			Attr:            "cute",
+			Prefix:          "测试卡牌",
+			AssetbundleName: "card_test",
+		}},
+		Events: []masterdata.EventInfo{{
+			ID:          2001,
+			Name:        "测试活动",
+			EventType:   "marathon",
+			StartAt:     1700000000000,
+			AggregateAt: 1700100000000,
+			ClosedAt:    1700200000000,
+			Unit:        "light_sound",
+		}},
+		EventCards: []masterdata.EventCard{{ID: 1, EventID: 2001, CardID: 1001}},
+	})
+
+	event := store.GetEvent(2001)
+	if event == nil {
+		t.Fatal("test event not found")
+	}
+
+	payload := BuildEventInfoPayloadWithAssets(store, *event, nil)
+
+	if len(payload.BonusCards) != 1 {
+		t.Fatalf("len(payload.BonusCards) = %d, want 1", len(payload.BonusCards))
+	}
+	if payload.BonusCards[0].ID != 1001 || payload.BonusCards[0].Prefix != "测试卡牌" {
+		t.Fatalf("payload.BonusCards[0] = %#v, want test card", payload.BonusCards[0])
+	}
+}
+
 func TestCardSupplyTypeDisplayName(t *testing.T) {
 	cases := map[string]string{
 		"normal":                     "常驻",

@@ -18,6 +18,7 @@ export interface EventListProps {
 		closedAt?: number;
 		bonusAttr?: string;
 		bonusCharacters?: string[];
+		bonusCards?: Array<{ id: number; prefix?: string; characterName?: string }>;
 	}>;
 	page?: number;
 	totalPages?: number;
@@ -124,6 +125,17 @@ export function EventList({
 									{event.bonusAttr ? `属性 ${event.bonusAttr}` : ""}{" "}
 									{(event.bonusCharacters ?? []).slice(0, 5).join("、")}
 								</span>
+								{event.bonusCards && event.bonusCards.length > 0 && (
+									<span
+										style={{
+											display: "flex",
+											color: theme.colors.textMuted,
+											fontSize: 11,
+										}}
+									>
+										加成卡：{event.bonusCards.slice(0, 3).map((card) => card.characterName ?? card.prefix ?? `#${card.id}`).join("、")}
+									</span>
+								)}
 							</div>
 						</div>
 					);

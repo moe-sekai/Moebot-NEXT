@@ -19,6 +19,7 @@ export interface CardListProps {
 		trainedThumbnailUrl?: string;
 		compositeLayers?: import("../card-thumbnail-composites").CardThumbnailCompositeLayer[];
 		supplyType?: string;
+		events?: Array<{ id: number; name: string; eventType?: string }>;
 	}>;
 	page?: number;
 	totalPages?: number;
@@ -137,6 +138,19 @@ export function CardList({
 								>
 									{card.prefix ?? rarity}
 								</span>
+								{card.events && card.events.length > 0 && (
+									<span
+										style={{
+											display: "flex",
+											justifyContent: "center",
+											color: theme.colors.textMuted,
+											fontSize: 10,
+											textAlign: "center",
+										}}
+									>
+										活动：{card.events[0].name}
+									</span>
+								)}
 							</div>
 						);
 					})}

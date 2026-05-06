@@ -240,6 +240,13 @@ func formatEventText(event renderer.EventInfoPayload) string {
 	if len(event.BonusCharacters) > 0 {
 		lines = append(lines, "加成角色："+strings.Join(event.BonusCharacters, "、"))
 	}
+	if len(event.BonusCards) > 0 {
+		cards := make([]string, 0, len(event.BonusCards))
+		for _, card := range event.BonusCards {
+			cards = append(cards, fmt.Sprintf("#%d %s · %s", card.ID, card.CharacterName, card.Prefix))
+		}
+		lines = append(lines, "加成卡："+strings.Join(cards, "、"))
+	}
 	return strings.Join(lines, "\n")
 }
 

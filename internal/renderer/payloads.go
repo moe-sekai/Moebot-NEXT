@@ -21,24 +21,34 @@ func defaultAssetResolver() *assets.Resolver {
 
 // CardDetailPayload is the normalized data contract consumed by CardDetail.tsx.
 type CardDetailPayload struct {
-	ID               int    `json:"id"`
-	Prefix           string `json:"prefix"`
-	CharacterName    string `json:"characterName"`
-	Rarity           string `json:"rarity"`
-	CardRarityType   string `json:"cardRarityType"`
-	Attr             string `json:"attr"`
-	AssetbundleName  string `json:"assetbundleName,omitempty"`
-	CharacterID      int    `json:"characterId,omitempty"`
-	Power            int    `json:"power,omitempty"`
-	SkillName        string `json:"skillName,omitempty"`
-	GachaPhrase      string `json:"gachaPhrase,omitempty"`
-	SupplyType       string `json:"supplyType,omitempty"`
-	CardSupplyID     int    `json:"cardSupplyId,omitempty"`
-	AssetSource      string `json:"assetSource,omitempty"`
-	NormalFullURL    string `json:"normalFullUrl,omitempty"`
-	TrainedFullURL   string `json:"trainedFullUrl,omitempty"`
-	ThumbnailURL     string `json:"thumbnailUrl,omitempty"`
-	TrainedThumbnail string `json:"trainedThumbnailUrl,omitempty"`
+	ID               int                `json:"id"`
+	Prefix           string             `json:"prefix"`
+	CharacterName    string             `json:"characterName"`
+	Rarity           string             `json:"rarity"`
+	CardRarityType   string             `json:"cardRarityType"`
+	Attr             string             `json:"attr"`
+	AssetbundleName  string             `json:"assetbundleName,omitempty"`
+	CharacterID      int                `json:"characterId,omitempty"`
+	Power            int                `json:"power,omitempty"`
+	SkillName        string             `json:"skillName,omitempty"`
+	GachaPhrase      string             `json:"gachaPhrase,omitempty"`
+	SupplyType       string             `json:"supplyType,omitempty"`
+	CardSupplyID     int                `json:"cardSupplyId,omitempty"`
+	Events           []CardEventPayload `json:"events,omitempty"`
+	AssetSource      string             `json:"assetSource,omitempty"`
+	NormalFullURL    string             `json:"normalFullUrl,omitempty"`
+	TrainedFullURL   string             `json:"trainedFullUrl,omitempty"`
+	ThumbnailURL     string             `json:"thumbnailUrl,omitempty"`
+	TrainedThumbnail string             `json:"trainedThumbnailUrl,omitempty"`
+}
+
+type CardEventPayload struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	EventType string `json:"eventType,omitempty"`
+	StartAt   int64  `json:"startAt,omitempty"`
+	ClosedAt  int64  `json:"closedAt,omitempty"`
+	Unit      string `json:"unit,omitempty"`
 }
 
 // MusicDetailPayload is the normalized data contract consumed by MusicDetail.tsx.
@@ -89,6 +99,7 @@ type EventInfoPayload struct {
 	DeckBonuses       []EventDeckBonusPayload `json:"deckBonuses,omitempty"`
 	BonusAttr         string                  `json:"bonusAttr,omitempty"`
 	BonusCharacters   []string                `json:"bonusCharacters,omitempty"`
+	BonusCards        []CardDetailPayload     `json:"bonusCards,omitempty"`
 	BannerURL         string                  `json:"bannerUrl,omitempty"`
 	LogoURL           string                  `json:"logoUrl,omitempty"`
 	StoryBannerURL    string                  `json:"storyBannerUrl,omitempty"`
@@ -1425,10 +1436,41 @@ func BuildCardDetailPayloadWithAssets(store *masterdata.Store, card masterdata.C
 		payload.TrainedThumbnail = assetResolver.GetCardThumbnailURL(card.AssetbundleName, true)
 	}
 
+	if store != nil {
+		payload.Events = buildCardEvents(store, card.ID)
+	}
+
 	return payload
 }
 
 // BuildMusicDetailPayload adapts a masterdata music row into MusicDetail renderer props.
+func buildCardEvents(store *masterdata.Store, cardID int) []CardEventPayload {
+	if store == nil || cardID <= 0 {
+		return nil
+	}
+	events := make([]CardEventPayload, 0)
+	for _, relation := range store.AllEventCards() {
+		if relation.CardID != cardID {
+			continue
+		}
+		event := store.GetEvent(relation.EventID)
+		if event == nil {
+			continue
+		}
+		events = append(events, CardEventPayload{
+			ID: event.ID, Name: event.Name, EventType: event.EventType,
+			StartAt: event.StartAt, ClosedAt: event.ClosedAt, Unit: event.Unit,
+		})
+	}
+	sort.SliceStable(events, func(i, j int) bool {
+		if events[i].StartAt != events[j].StartAt {
+			return events[i].StartAt < events[j].StartAt
+		}
+		return events[i].ID < events[j].ID
+	})
+	return events
+}
+
 func BuildMusicDetailPayload(store *masterdata.Store, music masterdata.MusicInfo) MusicDetailPayload {
 	return BuildMusicDetailPayloadWithAssets(store, music, defaultAssetResolver())
 }
@@ -1502,6 +1544,12 @@ func BuildEventInfoPayloadWithAssets(store *masterdata.Store, event masterdata.E
 	}
 
 	seenCharacters := make(map[string]struct{})
+	for _, eventCard := range store.GetEventCards(event.ID) {
+		if card := store.GetCard(eventCard.CardID); card != nil {
+			payload.BonusCards = append(payload.BonusCards, BuildCardDetailPayloadWithAssets(store, *card, resolver))
+		}
+	}
+
 	for _, b := range store.GetEventDeckBonuses(event.ID) {
 		bonus := EventDeckBonusPayload{
 			ID:                  b.ID,

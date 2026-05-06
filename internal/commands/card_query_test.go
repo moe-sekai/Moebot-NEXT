@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"moebot-next/internal/cardquery"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/renderer"
 )
 
 func TestParseCardQueryPureIDUsesDetail(t *testing.T) {
@@ -141,6 +143,36 @@ func TestResolveCardQueryPureIDDetail(t *testing.T) {
 	}
 	if len(result.Cards) != 1 || result.Cards[0].ID != 1204 {
 		t.Fatalf("Cards = %#v, want card #1204", result.Cards)
+	}
+}
+
+func TestFormatCardTextIncludesRelatedEvents(t *testing.T) {
+	text := formatCardText(renderer.CardDetailPayload{
+		ID:             1001,
+		Prefix:         "测试卡牌",
+		CharacterName:  "初音未来",
+		CardRarityType: "rarity_4",
+		Attr:           "cute",
+		Events: []renderer.CardEventPayload{{
+			ID: 2001, Name: "测试活动", EventType: "marathon",
+		}},
+	})
+	if !strings.Contains(text, "关联活动：#2001 测试活动") {
+		t.Fatalf("formatCardText() = %q, want related event", text)
+	}
+}
+
+func TestFormatEventTextIncludesBonusCards(t *testing.T) {
+	text := formatEventText(renderer.EventInfoPayload{
+		ID:        2001,
+		Name:      "测试活动",
+		EventType: "marathon",
+		BonusCards: []renderer.CardDetailPayload{{
+			ID: 1001, Prefix: "测试卡牌", CharacterName: "初音未来",
+		}},
+	})
+	if !strings.Contains(text, "加成卡：#1001 初音未来 · 测试卡牌") {
+		t.Fatalf("formatEventText() = %q, want bonus card", text)
 	}
 }
 

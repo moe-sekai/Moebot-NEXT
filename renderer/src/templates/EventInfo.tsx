@@ -1,4 +1,5 @@
 import {
+  getCardThumbnailUrl,
   getEventBannerUrl,
   getEventLogoUrl,
   type AssetSourceType,
@@ -6,6 +7,7 @@ import {
 import { BaseCard } from './base'
 import { getLocalIconAssetDataUri } from '../styles/assets'
 import { theme } from '../styles/theme'
+import { SekaiCardThumbnail, canUseTrainedArt } from './SekaiCardThumbnail'
 
 const EVENT_TYPE_NAMES: Record<string, string> = {
   marathon: '马拉松',
@@ -58,6 +60,18 @@ export interface EventInfoProps {
     unit?: string
     bonusAttr?: string
     bonusCharacters?: string[]
+    bonusCards?: Array<{
+      id: number
+      prefix?: string
+      characterName?: string
+      rarity?: string
+      cardRarityType?: string
+      attr?: string
+      assetbundleName?: string
+      thumbnailUrl?: string
+      trainedThumbnailUrl?: string
+      supplyType?: string
+    }>
   }
 }
 
@@ -180,6 +194,38 @@ export function EventInfo({ event }: EventInfoProps) {
             )}
           </div>
         </div>
+
+        {event.bonusCards && event.bonusCards.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: theme.spacing.sm,
+              backgroundColor: theme.colors.surface,
+              border: `1px solid ${theme.colors.border}`,
+              borderRadius: theme.borderRadius.xl,
+              padding: theme.spacing.md,
+            }}
+          >
+            <SectionTitle title="加成卡片" color={accent} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+              {event.bonusCards.slice(0, 6).map((card) => {
+                const rarity = card.cardRarityType ?? card.rarity ?? 'rarity_unknown'
+                const trained = canUseTrainedArt(rarity)
+                const imageUrl = card.thumbnailUrl ?? (card.assetbundleName ? getCardThumbnailUrl(card.assetbundleName, trained, source, 'png') : undefined)
+                return (
+                  <div key={card.id} style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.xs, width: 224 }}>
+                    <SekaiCardThumbnail imageUrl={imageUrl} rarity={rarity} attr={card.attr ?? 'cute'} isTrained={trained} characterName={card.characterName} supplyType={card.supplyType} size={64} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                      <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.xs, fontWeight: 900 }}>#{card.id} {card.characterName ?? ''}</span>
+                      <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: 10, lineHeight: 1.25 }}>{card.prefix ?? rarity}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </BaseCard>
   )

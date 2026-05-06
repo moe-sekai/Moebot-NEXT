@@ -134,5 +134,12 @@ func formatCardText(card renderer.CardDetailPayload) string {
 	if card.GachaPhrase != "" {
 		lines = append(lines, fmt.Sprintf("招募台词：%s", card.GachaPhrase))
 	}
+	if len(card.Events) > 0 {
+		events := make([]string, 0, len(card.Events))
+		for _, event := range card.Events {
+			events = append(events, fmt.Sprintf("#%d %s", event.ID, event.Name))
+		}
+		lines = append(lines, "关联活动："+strings.Join(events, "、"))
+	}
 	return strings.Join(lines, "\n")
 }

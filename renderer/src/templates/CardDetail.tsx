@@ -24,6 +24,14 @@ interface CardDetailProps {
     gachaPhrase?: string
     supplyType?: string
     trained?: boolean
+    events?: Array<{
+      id: number
+      name: string
+      eventType?: string
+      startAt?: number
+      closedAt?: number
+      unit?: string
+    }>
     compositeLayers?: import('../card-thumbnail-composites').CardThumbnailCompositeLayer[]
     normalCompositeLayers?: import('../card-thumbnail-composites').CardThumbnailCompositeLayer[]
     trainedCompositeLayers?: import('../card-thumbnail-composites').CardThumbnailCompositeLayer[]
@@ -126,6 +134,30 @@ export function CardDetail({ card }: CardDetailProps) {
             }}
           >
             “{card.gachaPhrase}”
+          </div>
+        )}
+
+        {card.events && card.events.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: theme.spacing.sm,
+              padding: theme.spacing.md,
+              borderRadius: theme.borderRadius.lg,
+              backgroundColor: theme.colors.surface,
+              border: `1px solid ${theme.colors.border}`,
+            }}
+          >
+            <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>关联活动</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {card.events.slice(0, 3).map((event) => (
+                <div key={event.id} style={{ display: 'flex', justifyContent: 'space-between', gap: theme.spacing.md }}>
+                  <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: 800 }}>#{event.id} {event.name}</span>
+                  <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: theme.fontSize.xs }}>{event.eventType ?? 'event'}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
