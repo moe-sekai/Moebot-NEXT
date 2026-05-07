@@ -49,156 +49,226 @@ export function DeckRecommend({
 		profile?.name ? `${profile.name}${profile.rank ? ` · Rank ${profile.rank}` : ""}` : undefined,
 		event?.name,
 	].filter(Boolean).join(" · ");
+	const footer = [
+		"功能移植并修改自 33Kit",
+		algorithm ? `${String(algorithm).toUpperCase()} 算法` : undefined,
+		Number.isFinite(Number(costMs)) ? `耗时 ${Math.round(Number(costMs))}ms` : undefined,
+	].filter(Boolean).join(" · ");
+
 	return (
-		<BaseCard title={title} subtitle={summary} accentColor="#55c7f7" footer={`Moebot NEXT · ${algorithm ?? "ga"} · ${costMs ?? 0}ms`}>
-			<div style={{ display: "flex", flexDirection: "column", gap: theme.spacing.lg }}>
-				<InfoPanel event={event} music={music} options={options} />
-				{decks.length === 0 ? (
-					<div style={emptyStyle}>没有得到推荐结果，请检查 Suite 数据或换用更宽松的参数。</div>
-				) : decks.map((deck, index) => (
-					<DeckBlock key={index} deck={deck} source={assetSource} />
-				))}
-				{warnings.length > 0 && (
-					<div style={warningStyle}>{warnings.slice(0, 4).join(" · ")}</div>
-				)}
+		<BaseCard title={title} subtitle={summary} accentColor="#f38ab8" footer={footer}>
+			<div style={pageStyle}>
+				<ProfileStrip profile={profile} regionLabel={regionLabel} />
+				<ScenarioPanel event={event} music={music} options={options} />
+				<ResultTable decks={decks} source={assetSource} />
+				{warnings.length > 0 && <div style={warningStyle}>{warnings.slice(0, 4).join(" · ")}</div>}
 			</div>
 		</BaseCard>
 	);
 }
 
-function InfoPanel({ event, music, options }: { event?: any; music?: any; options?: any }) {
-	const fixed = [
-		...(options?.fixedCards ?? []).map((id: number) => `卡${id}`),
-		...(options?.fixedCharacters ?? []).map((id: number) => `角色${id}`),
-	];
-	const items = [
-		["模式", modeLabel(options?.mode)],
-		["活动", event?.name ?? (options?.eventId ? `#${options.eventId}` : "无")],
-		["歌曲", music?.title ?? (options?.musicId === 10000 ? "おまかせ" : `#${options?.musicId ?? "-"}`)],
-		["难度", String(options?.difficulty ?? "master").toUpperCase()],
-		["Live", liveTypeLabel(options?.liveType)],
-		["目标", targetLabel(options?.target)],
-		["算法", String(options?.algorithm ?? "ga").toUpperCase()],
-		["固定", fixed.length > 0 ? fixed.join(" / ") : "无"],
-		...(options?.challengeCharacterId ? [["挑战角色", `角色${options.challengeCharacterId}`]] : []),
-		...(options?.targetBonusList?.length ? [["目标加成", `${options.targetBonusList.join(" / ")}%`]] : []),
-	];
+function ProfileStrip({ profile, regionLabel }: { profile?: any; regionLabel?: string }) {
+	if (!profile?.name && !regionLabel) return null;
 	return (
-		<div style={panelStyle}>
-			{items.map(([label, value]) => (
-				<div key={label} style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 112 }}>
-					<div style={{ display: "flex", fontSize: 18, color: theme.colors.textMuted }}>{label}</div>
-					<div style={{ display: "flex", fontSize: 24, fontWeight: 800, color: theme.colors.text }}>{value}</div>
+		<div style={profileStripStyle}>
+			<div style={avatarStyle}>{String(profile?.name ?? regionLabel ?? "M").slice(0, 1).toUpperCase()}</div>
+			<div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+				<div style={{ display: "flex", fontSize: 24, fontWeight: 900, color: "#2b2b32" }}>{profile?.name ?? "Moebot"}</div>
+				<div style={{ display: "flex", fontSize: 15, color: "#56515c" }}>
+					{regionLabel ?? "SEKAI"}{profile?.userId ? ` · UID ${maskUID(String(profile.userId))}` : ""}{profile?.source ? ` · ${profile.source}` : " Suite数据"}
 				</div>
-			))}
-		</div>
-	);
-}
-
-function DeckBlock({ deck, source }: { deck: DeckRecommendDeck; source: string }) {
-	return (
-		<div style={deckStyle}>
-			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.spacing.md }}>
-				<div style={{ display: "flex", alignItems: "baseline", gap: theme.spacing.sm }}>
-					<div style={{ display: "flex", fontSize: 28, fontWeight: 900, color: "#2196f3" }}>#{deck.rank ?? "-"}</div>
-					<div style={{ display: "flex", fontSize: 18, color: theme.colors.textSecondary }}>推荐卡组</div>
-				</div>
-				<div style={{ display: "flex", gap: theme.spacing.md, fontSize: 19, color: theme.colors.textSecondary }}>
-					<span style={{ display: "flex" }}>{deck.valueLabel ?? "主值"}：{formatNumber(deck.value ?? deck.eventPoint ?? deck.score)}</span>
-					<span style={{ display: "flex" }}>活动PT：{formatNumber(deck.eventPoint ?? deck.score)}</span>
-					<span style={{ display: "flex" }}>加成：{formatDeckBonus(deck)}</span>
-					<span style={{ display: "flex" }}>综合力：{formatNumber((deck.power as any)?.total)}</span>
-					<span style={{ display: "flex" }}>实效：{formatNumber(deck.multiLiveScoreUp)}</span>
-				</div>
-			</div>
-			<div style={{ display: "flex", gap: theme.spacing.sm, justifyContent: "space-between" }}>
-				{(deck.cards ?? []).slice(0, 5).map((entry, index) => (
-					<CardBox key={`${entry.cardId ?? index}`} entry={entry} source={source} leader={index === 0} />
-				))}
 			</div>
 		</div>
 	);
 }
 
-function CardBox({ entry, source, leader }: { entry: any; source: string; leader?: boolean }) {
+function ScenarioPanel({ event, music, options }: { event?: any; music?: any; options?: any }) {
+	return (
+		<div style={scenarioStyle}>
+			<div style={scenarioMainStyle}>
+				<div style={scenarioTitleStyle}>{modeLabel(options?.mode)}{options?.eventId || event?.id ? ` #${options?.eventId ?? event?.id}` : ""}</div>
+				<div style={scenarioTextStyle}>{event?.name ?? (options?.eventId ? `活动 #${options.eventId}` : "无活动")}</div>
+				<div style={scenarioTextStyle}>歌曲：{music?.title ?? (options?.musicId === 10000 ? "おまかせ（所有歌曲平均）" : `#${options?.musicId ?? "-"}`)}</div>
+			</div>
+			<div style={scenarioSideStyle}>
+				<MetaPill label="难度" value={String(options?.difficulty ?? "master").toUpperCase()} />
+				<MetaPill label="Live" value={liveTypeLabel(options?.liveType)} />
+				<MetaPill label="目标" value={targetLabel(options?.target)} />
+			</div>
+			<div style={skillOrderStyle}>技能顺序：平均情况 → BloomFes 花前技能吸取 → 平均值</div>
+		</div>
+	);
+}
+
+function MetaPill({ label, value }: { label: string; value: string }) {
+	return (
+		<div style={metaPillStyle}>
+			<span style={{ display: "flex", color: "#8a7b86", fontSize: 12, fontWeight: 800 }}>{label}</span>
+			<span style={{ display: "flex", color: "#2f2930", fontSize: 15, fontWeight: 900 }}>{value}</span>
+		</div>
+	);
+}
+
+function ResultTable({ decks, source }: { decks: DeckRecommendDeck[]; source: string }) {
+	if (decks.length === 0) {
+		return <div style={emptyStyle}>没有得到推荐结果，请检查 Suite 数据或换用更宽松的参数。</div>;
+	}
+	return (
+		<div style={tableStyle}>
+			<div style={headerRowStyle}>
+				<div style={ptvHeaderCellStyle}>PTV</div>
+				<div style={cardsHeaderCellStyle}>卡组</div>
+				<div style={metricHeaderCellStyle}>加成</div>
+				<div style={metricHeaderCellStyle}>实效</div>
+				<div style={metricHeaderCellStyle}>综合力</div>
+			</div>
+			{decks.map((deck, index) => <DeckRow key={index} deck={deck} source={source} />)}
+		</div>
+	);
+}
+
+function DeckRow({ deck, source }: { deck: DeckRecommendDeck; source: string }) {
+	return (
+		<div style={rowStyle}>
+			<div style={ptvCellStyle}>
+				<div style={ptvValueStyle}>{formatNumber(deck.value ?? deck.eventPoint ?? deck.score)}</div>
+				<div style={mutedSmallStyle}>{String(deck.valueLabel ?? "GA")}</div>
+			</div>
+			<div style={cardsCellStyle}>
+				{(deck.cards ?? []).slice(0, 5).map((entry, index) => <CardMini key={`${entry.cardId ?? index}`} entry={entry} source={source} />)}
+			</div>
+			<MetricCell value={formatPercent(deck.eventBonus)} sub={supportBonusText(deck)} />
+			<MetricCell value={formatPercent(deck.multiLiveScoreUp)} sub="队友 200" />
+			<MetricCell value={formatNumber((deck.power as any)?.total)} sub="队友 250000" />
+		</div>
+	);
+}
+
+function CardMini({ entry, source }: { entry: any; source: string }) {
 	const card = entry.card ?? entry;
 	return (
-		<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, width: 128 }}>
-			<div style={{ display: "flex", position: "relative" }}>
-				<SekaiCardThumbnail
-					size={112}
-					rarity={card.cardRarityType ?? card.rarity ?? "rarity_1"}
-					attr={card.attr ?? "cute"}
-					imageUrl={card.thumbnailUrl ?? card.normalThumbnailUrl}
-					compositeLayers={card.compositeLayers}
-					isTrained={card.isTrained}
-					mastery={card.masterRank ?? card.mastery ?? 0}
-					characterName={card.characterName}
-				/>
-				{leader && <div style={leaderBadge}>队长</div>}
-			</div>
-			<div style={{ display: "flex", fontSize: 16, fontWeight: 700, color: theme.colors.text, textAlign: "center" }}>{card.characterName ?? card.prefix ?? `#${entry.cardId}`}</div>
-			<div style={{ display: "flex", fontSize: 15, fontWeight: 700, color: theme.colors.text }}>#{entry.cardId}</div>
-			<div style={{ display: "flex", fontSize: 14, color: theme.colors.textSecondary }}>
-				Lv.{entry.level ?? "-"} · SLv.{entry.skillLevel ?? "-"} · MR{entry.masterRank ?? 0}
-			</div>
-			{entry.eventBonus && <div style={{ display: "flex", fontSize: 14, color: "#e67e22" }}>+{entry.eventBonus}</div>}
+		<div style={cardMiniStyle}>
+			<SekaiCardThumbnail
+				size={56}
+				rarity={card.cardRarityType ?? card.rarity ?? "rarity_1"}
+				attr={card.attr ?? "cute"}
+				imageUrl={card.thumbnailUrl ?? card.normalThumbnailUrl}
+				compositeLayers={card.compositeLayers}
+				isTrained={card.isTrained}
+				mastery={card.masterRank ?? card.mastery ?? entry.masterRank ?? 0}
+				characterName={card.characterName}
+			/>
+			<div style={cardSubStyle}>SLv.{entry.skillLevel ?? 1} · {formatPercent(entry.skillScoreUp ?? entry.scoreUp ?? 0)}</div>
+			<div style={cardBonusStyle}>+{formatPercent(entry.eventBonus ?? 0)}</div>
 		</div>
 	);
 }
 
-const panelStyle = {
+function MetricCell({ value, sub }: { value: string; sub: string }) {
+	return (
+		<div style={metricCellStyle}>
+			<div style={metricValueStyle}>{value}</div>
+			<div style={mutedSmallStyle}>{sub}</div>
+		</div>
+	);
+}
+
+const pageStyle = {
 	display: "flex",
-	gap: theme.spacing.md,
-	padding: theme.spacing.md,
-	backgroundColor: theme.colors.surface,
-	border: `1px solid ${theme.colors.border}`,
-	borderRadius: theme.borderRadius.lg,
+	flexDirection: "column" as const,
+	gap: 14,
+	padding: 2,
+	background: "linear-gradient(180deg, rgba(255,241,248,.72), rgba(255,255,255,.15))",
+};
+
+const profileStripStyle = {
+	display: "flex",
+	alignItems: "center",
+	gap: 12,
+	alignSelf: "flex-start",
+	padding: "12px 16px",
+	backgroundColor: "rgba(255,255,255,.82)",
+	border: "1px solid rgba(232, 174, 204, .42)",
+	borderRadius: 16,
+	boxShadow: "0 8px 20px rgba(187, 112, 154, .12)",
+};
+
+const avatarStyle = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	width: 54,
+	height: 54,
+	borderRadius: 12,
+	background: "linear-gradient(135deg, #ffd6e8, #bfe8ff)",
+	color: "#fff",
+	fontSize: 28,
+	fontWeight: 900,
+	boxShadow: "inset 0 0 0 2px rgba(255,255,255,.7)",
+};
+
+const scenarioStyle = {
+	display: "flex",
+	position: "relative" as const,
+	gap: 14,
+	padding: 16,
+	backgroundColor: "rgba(255,255,255,.78)",
+	border: "1px solid rgba(232, 174, 204, .38)",
+	borderRadius: 18,
+	boxShadow: "0 8px 24px rgba(187, 112, 154, .11)",
 	flexWrap: "wrap" as const,
 };
 
-const deckStyle = {
+const scenarioMainStyle = { display: "flex", flexDirection: "column" as const, gap: 7, flex: 1, minWidth: 360 };
+const scenarioTitleStyle = { display: "flex", fontSize: 25, fontWeight: 950, color: "#2f2930" };
+const scenarioTextStyle = { display: "flex", fontSize: 17, fontWeight: 800, color: "#4a424a" };
+const scenarioSideStyle = { display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" as const };
+const metaPillStyle = { display: "flex", flexDirection: "column" as const, gap: 2, padding: "7px 10px", backgroundColor: "rgba(255,246,250,.9)", borderRadius: 12, border: "1px solid rgba(232,174,204,.35)" };
+const skillOrderStyle = { display: "flex", width: "100%", paddingTop: 8, borderTop: "1px solid rgba(232,174,204,.3)", fontSize: 15, fontWeight: 800, color: "#5c535b" };
+
+const tableStyle = {
 	display: "flex",
 	flexDirection: "column" as const,
-	gap: theme.spacing.md,
-	padding: theme.spacing.md,
-	backgroundColor: "#ffffff",
-	border: `1px solid ${theme.colors.border}`,
-	borderRadius: theme.borderRadius.lg,
+	padding: "18px 18px 8px",
+	backgroundColor: "rgba(255,255,255,.84)",
+	border: "1px solid rgba(232,174,204,.42)",
+	borderRadius: 20,
+	boxShadow: "0 10px 30px rgba(187,112,154,.14)",
 };
 
-const emptyStyle = {
+const ptvColumnWidth = 72;
+const cardsColumnWidth = 330;
+const metricColumnWidth = 88;
+const headerRowStyle = {
 	display: "flex",
-	padding: theme.spacing.lg,
-	backgroundColor: theme.colors.surface,
-	borderRadius: theme.borderRadius.lg,
-	fontSize: 22,
-	color: theme.colors.textSecondary,
+	alignItems: "center",
+	gap: 10,
+	padding: "0 4px 10px",
+	fontSize: 23,
+	fontWeight: 950,
+	color: "#2f2930",
 };
-
-const warningStyle = {
+const rowStyle = {
 	display: "flex",
-	padding: theme.spacing.md,
-	backgroundColor: "#fff8e1",
-	border: "1px solid #ffe082",
-	borderRadius: theme.borderRadius.md,
-	fontSize: 17,
-	color: "#8d6e00",
+	gap: 10,
+	alignItems: "flex-start",
+	padding: "10px 4px",
+	borderTop: "1px solid rgba(232,174,204,.28)",
 };
-
-const leaderBadge = {
-	position: "absolute" as const,
-	top: 4,
-	left: 4,
-	display: "flex",
-	padding: "2px 6px",
-	backgroundColor: "rgba(33, 150, 243, 0.9)",
-	borderRadius: 999,
-	fontSize: 13,
-	fontWeight: 800,
-	color: "#fff",
-};
-
+const ptvHeaderCellStyle = { display: "flex", width: ptvColumnWidth };
+const cardsHeaderCellStyle = { display: "flex", width: cardsColumnWidth };
+const metricHeaderCellStyle = { display: "flex", width: metricColumnWidth, justifyContent: "center" };
+const ptvCellStyle = { display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 2, width: ptvColumnWidth };
+const ptvValueStyle = { display: "flex", fontSize: 22, fontWeight: 950, color: "#363039" };
+const cardsCellStyle = { display: "flex", gap: 7, alignItems: "flex-start", width: cardsColumnWidth };
+const cardMiniStyle = { display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 1, width: 60 };
+const cardSubStyle = { display: "flex", fontSize: 8, color: "#4b4650", whiteSpace: "nowrap" as const };
+const cardBonusStyle = { display: "flex", fontSize: 8, color: "#0a8f62", whiteSpace: "nowrap" as const };
+const metricCellStyle = { display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 3, width: metricColumnWidth };
+const metricValueStyle = { display: "flex", fontSize: 22, fontWeight: 950, color: "#363039", textAlign: "center" as const };
+const mutedSmallStyle = { display: "flex", fontSize: 10, color: "#9b929c", fontWeight: 700, textAlign: "center" as const };
+const emptyStyle = { display: "flex", padding: theme.spacing.lg, backgroundColor: "rgba(255,255,255,.78)", borderRadius: 18, fontSize: 22, color: theme.colors.textSecondary };
+const warningStyle = { display: "flex", padding: "10px 14px", backgroundColor: "rgba(255,248,225,.75)", border: "1px solid rgba(255,224,130,.85)", borderRadius: 14, fontSize: 15, color: "#705800", lineHeight: 1.45 };
 function formatNumber(value: unknown): string {
 	const n = Number(value);
 	return Number.isFinite(n) ? Math.round(n).toLocaleString("zh-CN") : "-";
@@ -217,6 +287,15 @@ function formatDeckBonus(deck: DeckRecommendDeck): string {
 	return formatPercent(deck.eventBonus);
 }
 
+function supportBonusText(deck: DeckRecommendDeck): string {
+	const base = Number(deck.eventBonus);
+	const support = Number(deck.supportDeckBonus);
+	if (Number.isFinite(base) && Number.isFinite(support) && support > 0) {
+		return `${Math.max(0, Math.round(base - support))}.0+${Math.round(support)}.0%`;
+	}
+	return "活动加成";
+}
+
 function liveTypeLabel(value: unknown): string {
 	switch (String(value || "multi").toLowerCase()) {
 		case "solo": return "单人";
@@ -228,10 +307,10 @@ function liveTypeLabel(value: unknown): string {
 
 function modeLabel(value: unknown): string {
 	switch (String(value || "event").toLowerCase()) {
-		case "strongest": return "最强/长草";
-		case "challenge": return "挑战Live";
-		case "bonus": return "加成/控分";
-		default: return "活动";
+		case "strongest": return "最强/长草组卡";
+		case "challenge": return "挑战 Live 组卡";
+		case "bonus": return "加成/控分组卡";
+		default: return "活动组卡";
 	}
 }
 
@@ -242,4 +321,9 @@ function targetLabel(value: unknown): string {
 		case "bonus": return "加成";
 		default: return "活动点/分数";
 	}
+}
+
+function maskUID(value: string): string {
+	if (value.length <= 6) return value;
+	return `${value.slice(0, 2)}******${value.slice(-4)}`;
 }
