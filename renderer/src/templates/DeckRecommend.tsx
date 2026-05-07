@@ -24,6 +24,7 @@ interface DeckRecommendDeck {
 	score?: number;
 	eventPoint?: number;
 	eventBonus?: number;
+	supportDeckBonus?: number;
 	multiLiveScoreUp?: number;
 	power?: { total?: number } | Record<string, unknown>;
 	cards?: Array<any>;
@@ -105,7 +106,7 @@ function DeckBlock({ deck, source }: { deck: DeckRecommendDeck; source: string }
 				<div style={{ display: "flex", gap: theme.spacing.md, fontSize: 19, color: theme.colors.textSecondary }}>
 					<span style={{ display: "flex" }}>{deck.valueLabel ?? "主值"}：{formatNumber(deck.value ?? deck.eventPoint ?? deck.score)}</span>
 					<span style={{ display: "flex" }}>活动PT：{formatNumber(deck.eventPoint ?? deck.score)}</span>
-					<span style={{ display: "flex" }}>加成：{formatPercent(deck.eventBonus)}</span>
+					<span style={{ display: "flex" }}>加成：{formatDeckBonus(deck)}</span>
 					<span style={{ display: "flex" }}>综合力：{formatNumber((deck.power as any)?.total)}</span>
 					<span style={{ display: "flex" }}>实效：{formatNumber(deck.multiLiveScoreUp)}</span>
 				</div>
@@ -206,6 +207,14 @@ function formatNumber(value: unknown): string {
 function formatPercent(value: unknown): string {
 	const n = Number(value);
 	return Number.isFinite(n) ? `${Math.round(n)}%` : "-";
+}
+
+function formatDeckBonus(deck: DeckRecommendDeck): string {
+	const support = Number(deck.supportDeckBonus);
+	if (Number.isFinite(support) && support > 0) {
+		return `${formatPercent(deck.eventBonus)} + ${formatPercent(support)}`;
+	}
+	return formatPercent(deck.eventBonus);
 }
 
 function liveTypeLabel(value: unknown): string {

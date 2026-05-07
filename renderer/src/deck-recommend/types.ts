@@ -49,6 +49,7 @@ export interface DeckRecommendResultCard {
 	masterRank: number;
 	defaultImage?: string;
 	eventBonus?: string;
+	supportDeckBonus?: number;
 	power?: any;
 	skill?: any;
 	card?: any;
@@ -61,6 +62,7 @@ export interface DeckRecommendResultDeck {
 	score: number;
 	eventPoint?: number;
 	eventBonus?: number;
+	supportDeckBonus?: number;
 	power: any;
 	multiLiveScoreUp: number;
 	cards: DeckRecommendResultCard[];

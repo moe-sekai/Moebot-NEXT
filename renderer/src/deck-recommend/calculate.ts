@@ -296,9 +296,10 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 			valueLabel,
 			score: Math.round(Number(deck.score || 0)),
 			eventPoint: mode === "event" && String(req.options.target || "score").toLowerCase() === "score" ? Math.round(Number(deck.score || 0)) : undefined,
-			eventBonus: deck.eventBonus,
-			power: deck.power,
-			multiLiveScoreUp: deck.multiLiveScoreUp,
+				eventBonus: deck.eventBonus,
+				supportDeckBonus: deck.supportDeckBonus,
+				power: deck.power,
+				multiLiveScoreUp: deck.multiLiveScoreUp,
 			cards: deck.cards.map((card: any) => {
 				const master = masterCards.find((it) => Number(it.id) === Number(card.cardId));
 				const asset = req.cardAssets?.[Number(card.cardId)] ?? {};

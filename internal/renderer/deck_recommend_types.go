@@ -70,19 +70,21 @@ type DeckRecommendResult struct {
 	Score            int                 `json:"score"`
 	EventPoint       int                 `json:"eventPoint,omitempty"`
 	EventBonus       float64             `json:"eventBonus,omitempty"`
+	SupportDeckBonus float64             `json:"supportDeckBonus,omitempty"`
 	Power            map[string]any      `json:"power,omitempty"`
 	MultiLiveScoreUp float64             `json:"multiLiveScoreUp,omitempty"`
 	Cards            []DeckRecommendCard `json:"cards"`
 }
 
 type DeckRecommendCard struct {
-	CardID       int            `json:"cardId"`
-	Level        int            `json:"level"`
-	SkillLevel   int            `json:"skillLevel"`
-	MasterRank   int            `json:"masterRank"`
-	DefaultImage string         `json:"defaultImage,omitempty"`
-	EventBonus   string         `json:"eventBonus,omitempty"`
-	Power        map[string]any `json:"power,omitempty"`
-	Skill        map[string]any `json:"skill,omitempty"`
-	Card         map[string]any `json:"card,omitempty"`
+	CardID           int            `json:"cardId"`
+	Level            int            `json:"level"`
+	SkillLevel       int            `json:"skillLevel"`
+	MasterRank       int            `json:"masterRank"`
+	DefaultImage     string         `json:"defaultImage,omitempty"`
+	EventBonus       string         `json:"eventBonus,omitempty"`
+	SupportDeckBonus float64        `json:"supportDeckBonus,omitempty"`
+	Power            map[string]any `json:"power,omitempty"`
+	Skill            map[string]any `json:"skill,omitempty"`
+	Card             map[string]any `json:"card,omitempty"`
 }
