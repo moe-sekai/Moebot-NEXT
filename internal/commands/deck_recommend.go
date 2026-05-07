@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +15,7 @@ import (
 	"moebot-next/internal/assets"
 	"moebot-next/internal/bot"
 	"moebot-next/internal/config"
+	"moebot-next/internal/deckrecommenddata"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/renderer"
 	"moebot-next/internal/servers"
@@ -29,15 +29,6 @@ import (
 const musicMetaURL = "https://moe.exmeaning.com/data/music_meta/music_metas.json"
 const musicMetaCacheTTL = 6 * time.Hour
 const deckRecommendDefaultMasterCacheTTL = time.Hour
-
-//go:embed deck_recommend_data/*.json
-var deckRecommendLocalMasterData embed.FS
-
-var deckRecommendLocalMasterKeys = map[string]string{
-	"worldBloomSupportDeckBonusesWL1": "deck_recommend_data/worldBloomSupportDeckBonusesWL1.json",
-	"worldBloomSupportDeckBonusesWL2": "deck_recommend_data/worldBloomSupportDeckBonusesWL2.json",
-	"worldBloomSupportDeckBonusesWL3": "deck_recommend_data/worldBloomSupportDeckBonusesWL3.json",
-}
 
 type deckRecommendUserCardEntry struct {
 	CardID int `json:"cardId"`
@@ -509,6 +500,15 @@ func filterDeckRecommendUserDataWithJPMaster(userData map[string]any, masterMap 
 	if rawHonors, ok := filtered["userHonors"]; ok {
 		filtered["userHonors"] = filterDeckRecommendUserHonorsFromJPMaster(rawHonors, masterMap, store)
 	}
+	if rawAreas, ok := filtered[suite.FieldUserAreas]; ok {
+		filtered[suite.FieldUserAreas] = filterDeckRecommendUserAreasFromJPMaster(rawAreas, masterMap)
+	}
+	if rawGates, ok := filtered[suite.FieldUserMysekaiGates]; ok {
+		filtered[suite.FieldUserMysekaiGates] = filterDeckRecommendUserMysekaiGatesFromJPMaster(rawGates, masterMap)
+	}
+	if rawCharacters, ok := filtered[suite.FieldUserCharacters]; ok {
+		filtered[suite.FieldUserCharacters] = filterDeckRecommendUserCharactersFromJPMaster(rawCharacters, masterMap)
+	}
 	return filtered
 }
 
@@ -668,6 +668,167 @@ func filterDeckRecommendUserHonorsByValidLevels(raw any, valid map[int]map[int]s
 	return filtered
 }
 
+func filterDeckRecommendUserAreasFromJPMaster(raw any, masterMap map[string]any) any {
+	areas, ok := raw.([]any)
+	if !ok {
+		return raw
+	}
+	valid := deckRecommendValidMasterPairs(masterMap, "areaItemLevels", "areaItemId", "level")
+	if len(valid) == 0 {
+		return raw
+	}
+	filteredAreas := make([]any, 0, len(areas))
+	for _, area := range areas {
+		entry, ok := area.(map[string]any)
+		if !ok {
+			continue
+		}
+		areaItems, ok := entry["areaItems"].([]any)
+		if !ok {
+			filteredAreas = append(filteredAreas, area)
+			continue
+		}
+		filteredItems := make([]any, 0, len(areaItems))
+		for _, item := range areaItems {
+			itemEntry, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if deckRecommendPairExists(valid, intValueFromAny(itemEntry["areaItemId"]), intValueFromAny(itemEntry["level"])) {
+				filteredItems = append(filteredItems, item)
+			}
+		}
+		cloned := cloneDeckRecommendMap(entry)
+		cloned["areaItems"] = filteredItems
+		filteredAreas = append(filteredAreas, cloned)
+	}
+	return filteredAreas
+}
+
+func filterDeckRecommendUserMysekaiGatesFromJPMaster(raw any, masterMap map[string]any) any {
+	items, ok := raw.([]any)
+	if !ok {
+		return raw
+	}
+	valid := deckRecommendValidMasterPairs(masterMap, "mysekaiGateLevels", "mysekaiGateId", "level")
+	if len(valid) == 0 {
+		return raw
+	}
+	filtered := make([]any, 0, len(items))
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if deckRecommendPairExists(valid, intValueFromAny(entry["mysekaiGateId"]), intValueFromAny(entry["mysekaiGateLevel"])) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func filterDeckRecommendUserCharactersFromJPMaster(raw any, masterMap map[string]any) any {
+	items, ok := raw.([]any)
+	if !ok {
+		return raw
+	}
+	ranksByCharacter := deckRecommendValidCharacterRanks(masterMap)
+	if len(ranksByCharacter) == 0 {
+		return raw
+	}
+	filtered := make([]any, 0, len(items))
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		characterID := intValueFromAny(entry["characterId"])
+		characterRank := intValueFromAny(entry["characterRank"])
+		ranks, exists := ranksByCharacter[characterID]
+		if !exists || len(ranks) == 0 {
+			continue
+		}
+		if _, ok := ranks[characterRank]; ok {
+			filtered = append(filtered, item)
+			continue
+		}
+		clampedRank := deckRecommendBestCharacterRank(ranks, characterRank)
+		if clampedRank == 0 {
+			continue
+		}
+		cloned := cloneDeckRecommendMap(entry)
+		cloned["characterRank"] = clampedRank
+		filtered = append(filtered, cloned)
+	}
+	return filtered
+}
+
+func deckRecommendValidMasterPairs(masterMap map[string]any, key string, firstField string, secondField string) map[int]map[int]struct{} {
+	raw, ok := masterMap[key]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	valid := make(map[int]map[int]struct{})
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		first := intValueFromAny(entry[firstField])
+		second := intValueFromAny(entry[secondField])
+		if first == 0 || second == 0 {
+			continue
+		}
+		if valid[first] == nil {
+			valid[first] = map[int]struct{}{}
+		}
+		valid[first][second] = struct{}{}
+	}
+	return valid
+}
+
+func deckRecommendPairExists(valid map[int]map[int]struct{}, first int, second int) bool {
+	seconds, ok := valid[first]
+	if !ok {
+		return false
+	}
+	_, ok = seconds[second]
+	return ok
+}
+
+func deckRecommendValidCharacterRanks(masterMap map[string]any) map[int]map[int]struct{} {
+	return deckRecommendValidMasterPairs(masterMap, "characterRanks", "characterId", "characterRank")
+}
+
+func deckRecommendBestCharacterRank(ranks map[int]struct{}, current int) int {
+	bestBelow := 0
+	minRank := 0
+	for rank := range ranks {
+		if minRank == 0 || rank < minRank {
+			minRank = rank
+		}
+		if rank <= current && rank > bestBelow {
+			bestBelow = rank
+		}
+	}
+	if bestBelow > 0 {
+		return bestBelow
+	}
+	return minRank
+}
+
+func cloneDeckRecommendMap(entry map[string]any) map[string]any {
+	cloned := make(map[string]any, len(entry))
+	for key, value := range entry {
+		cloned[key] = value
+	}
+	return cloned
+}
+
 func intValueFromAny(value any) int {
 	switch v := value.(type) {
 	case int:
@@ -680,9 +841,19 @@ func intValueFromAny(value any) int {
 		return int(v)
 	case float32:
 		return int(v)
-	default:
-		return 0
+	case json.Number:
+		if i, err := v.Int64(); err == nil {
+			return int(i)
+		}
+		if f, err := strconv.ParseFloat(v.String(), 64); err == nil {
+			return int(f)
+		}
+	case string:
+		if i, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			return i
+		}
 	}
+	return 0
 }
 
 func buildDeckRecommendPayload(runtime *servers.Runtime, mode string, calc *renderer.DeckRecommendCalculateResponse) map[string]any {
@@ -905,26 +1076,10 @@ func allMusicDifficulties(store *masterdata.Store) []masterdata.MusicDifficulty 
 }
 
 func loadDeckRecommendMasterDataAny(key string, resolved config.ResolvedMasterdata, ttl time.Duration) ([]any, error) {
-	if _, ok := deckRecommendLocalMasterKeys[key]; ok {
-		return loadDeckRecommendLocalMasterData(key)
+	if deckrecommenddata.IsLocalMasterKey(key) {
+		return deckrecommenddata.LoadLocalMasterData(key)
 	}
 	return loadMasterDataAny(key, resolved, ttl)
-}
-
-func loadDeckRecommendLocalMasterData(key string) ([]any, error) {
-	path, ok := deckRecommendLocalMasterKeys[key]
-	if !ok {
-		return nil, fmt.Errorf("local masterdata %s not configured", key)
-	}
-	body, err := deckRecommendLocalMasterData.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read local masterdata %s: %w", key, err)
-	}
-	var data []any
-	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, fmt.Errorf("decode local masterdata %s: %w", key, err)
-	}
-	return data, nil
 }
 
 func loadMasterDataAny(key string, resolved config.ResolvedMasterdata, ttl time.Duration) ([]any, error) {

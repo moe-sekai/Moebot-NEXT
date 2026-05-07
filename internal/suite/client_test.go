@@ -105,6 +105,34 @@ func TestClientUsesHarukiPublicKeyParamAndRegionPlaceholder(t *testing.T) {
 	}
 }
 
+func TestClientRegionPlaceholderSupportsAllGlobalRegions(t *testing.T) {
+	for _, tc := range []struct {
+		region string
+		path   string
+	}{
+		{config.RegionTW, "/public/tw/suite/123456789012345678"},
+		{config.RegionKR, "/public/kr/suite/123456789012345678"},
+		{config.RegionEN, "/public/en/suite/123456789012345678"},
+	} {
+		t.Run(tc.region, func(t *testing.T) {
+			var gotPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				_ = json.NewEncoder(w).Encode(map[string]any{"userGamedata": map[string]any{"userId": "123456789012345678"}})
+			}))
+			defer server.Close()
+
+			client := NewClient(config.SuiteAPIConfig{Enabled: true, URL: server.URL + "/public/{region}/suite/{uid}"}, tc.region)
+			if _, err := client.GetStatus("123456789012345678", config.SuiteModeHaruki); err != nil {
+				t.Fatal(err)
+			}
+			if gotPath != tc.path {
+				t.Fatalf("path = %q, want %q", gotPath, tc.path)
+			}
+		})
+	}
+}
+
 func TestClientSupportsReginPlaceholderTypo(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -84,7 +84,7 @@ func userIDFromCtx(ctx *zero.Ctx) string {
 func runtimeForCommand(deps *Deps, ctx *zero.Ctx, forcedRegion string) (*servers.Runtime, *models.User) {
 	region := normalizeRequestedRegion(forcedRegion)
 	if region != "" {
-		return deps.Servers.Get(region), nil
+		return deps.Servers.GetExact(region), nil
 	}
 	user, err := deps.DB.GetUserByPlatform("onebot", userIDFromCtx(ctx))
 	if err != nil && err != gorm.ErrRecordNotFound {

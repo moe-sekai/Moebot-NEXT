@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/suite"
 )
@@ -292,6 +293,17 @@ func TestFilterDeckRecommendUserDataWithJPMaster(t *testing.T) {
 		"cards": []any{
 			map[string]any{"id": float64(101)},
 		},
+		"areaItemLevels": []any{
+			map[string]any{"areaItemId": float64(1), "level": float64(5)},
+		},
+		"mysekaiGateLevels": []any{
+			map[string]any{"mysekaiGateId": float64(10), "level": float64(3)},
+		},
+		"characterRanks": []any{
+			map[string]any{"characterId": float64(1), "characterRank": float64(1)},
+			map[string]any{"characterId": float64(1), "characterRank": float64(3)},
+			map[string]any{"characterId": float64(2), "characterRank": float64(5)},
+		},
 	}
 	userData := map[string]any{
 		suite.FieldUserCards: []any{
@@ -302,14 +314,55 @@ func TestFilterDeckRecommendUserDataWithJPMaster(t *testing.T) {
 			map[string]any{"honorId": 201, "level": 1},
 			map[string]any{"honorId": 999, "level": 1},
 		},
+		suite.FieldUserAreas: []any{
+			map[string]any{"areaItems": []any{
+				map[string]any{"areaItemId": float64(1), "level": float64(5)},
+				map[string]any{"areaItemId": float64(2), "level": float64(1)},
+			}},
+		},
+		suite.FieldUserMysekaiGates: []any{
+			map[string]any{"mysekaiGateId": float64(10), "mysekaiGateLevel": float64(3)},
+			map[string]any{"mysekaiGateId": float64(10), "mysekaiGateLevel": float64(9)},
+		},
+		suite.FieldUserCharacters: []any{
+			map[string]any{"characterId": float64(1), "characterRank": float64(99)},
+			map[string]any{"characterId": float64(2), "characterRank": float64(5)},
+			map[string]any{"characterId": float64(99), "characterRank": float64(1)},
+		},
 	}
 	filtered := filterDeckRecommendUserDataWithJPMaster(userData, jpMaster, store)
 	cards, _ := filtered[suite.FieldUserCards].([]any)
 	honors, _ := filtered["userHonors"].([]any)
+	areas, _ := filtered[suite.FieldUserAreas].([]any)
+	gates, _ := filtered[suite.FieldUserMysekaiGates].([]any)
+	characters, _ := filtered[suite.FieldUserCharacters].([]any)
 	if len(cards) != 1 {
 		t.Fatalf("filtered cards = %d, want 1", len(cards))
 	}
 	if len(honors) != 1 {
 		t.Fatalf("filtered honors = %d, want 1", len(honors))
+	}
+	areaItems := areas[0].(map[string]any)["areaItems"].([]any)
+	if len(areaItems) != 1 {
+		t.Fatalf("filtered area items = %d, want 1", len(areaItems))
+	}
+	if len(gates) != 1 {
+		t.Fatalf("filtered mysekai gates = %d, want 1", len(gates))
+	}
+	if len(characters) != 2 {
+		t.Fatalf("filtered characters = %d, want 2", len(characters))
+	}
+	if rank := intValueFromAny(characters[0].(map[string]any)["characterRank"]); rank != 3 {
+		t.Fatalf("clamped character rank = %d, want 3", rank)
+	}
+}
+
+func TestLoadDeckRecommendMasterDataUsesLocalWorldBloomData(t *testing.T) {
+	data, err := loadDeckRecommendMasterDataAny("worldBloomSupportDeckBonusesWL1", config.ResolvedMasterdata{}, time.Hour)
+	if err != nil {
+		t.Fatalf("load local WL1 data: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("local WL1 data should not be empty")
 	}
 }

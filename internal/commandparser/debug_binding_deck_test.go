@@ -2,7 +2,9 @@ package commandparser
 
 import (
 	"testing"
+	"time"
 
+	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
 )
 
@@ -69,6 +71,16 @@ func TestDebugFilterDeckRecommendUserCardsAndHonors(t *testing.T) {
 	}, store).([]any)
 	if len(cards) != 1 || len(honors) != 1 {
 		t.Fatalf("cards=%#v honors=%#v", cards, honors)
+	}
+}
+
+func TestSuiteDebugLoadDeckRecommendMasterDataUsesLocalWorldBloomData(t *testing.T) {
+	data, err := suiteDebugLoadDeckRecommendMasterDataAny("worldBloomSupportDeckBonusesWL1", config.ResolvedMasterdata{}, time.Hour)
+	if err != nil {
+		t.Fatalf("load local WL1 data: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("local WL1 data should not be empty")
 	}
 }
 

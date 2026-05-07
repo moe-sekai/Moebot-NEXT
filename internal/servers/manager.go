@@ -172,6 +172,20 @@ func (m *Manager) Get(region string) *Runtime {
 	return runtime
 }
 
+// GetExact returns the runtime for a concrete region without falling back when
+// the region is disabled. This is used by explicitly regional commands such as
+// /tw组卡 so they do not accidentally run against the default server.
+func (m *Manager) GetExact(region string) *Runtime {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	region = config.NormalizeRegion(region)
+	if region == "" || !config.IsValidRegion(region) {
+		return nil
+	}
+	return m.runtimes[region]
+}
+
 // ForUser returns the runtime bound to a user, falling back to default JP.
 func (m *Manager) ForUser(user *models.User) *Runtime {
 	if user == nil || user.ServerRegion == "" {
