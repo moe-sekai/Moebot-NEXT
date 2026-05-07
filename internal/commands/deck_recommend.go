@@ -215,6 +215,7 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 	var eventID, musicID int
 	bonusTargets := []int{}
 	challengeSet := false
+	wlChapterNo := 0
 	remaining := make([]string, 0, len(args))
 	fixedMode := false
 	for i, rawToken := range args {
@@ -237,6 +238,12 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 			}
 			continue
 		}
+		if mode == "event" || mode == "bonus" {
+			if chapterNo, ok := parseDeckWLChapterToken(token); ok {
+				wlChapterNo = chapterNo
+				continue
+			}
+		}
 		switch token {
 		case "多人", "协力", "multi":
 			options.LiveType = "multi"
@@ -246,11 +253,11 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 			options.LiveType = "auto"
 		case "欢乐", "cheerful":
 			options.LiveType = "cheerful"
-		case "分数", "score":
+		case "分数", "score", "pt":
 			options.Target = "score"
-		case "综合力", "power":
+		case "综合力", "综合", "总合力", "总和", "power":
 			options.Target = "power"
-		case "实效", "skill", "倍率":
+		case "实效", "skill", "倍率", "时效":
 			options.Target = "skill"
 		case "dfs":
 			options.Algorithm = "dfs"
@@ -266,23 +273,29 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 			options.SkillReferenceChooseStrategy = "average"
 		case "不换队长", "固定队长":
 			options.BestSkillAsLeader = false
-		case "easy", "ez":
+		case "bfes不变", "bf不变":
+			options.KeepAfterTrainingState = true
+		case "异队":
+			options.FilterOtherUnit = true
+		case "终章":
+			eventID = 180
+		case "easy", "ez", "简单":
 			options.Difficulty = "easy"
-		case "normal", "nm":
+		case "normal", "nm", "普通":
 			options.Difficulty = "normal"
-		case "hard", "hd":
+		case "hard", "hd", "困难":
 			options.Difficulty = "hard"
-		case "expert", "ex":
+		case "expert", "ex", "专家":
 			options.Difficulty = "expert"
-		case "master", "ma", "mas":
+		case "master", "ma", "mas", "大师":
 			options.Difficulty = "master"
-		case "append", "apd", "ap":
+		case "append", "apd", "ap", "追加":
 			options.Difficulty = "append"
-		case "满破":
+		case "满破", "满突破", "rankmax", "mastermax", "5破", "五破":
 			setAllCardConfig(options.CardConfig, func(c renderer.DeckCardConfig) renderer.DeckCardConfig { c.MasterMax = true; return c })
-		case "满技能":
+		case "满技能", "满技", "skillmax", "技能满级", "slv4":
 			setAllCardConfig(options.CardConfig, func(c renderer.DeckCardConfig) renderer.DeckCardConfig { c.SkillMax = true; return c })
-		case "已读":
+		case "已读", "剧情已读", "满剧情", "前后篇已读", "前后篇":
 			setAllCardConfig(options.CardConfig, func(c renderer.DeckCardConfig) renderer.DeckCardConfig { c.EpisodeRead = true; return c })
 		case "四星满破":
 			c := options.CardConfig["rarity_4"]
@@ -354,12 +367,23 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 		if event == nil {
 			return options, nil, nil, fmt.Errorf("找不到活动：%d", eventID)
 		}
-
+	}
+	if (mode == "event" || mode == "bonus") && event != nil {
+		var err error
+		remaining, err = applyDeckWorldBloomChapter(store, event, wlChapterNo, remaining, &options)
+		if err != nil {
+			return options, nil, nil, err
+		}
+	}
+	if mode == "event" || mode == "bonus" {
+		remaining = applyDeckSupportCharacterAlias(remaining, &options)
+	} else if mode != "challenge" {
+		remaining = applyDeckFixedCharacterAliases(remaining, &options)
 	}
 	if mode == "bonus" && len(options.TargetBonusList) == 0 {
 		return options, nil, nil, fmt.Errorf("请输入目标活动加成，例如 /加成组卡 300")
 	}
-	if musicID == 0 && len(remaining) > 0 {
+	if musicID == 0 && mode != "bonus" && len(remaining) > 0 {
 		musicID = searchMusicID(store, strings.Join(remaining, " "))
 		if musicID == 0 {
 			return options, nil, nil, fmt.Errorf("找不到曲目关键词：%s", strings.Join(remaining, " "))
@@ -880,9 +904,89 @@ func parseDeckFixedToken(token string, options *renderer.DeckRecommendOptions) e
 }
 
 func deckCharacterAlias(token string) (int, bool) {
-	aliases := map[string]int{"miku": 1, "初音": 1, "初音未来": 1, "rin": 2, "铃": 2, "len": 3, "连": 3, "luka": 4, "巡音": 4, "meiko": 5, "kaito": 6, "ichika": 7, "一歌": 7, "saki": 8, "咲希": 8, "honami": 9, "穗波": 9, "shiho": 10, "志步": 10, "minori": 11, "实乃理": 11, "haruka": 12, "遥": 12, "airi": 13, "爱莉": 13, "shizuku": 14, "雫": 14, "kohane": 15, "心羽": 15, "an": 16, "杏": 16, "akito": 17, "彰人": 17, "toya": 18, "冬弥": 18, "tsukasa": 19, "司": 19, "emu": 20, "笑梦": 20, "nene": 21, "宁宁": 21, "rui": 22, "类": 22, "kanade": 23, "奏": 23, "mafuyu": 24, "真冬": 24, "ena": 25, "绘名": 25, "mizuki": 26, "瑞希": 26}
-	id, ok := aliases[strings.ToLower(strings.TrimSpace(token))]
-	return id, ok
+	query := assets.NormalizeAlias(token)
+	if query == "" {
+		return 0, false
+	}
+	for _, entry := range assets.CharacterAliasEntries() {
+		if entry.Normalized == query {
+			return entry.CharacterID, true
+		}
+	}
+	return 0, false
+}
+
+func extractDeckCharacterAliasFromText(text string) (int, string, bool) {
+	normalized := assets.NormalizeAlias(text)
+	if normalized == "" {
+		return 0, "", false
+	}
+	for _, entry := range assets.CharacterAliasEntries() {
+		if entry.Normalized == "" {
+			continue
+		}
+		if strings.Contains(normalized, entry.Normalized) {
+			return entry.CharacterID, entry.Alias, true
+		}
+	}
+	return 0, "", false
+}
+
+func applyDeckFixedCharacterAliases(remaining []string, options *renderer.DeckRecommendOptions) []string {
+	if options == nil || len(remaining) == 0 {
+		return remaining
+	}
+	out := make([]string, 0, len(remaining))
+	seen := make(map[int]bool, len(options.FixedCharacters))
+	for _, id := range options.FixedCharacters {
+		seen[id] = true
+	}
+	for _, token := range remaining {
+		if characterID, ok := deckCharacterAlias(token); ok {
+			if !seen[characterID] {
+				options.FixedCharacters = append(options.FixedCharacters, characterID)
+				seen[characterID] = true
+			}
+			continue
+		}
+		out = append(out, token)
+	}
+	return out
+}
+
+func applyDeckSupportCharacterAlias(remaining []string, options *renderer.DeckRecommendOptions) []string {
+	if options == nil || len(remaining) == 0 || options.SupportCharacterID > 0 {
+		return remaining
+	}
+	out := make([]string, 0, len(remaining))
+	consumed := false
+	for _, token := range remaining {
+		if !consumed {
+			if characterID, ok := deckCharacterAlias(token); ok {
+				options.SupportCharacterID = characterID
+				consumed = true
+				continue
+			}
+		}
+		out = append(out, token)
+	}
+	return out
+}
+
+func parseDeckWLChapterToken(token string) (int, bool) {
+	clean := strings.TrimSpace(strings.ToLower(token))
+	clean = strings.TrimPrefix(clean, "wl")
+	clean = strings.TrimPrefix(clean, "章节")
+	clean = strings.TrimPrefix(clean, "第")
+	clean = strings.TrimSuffix(clean, "章")
+	if clean == "" {
+		return 0, false
+	}
+	value, err := strconv.Atoi(clean)
+	if err != nil || value <= 0 || value > 99 {
+		return 0, false
+	}
+	return value, true
 }
 
 func parsePrefixedID(token string, prefixes ...string) (bool, int) {
@@ -894,6 +998,99 @@ func parsePrefixedID(token string, prefixes ...string) (bool, int) {
 	}
 	return false, 0
 }
+func applyDeckWorldBloomChapter(store *masterdata.Store, event *masterdata.EventInfo, chapterNo int, remaining []string, options *renderer.DeckRecommendOptions) ([]string, error) {
+	if event == nil || options == nil {
+		return remaining, nil
+	}
+	if event.EventType != "world_bloom" {
+		if chapterNo > 0 {
+			return remaining, fmt.Errorf("活动 #%d 不是 WL 活动，无法指定章节 wl%d", event.ID, chapterNo)
+		}
+		return remaining, nil
+	}
+	chapters := store.GetWorldBlooms(event.ID)
+	if len(chapters) == 0 {
+		return remaining, fmt.Errorf("活动 #%d 缺少 WL 章节数据，无法选择章节角色", event.ID)
+	}
+	var characterID int
+	var consumed string
+	for _, token := range remaining {
+		if id, _, ok := extractDeckCharacterAliasFromText(token); ok {
+			characterID = id
+			consumed = token
+			break
+		}
+	}
+	chapter, err := resolveDeckWorldBloomChapter(event, chapters, chapterNo, characterID)
+	if err != nil {
+		return remaining, err
+	}
+	options.SupportCharacterID = chapter.GameCharacterID
+	if consumed == "" {
+		return remaining, nil
+	}
+	out := make([]string, 0, len(remaining)-1)
+	removed := false
+	for _, token := range remaining {
+		if !removed && token == consumed {
+			removed = true
+			continue
+		}
+		out = append(out, token)
+	}
+	return out, nil
+}
+
+func resolveDeckWorldBloomChapter(event *masterdata.EventInfo, chapters []masterdata.WorldBloom, chapterNo int, characterID int) (*masterdata.WorldBloom, error) {
+	if event == nil {
+		return nil, fmt.Errorf("活动不存在")
+	}
+	sorted := append([]masterdata.WorldBloom(nil), chapters...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].ChapterNo != sorted[j].ChapterNo {
+			return sorted[i].ChapterNo < sorted[j].ChapterNo
+		}
+		return sorted[i].ID < sorted[j].ID
+	})
+	if chapterNo > 0 {
+		for i := range sorted {
+			if sorted[i].ChapterNo == chapterNo {
+				return &sorted[i], nil
+			}
+		}
+		return nil, fmt.Errorf("活动 #%d 没有 WL 第 %d 章", event.ID, chapterNo)
+	}
+	if characterID > 0 {
+		for i := range sorted {
+			if sorted[i].GameCharacterID == characterID {
+				return &sorted[i], nil
+			}
+		}
+		return nil, fmt.Errorf("活动 #%d 没有 %s 的 WL 章节", event.ID, characterNameByID(characterID))
+	}
+	if len(sorted) == 1 {
+		return &sorted[0], nil
+	}
+	now := time.Now().UnixMilli()
+	for i := range sorted {
+		start := sorted[i].ChapterStartAt
+		end := sorted[i].ChapterEndAt
+		if end <= 0 {
+			end = sorted[i].AggregateAt
+		}
+		if start <= now && (end <= 0 || now <= end) {
+			return &sorted[i], nil
+		}
+	}
+	if event.StartAt > 0 && now < event.StartAt {
+		return &sorted[0], nil
+	}
+	if event.ClosedAt > 0 && now > event.ClosedAt {
+		return &sorted[len(sorted)-1], nil
+	}
+	return nil, fmt.Errorf("无法自动判断活动 #%d 的 WL 章节，请指定 wl1/wl2 或章节角色", event.ID)
+}
+
 func parseLimitToken(token string) (int, bool) {
 	raw := strings.TrimPrefix(token, "limit")
 	raw = strings.TrimSuffix(raw, "套")

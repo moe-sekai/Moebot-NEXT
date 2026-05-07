@@ -13,7 +13,21 @@ func testDeckRecommendStore() *masterdata.Store {
 	store := masterdata.NewStore()
 	now := time.Now().UnixMilli()
 	store.SetAll(&masterdata.MasterData{
-		Events: []masterdata.EventInfo{{ID: 123, Name: "测试活动", EventType: "marathon", StartAt: now - 1000, AggregateAt: now + 100000, ClosedAt: now + 200000}, {ID: 999, Name: "旧活动", EventType: "marathon", StartAt: now - 200000, AggregateAt: now - 100000, ClosedAt: now - 50000}},
+		Events: []masterdata.EventInfo{
+			{ID: 123, Name: "测试活动", EventType: "marathon", StartAt: now - 1000, AggregateAt: now + 100000, ClosedAt: now + 200000},
+			{ID: 140, Name: "WL活动", EventType: "world_bloom", StartAt: now - 500000, AggregateAt: now + 500000, ClosedAt: now + 600000},
+			{ID: 141, Name: "未来WL", EventType: "world_bloom", StartAt: now + 100000, AggregateAt: now + 900000, ClosedAt: now + 1000000},
+			{ID: 142, Name: "已结束WL", EventType: "world_bloom", StartAt: now - 1000000, AggregateAt: now - 100000, ClosedAt: now - 50000},
+			{ID: 999, Name: "旧活动", EventType: "marathon", StartAt: now - 200000, AggregateAt: now - 100000, ClosedAt: now - 50000},
+		},
+		WorldBlooms: []masterdata.WorldBloom{
+			{ID: 1, EventID: 140, GameCharacterID: 1, ChapterNo: 1, ChapterStartAt: now - 400000, ChapterEndAt: now - 300000},
+			{ID: 2, EventID: 140, GameCharacterID: 21, ChapterNo: 2, ChapterStartAt: now - 1000, ChapterEndAt: now + 100000},
+			{ID: 3, EventID: 141, GameCharacterID: 17, ChapterNo: 1, ChapterStartAt: now + 100000, ChapterEndAt: now + 200000},
+			{ID: 4, EventID: 141, GameCharacterID: 18, ChapterNo: 2, ChapterStartAt: now + 200000, ChapterEndAt: now + 300000},
+			{ID: 5, EventID: 142, GameCharacterID: 19, ChapterNo: 1, ChapterStartAt: now - 900000, ChapterEndAt: now - 800000},
+			{ID: 6, EventID: 142, GameCharacterID: 20, ChapterNo: 2, ChapterStartAt: now - 700000, ChapterEndAt: now - 600000},
+		},
 		Musics: []masterdata.MusicInfo{{ID: 456, Title: "Test Song", Pronunciation: "test song"}, {ID: 789, Title: "另一个曲目", Pronunciation: "another"}},
 	})
 	return store
@@ -30,8 +44,43 @@ func TestParseDeckRecommendArgsFixedCardsAndCharacters(t *testing.T) {
 	if got := options.FixedCards; len(got) != 2 || got[0] != 123 || got[1] != 456 {
 		t.Fatalf("fixed cards = %#v", got)
 	}
-	if got := options.FixedCharacters; len(got) != 2 || got[0] != 1 || got[1] != 7 {
+	if got := options.FixedCharacters; len(got) != 2 || got[0] != 21 || got[1] != 1 {
 		t.Fatalf("fixed characters = %#v", got)
+	}
+}
+
+func TestDeckCharacterAliasUsesLocalAliasLibrary(t *testing.T) {
+	cases := map[string]int{
+		"miku": 21,
+		"奏":    17,
+		"马":    18,
+		"葱":    21,
+		"冰":    26,
+	}
+	for input, want := range cases {
+		got, ok := deckCharacterAlias(input)
+		if !ok || got != want {
+			t.Fatalf("deckCharacterAlias(%q) = %d/%v, want %d/true", input, got, ok, want)
+		}
+	}
+}
+
+func TestParseDeckRecommendArgsEventCharacterAliasDoesNotOverrideDefaultMusic(t *testing.T) {
+	options, music, event, err := parseDeckRecommendArgs("event123 ick", testDeckRecommendStore(), "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if event == nil || event.ID != 123 {
+		t.Fatalf("event = %#v", event)
+	}
+	if options.MusicID != deckRecommendDefaultMusicID || music == nil || music.ID != deckRecommendDefaultMusicID {
+		t.Fatalf("music = %#v / %d, want default", music, options.MusicID)
+	}
+	if options.SupportCharacterID != 1 {
+		t.Fatalf("support character = %d", options.SupportCharacterID)
+	}
+	if len(options.FixedCharacters) != 0 {
+		t.Fatalf("fixed characters = %#v", options.FixedCharacters)
 	}
 }
 
@@ -148,7 +197,7 @@ func TestParseChallengeDeckArgs(t *testing.T) {
 	if event != nil {
 		t.Fatalf("challenge event should be nil")
 	}
-	if options.ChallengeCharacterID != 1 {
+	if options.ChallengeCharacterID != 21 {
 		t.Fatalf("character = %d", options.ChallengeCharacterID)
 	}
 	if options.Algorithm != "all" {
@@ -169,6 +218,83 @@ func TestParseBonusDeckArgs(t *testing.T) {
 	}
 	if len(options.TargetBonusList) != 3 || options.TargetBonusList[0] != 250 || options.TargetBonusList[2] != 270 {
 		t.Fatalf("targets = %#v", options.TargetBonusList)
+	}
+}
+
+func TestParseDeckRecommendArgsWorldBloomChapterNumber(t *testing.T) {
+	options, _, event, err := parseDeckRecommendArgs("event140 wl1", testDeckRecommendStore(), "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if event == nil || event.ID != 140 {
+		t.Fatalf("event = %#v", event)
+	}
+	if options.SupportCharacterID != 1 {
+		t.Fatalf("support character = %d", options.SupportCharacterID)
+	}
+}
+
+func TestParseDeckRecommendArgsWorldBloomCharacterAlias(t *testing.T) {
+	options, _, event, err := parseDeckRecommendArgs("event140 miku", testDeckRecommendStore(), "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if event == nil || event.ID != 140 {
+		t.Fatalf("event = %#v", event)
+	}
+	if options.SupportCharacterID != 21 {
+		t.Fatalf("support character = %d", options.SupportCharacterID)
+	}
+}
+
+func TestParseDeckRecommendArgsWorldBloomDefaultCurrentChapter(t *testing.T) {
+	options, _, _, err := parseDeckRecommendArgs("event140", testDeckRecommendStore(), "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if options.SupportCharacterID != 21 {
+		t.Fatalf("support character = %d", options.SupportCharacterID)
+	}
+}
+
+func TestParseDeckRecommendArgsWorldBloomDefaultFutureAndPast(t *testing.T) {
+	store := testDeckRecommendStore()
+	future, _, _, err := parseDeckRecommendArgs("event141", store, "event")
+	if err != nil {
+		t.Fatalf("future parse failed: %v", err)
+	}
+	if future.SupportCharacterID != 17 {
+		t.Fatalf("future support = %d", future.SupportCharacterID)
+	}
+	past, _, _, err := parseDeckRecommendArgs("event142", store, "event")
+	if err != nil {
+		t.Fatalf("past parse failed: %v", err)
+	}
+	if past.SupportCharacterID != 20 {
+		t.Fatalf("past support = %d", past.SupportCharacterID)
+	}
+}
+
+func TestParseDeckRecommendArgsWorldBloomNonWLError(t *testing.T) {
+	_, _, _, err := parseDeckRecommendArgs("event123 wl1", testDeckRecommendStore(), "event")
+	if err == nil {
+		t.Fatal("expected non-WL chapter error")
+	}
+}
+
+func TestParseBonusDeckArgsWorldBloomSupportCharacter(t *testing.T) {
+	options, _, event, err := parseDeckRecommendArgs("event140 wl1 250", testDeckRecommendStore(), "bonus")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if event == nil || event.ID != 140 {
+		t.Fatalf("event = %#v", event)
+	}
+	if len(options.TargetBonusList) != 1 || options.TargetBonusList[0] != 250 {
+		t.Fatalf("targets = %#v", options.TargetBonusList)
+	}
+	if options.SupportCharacterID != 1 {
+		t.Fatalf("support character = %d", options.SupportCharacterID)
 	}
 }
 

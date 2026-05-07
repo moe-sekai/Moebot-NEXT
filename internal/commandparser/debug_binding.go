@@ -1314,6 +1314,9 @@ func parseSuiteDebugDeckRecommendArgs(raw string, store *masterdata.Store, mode 
 			}
 			continue
 		}
+		if suiteDebugDeckCommandToken(token) {
+			continue
+		}
 		switch token {
 		case "多人", "协力", "multi":
 			options.LiveType = "multi"
@@ -1395,7 +1398,7 @@ func parseSuiteDebugDeckRecommendArgs(raw string, store *masterdata.Store, mode 
 			if value, err := strconv.Atoi(token); err == nil {
 				switch mode {
 				case "challenge":
-					if !challengeSet {
+					if !challengeSet && value >= 1 && value <= 26 {
 						options.ChallengeCharacterID = value
 						challengeSet = true
 						continue
@@ -1430,6 +1433,9 @@ func parseSuiteDebugDeckRecommendArgs(raw string, store *masterdata.Store, mode 
 		options.TargetBonusList = bonusTargets
 		options.TargetBonus = bonusTargets[0]
 	}
+	if mode == "challenge" && options.ChallengeCharacterID == 0 {
+		return options, nil, nil, fmt.Errorf("请输入挑战角色，例如 /挑战组卡 miku")
+	}
 	if eventID == 0 && (mode == "event" || mode == "bonus") {
 		eventID = suiteDebugCurrentEventID(store)
 	}
@@ -1438,6 +1444,18 @@ func parseSuiteDebugDeckRecommendArgs(raw string, store *masterdata.Store, mode 
 	var event *masterdata.EventInfo
 	if eventID > 0 {
 		event = store.GetEvent(eventID)
+	}
+	if (mode == "event" || mode == "bonus") && event != nil {
+		var err error
+		remaining, err = applySuiteDebugDeckWorldBloomChapter(store, event, 0, remaining, &options)
+		if err != nil {
+			return options, nil, nil, err
+		}
+	}
+	if mode == "event" || mode == "bonus" {
+		remaining = applySuiteDebugDeckSupportCharacterAlias(remaining, &options)
+	} else if mode != "challenge" {
+		remaining = applySuiteDebugDeckFixedCharacterAliases(remaining, &options)
 	}
 	var music *masterdata.MusicInfo
 	if len(remaining) > 0 && musicID == 0 {
@@ -1490,6 +1508,15 @@ func suiteDebugSearchMusicID(store *masterdata.Store, keyword string) int {
 		}
 	}
 	return 0
+}
+
+func suiteDebugDeckCommandToken(token string) bool {
+	switch strings.TrimSpace(strings.ToLower(token)) {
+	case "组卡", "活动组卡", "最强组卡", "挑战组卡", "加成组卡", "控分组卡", "deck", "deck-recommend", "strongest-deck-recommend", "challenge-deck-recommend", "bonus-deck-recommend":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeSuiteDebugDeckRecommendMode(mode string) string {
@@ -1572,10 +1599,142 @@ func parseSuiteDebugPrefixedID(token string, prefixes ...string) (bool, int) {
 	return false, 0
 }
 
+func applySuiteDebugDeckFixedCharacterAliases(remaining []string, options *renderer.DeckRecommendOptions) []string {
+	if options == nil || len(remaining) == 0 {
+		return remaining
+	}
+	out := make([]string, 0, len(remaining))
+	seen := make(map[int]bool, len(options.FixedCharacters))
+	for _, id := range options.FixedCharacters {
+		seen[id] = true
+	}
+	for _, token := range remaining {
+		if characterID, ok := suiteDebugDeckCharacterAlias(token); ok {
+			if !seen[characterID] {
+				options.FixedCharacters = append(options.FixedCharacters, characterID)
+				seen[characterID] = true
+			}
+			continue
+		}
+		out = append(out, token)
+	}
+	return out
+}
+
+func applySuiteDebugDeckSupportCharacterAlias(remaining []string, options *renderer.DeckRecommendOptions) []string {
+	if options == nil || len(remaining) == 0 || options.SupportCharacterID > 0 {
+		return remaining
+	}
+	out := make([]string, 0, len(remaining))
+	consumed := false
+	for _, token := range remaining {
+		if !consumed {
+			if characterID, ok := suiteDebugDeckCharacterAlias(token); ok {
+				options.SupportCharacterID = characterID
+				consumed = true
+				continue
+			}
+		}
+		out = append(out, token)
+	}
+	return out
+}
+
+func applySuiteDebugDeckWorldBloomChapter(store *masterdata.Store, event *masterdata.EventInfo, chapterNo int, remaining []string, options *renderer.DeckRecommendOptions) ([]string, error) {
+	if event == nil || options == nil || event.EventType != "world_bloom" {
+		return remaining, nil
+	}
+	chapters := store.GetWorldBlooms(event.ID)
+	if len(chapters) == 0 {
+		return remaining, fmt.Errorf("活动 #%d 缺少 WL 章节数据，无法选择章节角色", event.ID)
+	}
+	characterID := 0
+	consumed := ""
+	for _, token := range remaining {
+		if id, ok := suiteDebugDeckCharacterAlias(token); ok {
+			characterID = id
+			consumed = token
+			break
+		}
+	}
+	chapter, err := resolveSuiteDebugDeckWorldBloomChapter(event, chapters, chapterNo, characterID)
+	if err != nil {
+		return remaining, err
+	}
+	options.SupportCharacterID = chapter.GameCharacterID
+	if consumed == "" {
+		return remaining, nil
+	}
+	out := make([]string, 0, len(remaining)-1)
+	removed := false
+	for _, token := range remaining {
+		if !removed && token == consumed {
+			removed = true
+			continue
+		}
+		out = append(out, token)
+	}
+	return out, nil
+}
+
+func resolveSuiteDebugDeckWorldBloomChapter(event *masterdata.EventInfo, chapters []masterdata.WorldBloom, chapterNo int, characterID int) (*masterdata.WorldBloom, error) {
+	sorted := append([]masterdata.WorldBloom(nil), chapters...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].ChapterNo != sorted[j].ChapterNo {
+			return sorted[i].ChapterNo < sorted[j].ChapterNo
+		}
+		return sorted[i].ID < sorted[j].ID
+	})
+	if chapterNo > 0 {
+		for i := range sorted {
+			if sorted[i].ChapterNo == chapterNo {
+				return &sorted[i], nil
+			}
+		}
+		return nil, fmt.Errorf("活动 #%d 没有 WL 第 %d 章", event.ID, chapterNo)
+	}
+	if characterID > 0 {
+		for i := range sorted {
+			if sorted[i].GameCharacterID == characterID {
+				return &sorted[i], nil
+			}
+		}
+		return nil, fmt.Errorf("活动 #%d 没有 %s 的 WL 章节", event.ID, suiteDebugCharacterName(characterID))
+	}
+	if len(sorted) == 1 {
+		return &sorted[0], nil
+	}
+	now := time.Now().UnixMilli()
+	for i := range sorted {
+		start := sorted[i].ChapterStartAt
+		end := sorted[i].ChapterEndAt
+		if end <= 0 {
+			end = sorted[i].AggregateAt
+		}
+		if start <= now && (end <= 0 || now <= end) {
+			return &sorted[i], nil
+		}
+	}
+	if event.StartAt > 0 && now < event.StartAt {
+		return &sorted[0], nil
+	}
+	if event.ClosedAt > 0 && now > event.ClosedAt {
+		return &sorted[len(sorted)-1], nil
+	}
+	return nil, fmt.Errorf("无法自动判断活动 #%d 的 WL 章节，请指定 wl1/wl2 或章节角色", event.ID)
+}
+
 func suiteDebugDeckCharacterAlias(token string) (int, bool) {
-	aliases := map[string]int{"miku": 1, "初音": 1, "初音未来": 1, "rin": 2, "铃": 2, "len": 3, "连": 3, "luka": 4, "巡音": 4, "meiko": 5, "kaito": 6, "ichika": 7, "一歌": 7, "saki": 8, "咲希": 8, "honami": 9, "穗波": 9, "shiho": 10, "志步": 10, "minori": 11, "实乃理": 11, "haruka": 12, "遥": 12, "airi": 13, "爱莉": 13, "shizuku": 14, "雫": 14, "kohane": 15, "心羽": 15, "an": 16, "杏": 16, "akito": 17, "彰人": 17, "toya": 18, "冬弥": 18, "tsukasa": 19, "司": 19, "emu": 20, "笑梦": 20, "nene": 21, "宁宁": 21, "rui": 22, "类": 22, "kanade": 23, "奏": 23, "mafuyu": 24, "真冬": 24, "ena": 25, "绘名": 25, "mizuki": 26, "瑞希": 26}
-	id, ok := aliases[strings.ToLower(strings.TrimSpace(token))]
-	return id, ok
+	query := assets.NormalizeAlias(token)
+	if query == "" {
+		return 0, false
+	}
+	for _, entry := range assets.CharacterAliasEntries() {
+		if entry.Normalized == query {
+			return entry.CharacterID, true
+		}
+	}
+	return 0, false
 }
 
 func parseSuiteDebugLimitToken(token string) (int, bool) {

@@ -54,6 +54,77 @@ func TestSuiteDebugDeckRecommendArgsExplicitDifficultyOverridesDefault(t *testin
 	}
 }
 
+func TestSuiteDebugChallengeDeckRequiresCharacter(t *testing.T) {
+	store := masterdata.NewStore()
+	_, _, _, err := parseSuiteDebugDeckRecommendArgs("挑战组卡", store, "challenge")
+	if err == nil {
+		t.Fatal("expected missing challenge character error")
+	}
+}
+
+func TestSuiteDebugChallengeDeckUsesLocalCharacterAlias(t *testing.T) {
+	store := masterdata.NewStore()
+	options, music, event, err := parseSuiteDebugDeckRecommendArgs("挑战组卡 miku", store, "challenge")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if options.ChallengeCharacterID != 21 {
+		t.Fatalf("challenge character = %d, want 21", options.ChallengeCharacterID)
+	}
+	if options.MusicID != deckRecommendDefaultMusicID || music == nil || music.ID != deckRecommendDefaultMusicID {
+		t.Fatalf("music = %#v / %d, want default", music, options.MusicID)
+	}
+	if event != nil {
+		t.Fatalf("event = %#v, want nil", event)
+	}
+}
+
+func TestSuiteDebugEventDeckCharacterAliasDoesNotOverrideDefaultMusic(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{Events: []masterdata.EventInfo{{ID: 202, Name: "测试活动", EventType: "marathon"}}})
+	options, music, event, err := parseSuiteDebugDeckRecommendArgs("活动组卡 202 ick", store, "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if event == nil || event.ID != 202 {
+		t.Fatalf("event = %#v", event)
+	}
+	if options.MusicID != deckRecommendDefaultMusicID || music == nil || music.ID != deckRecommendDefaultMusicID {
+		t.Fatalf("music = %#v / %d, want default", music, options.MusicID)
+	}
+	if options.SupportCharacterID != 1 {
+		t.Fatalf("support character = %d", options.SupportCharacterID)
+	}
+	if len(options.FixedCharacters) != 0 {
+		t.Fatalf("fixed characters = %#v", options.FixedCharacters)
+	}
+}
+
+func TestSuiteDebugEventDeckWorldBloomAliasSetsSupportCharacter(t *testing.T) {
+	store := masterdata.NewStore()
+	now := time.Now().UnixMilli()
+	store.SetAll(&masterdata.MasterData{
+		Events:      []masterdata.EventInfo{{ID: 202, Name: "WL3", EventType: "world_bloom", StartAt: now - 1000, AggregateAt: now + 1000, ClosedAt: now + 2000}},
+		WorldBlooms: []masterdata.WorldBloom{{ID: 1, EventID: 202, GameCharacterID: 1, ChapterNo: 1, ChapterStartAt: now - 1000, ChapterEndAt: now + 1000}},
+	})
+	options, music, event, err := parseSuiteDebugDeckRecommendArgs("活动组卡 202 ick", store, "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if event == nil || event.ID != 202 {
+		t.Fatalf("event = %#v", event)
+	}
+	if options.SupportCharacterID != 1 {
+		t.Fatalf("support character = %d", options.SupportCharacterID)
+	}
+	if len(options.FixedCharacters) != 0 {
+		t.Fatalf("fixed characters = %#v", options.FixedCharacters)
+	}
+	if options.MusicID != deckRecommendDefaultMusicID || music == nil || music.ID != deckRecommendDefaultMusicID {
+		t.Fatalf("music = %#v / %d, want default", music, options.MusicID)
+	}
+}
+
 func TestDebugFilterDeckRecommendUserCardsAndHonors(t *testing.T) {
 	store := masterdata.NewStore()
 	store.SetAll(&masterdata.MasterData{

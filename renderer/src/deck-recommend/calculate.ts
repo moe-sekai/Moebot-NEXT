@@ -153,6 +153,7 @@ function logDeckRecommendInputSummary(provider: MemoryDeckRecommendDataProvider,
 			limit: options.limit,
 			bestSkillAsLeader: options.bestSkillAsLeader,
 			filterOtherUnit: options.filterOtherUnit,
+			supportCharacterId: options.supportCharacterId,
 			skillReferenceChooseStrategy: options.skillReferenceChooseStrategy,
 		},
 		musicMeta: musicMeta ? {
@@ -207,7 +208,7 @@ async function recommendByMode(mode: string, provider: MemoryDeckRecommendDataPr
 		const recommender = new EventBonusDeckRecommend(provider);
 		const all: any[] = [];
 		for (const target of targets) {
-			all.push(...await recommender.recommendEventBonusDeck(eventID, target, liveType, { musicMeta: config.musicMeta, member: config.member, cardConfig: config.cardConfig, specificBonuses: [target], timeoutMs: config.timeoutMs, filterOtherUnit: config.filterOtherUnit }));
+			all.push(...await recommender.recommendEventBonusDeck(eventID, target, liveType, { musicMeta: config.musicMeta, member: config.member, cardConfig: config.cardConfig, specificBonuses: [target], timeoutMs: config.timeoutMs, filterOtherUnit: config.filterOtherUnit }, Number(req.options.supportCharacterId || 0)));
 		}
 		return all;
 	}

@@ -27,6 +27,7 @@ type Store struct {
 	eventDeckBonuses                  []EventDeckBonus
 	eventCards                        []EventCard
 	eventMusics                       []EventMusic
+	worldBlooms                       []WorldBloom
 	virtualLives                      []VirtualLive
 	gachas                            []GachaInfo
 	cardSupplies                      []CardSupplyInfo
@@ -61,6 +62,7 @@ type Store struct {
 	bonusesByEventID         map[int][]EventDeckBonus
 	eventCardsByEventID      map[int][]EventCard
 	eventMusicsByEventID     map[int][]EventMusic
+	worldBloomsByEventID     map[int][]WorldBloom
 	unitsByCharacterID       map[int][]GameCharacterUnit
 	vocalsByMusicID          map[int][]MusicVocal
 	challengeRewardsByCharID map[int][]ChallengeLiveHighScoreReward
@@ -94,6 +96,7 @@ func (s *Store) initMaps() {
 	s.bonusesByEventID = make(map[int][]EventDeckBonus)
 	s.eventCardsByEventID = make(map[int][]EventCard)
 	s.eventMusicsByEventID = make(map[int][]EventMusic)
+	s.worldBloomsByEventID = make(map[int][]WorldBloom)
 	s.unitsByCharacterID = make(map[int][]GameCharacterUnit)
 	s.vocalsByMusicID = make(map[int][]MusicVocal)
 	s.challengeRewardsByCharID = make(map[int][]ChallengeLiveHighScoreReward)
@@ -118,12 +121,15 @@ func (s *Store) SetAll(data *MasterData) {
 	s.eventDeckBonuses = data.EventDeckBonuses
 	s.eventCards = data.EventCards
 	s.eventMusics = data.EventMusics
+	s.worldBlooms = data.WorldBlooms
 	s.virtualLives = data.VirtualLives
 	s.gachas = data.Gachas
 	s.cardSupplies = data.CardSupplies
 	s.skills = data.Skills
 	s.characterUnits = data.CharacterUnits
 	s.honors = data.Honors
+	s.bondsHonors = data.BondsHonors
+	s.bondsHonorWords = data.BondsHonorWords
 	s.musicVocals = data.MusicVocals
 	s.challengeLiveHighScoreRewards = data.ChallengeLiveHighScoreRewards
 	s.resourceBoxes = data.ResourceBoxes
@@ -192,6 +198,9 @@ func (s *Store) buildIndexes() {
 	}
 	for _, m := range s.eventMusics {
 		s.eventMusicsByEventID[m.EventID] = append(s.eventMusicsByEventID[m.EventID], m)
+	}
+	for _, b := range s.worldBlooms {
+		s.worldBloomsByEventID[b.EventID] = append(s.worldBloomsByEventID[b.EventID], b)
 	}
 	for _, u := range s.characterUnits {
 		s.unitsByCharacterID[u.GameCharacterID] = append(s.unitsByCharacterID[u.GameCharacterID], u)
@@ -334,6 +343,13 @@ func (s *Store) GetEventMusics(eventID int) []EventMusic {
 	return append([]EventMusic(nil), s.eventMusicsByEventID[eventID]...)
 }
 
+// GetWorldBlooms returns all World Link chapters for an event ID.
+func (s *Store) GetWorldBlooms(eventID int) []WorldBloom {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]WorldBloom(nil), s.worldBloomsByEventID[eventID]...)
+}
+
 // GetCharacterUnits returns all unit memberships for a character ID.
 func (s *Store) GetCharacterUnits(characterID int) []GameCharacterUnit {
 	s.mu.RLock()
@@ -404,6 +420,15 @@ func (s *Store) AllEvents() []EventInfo {
 	defer s.mu.RUnlock()
 	out := make([]EventInfo, len(s.events))
 	copy(out, s.events)
+	return out
+}
+
+// AllWorldBlooms returns a copy of the full World Link chapter list.
+func (s *Store) AllWorldBlooms() []WorldBloom {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]WorldBloom, len(s.worldBlooms))
+	copy(out, s.worldBlooms)
 	return out
 }
 

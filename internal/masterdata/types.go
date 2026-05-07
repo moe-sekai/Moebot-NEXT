@@ -17,20 +17,23 @@ import (
 // MasterData is the aggregate container for a full masterdata snapshot.
 // It is passed to Store.SetAll to atomically swap all data.
 type MasterData struct {
-	Cards             []CardInfo          `json:"cards"`
-	Musics            []MusicInfo         `json:"musics"`
-	MusicDifficulties []MusicDifficulty   `json:"musicDifficulties"`
-	Events            []EventInfo         `json:"events"`
-	EventDeckBonuses  []EventDeckBonus    `json:"eventDeckBonuses"`
-	EventCards        []EventCard         `json:"eventCards"`
-	EventMusics       []EventMusic        `json:"eventMusics"`
-	VirtualLives      []VirtualLive       `json:"virtualLives"`
-	Gachas            []GachaInfo         `json:"gachas"`
-	CardSupplies      []CardSupplyInfo    `json:"cardSupplies"`
-	Skills            []SkillInfo         `json:"skills"`
-	CharacterUnits    []GameCharacterUnit `json:"gameCharacterUnits"`
-	Honors                            []HonorInfo                       `json:"honors"`
-	MusicVocals                       []MusicVocal                      `json:"musicVocals"`
+	Cards                             []CardInfo                         `json:"cards"`
+	Musics                            []MusicInfo                        `json:"musics"`
+	MusicDifficulties                 []MusicDifficulty                  `json:"musicDifficulties"`
+	Events                            []EventInfo                        `json:"events"`
+	EventDeckBonuses                  []EventDeckBonus                   `json:"eventDeckBonuses"`
+	EventCards                        []EventCard                        `json:"eventCards"`
+	EventMusics                       []EventMusic                       `json:"eventMusics"`
+	WorldBlooms                       []WorldBloom                       `json:"worldBlooms"`
+	VirtualLives                      []VirtualLive                      `json:"virtualLives"`
+	Gachas                            []GachaInfo                        `json:"gachas"`
+	CardSupplies                      []CardSupplyInfo                   `json:"cardSupplies"`
+	Skills                            []SkillInfo                        `json:"skills"`
+	CharacterUnits                    []GameCharacterUnit                `json:"gameCharacterUnits"`
+	Honors                            []HonorInfo                        `json:"honors"`
+	BondsHonors                       []BondsHonorInfo                   `json:"bondsHonors"`
+	BondsHonorWords                   []BondsHonorWordInfo               `json:"bondsHonorWords"`
+	MusicVocals                       []MusicVocal                       `json:"musicVocals"`
 	ChallengeLiveHighScoreRewards     []ChallengeLiveHighScoreReward     `json:"challengeLiveHighScoreRewards"`
 	ResourceBoxes                     []ResourceBox                      `json:"resourceBoxes"`
 	ResourceBoxDetails                []ResourceBoxDetail                `json:"resourceBoxDetails"`
@@ -303,6 +306,19 @@ type EventMusic struct {
 	Seq     int `json:"seq"`
 }
 
+// WorldBloom represents a World Link chapter row.
+type WorldBloom struct {
+	ID                    int    `json:"id"`
+	EventID               int    `json:"eventId"`
+	GameCharacterID       int    `json:"gameCharacterId"`
+	WorldBloomChapterType string `json:"worldBloomChapterType"`
+	ChapterNo             int    `json:"chapterNo"`
+	ChapterStartAt        int64  `json:"chapterStartAt"`
+	AggregateAt           int64  `json:"aggregateAt"`
+	ChapterEndAt          int64  `json:"chapterEndAt"`
+	IsSupplemental        bool   `json:"isSupplemental"`
+}
+
 // ----------------------------- Virtual Live types ---------------------------
 
 // VirtualLive represents an in-game virtual live / after live schedule group.
@@ -436,12 +452,12 @@ type ResourceBox struct {
 
 // ResourceBoxDetail is a concrete resource in an expanded resource box.
 type ResourceBoxDetail struct {
-	ResourceBoxPurpose  string `json:"resourceBoxPurpose"`
-	ResourceBoxID       int    `json:"resourceBoxId"`
-	Seq                 int    `json:"seq"`
-	ResourceType        string `json:"resourceType"`
-	ResourceID          int    `json:"resourceId"`
-	ResourceQuantity    int    `json:"resourceQuantity"`
+	ResourceBoxPurpose string `json:"resourceBoxPurpose"`
+	ResourceBoxID      int    `json:"resourceBoxId"`
+	Seq                int    `json:"seq"`
+	ResourceType       string `json:"resourceType"`
+	ResourceID         int    `json:"resourceId"`
+	ResourceQuantity   int    `json:"resourceQuantity"`
 }
 
 // CharacterMissionV2ParameterGroup defines requirement/exp rows for character missions.
@@ -486,14 +502,14 @@ type HonorLevel struct {
 
 // BondsHonorInfo represents a kizuna / bonds profile title.
 type BondsHonorInfo struct {
-	ID                   int                `json:"id"`
-	Seq                  int                `json:"seq"`
-	BondsGroupID         int                `json:"bondsGroupId"`
-	GameCharacterUnitID1 int                `json:"gameCharacterUnitId1"`
-	GameCharacterUnitID2 int                `json:"gameCharacterUnitId2"`
-	HonorRarity          string             `json:"honorRarity"`
-	Name                 string             `json:"name"`
-	Levels               []BondsHonorLevel  `json:"levels"`
+	ID                   int               `json:"id"`
+	Seq                  int               `json:"seq"`
+	BondsGroupID         int               `json:"bondsGroupId"`
+	GameCharacterUnitID1 int               `json:"gameCharacterUnitId1"`
+	GameCharacterUnitID2 int               `json:"gameCharacterUnitId2"`
+	HonorRarity          string            `json:"honorRarity"`
+	Name                 string            `json:"name"`
+	Levels               []BondsHonorLevel `json:"levels"`
 }
 
 type BondsHonorLevel struct {
