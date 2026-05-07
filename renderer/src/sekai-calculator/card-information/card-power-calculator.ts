@@ -3,7 +3,7 @@ import { type UserCard } from '../user-data/user-card'
 import { type Card } from '../master-data/card'
 import { type CardEpisode } from '../master-data/card-episode'
 import { type MasterLesson } from '../master-data/master-lesson'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import { type AreaItemLevel } from '../master-data/area-item-level'
 import { type CharacterRank } from '../master-data/character-rank'
 import { type UserCharacter } from '../user-data/user-character'
@@ -110,7 +110,8 @@ export class CardPowerCalculator {
       .filter(it => it.cardLevel === userCard.level)
     const params = ['param1', 'param2', 'param3']// cardParameterType的枚举
     params.forEach((param, i) => {
-      ret[i] = findOrThrow(cardParameters, it => it.cardParameterType === param).power
+      ret[i] = findOrThrowBy(cardParameters, it => it.cardParameterType === param,
+        `cardParameters cardId=${card.id} level=${userCard.level} type=${param}`).power
     })
     // 觉醒
     if (userCard.specialTrainingStatus === 'done') {
@@ -123,7 +124,8 @@ export class CardPowerCalculator {
       ? []// 有些卡没剧情
       : userCard.episodes.filter(it => it.scenarioStatus === 'already_read')
         .map(it =>
-          findOrThrow(cardEpisodes, e => e.id === it.cardEpisodeId))
+          findOrThrowBy(cardEpisodes, e => e.id === it.cardEpisodeId,
+            `cardEpisodes id=${it.cardEpisodeId} cardId=${card.id}`))
     for (const episode of episodes) {
       ret[0] += episode.power1BonusFixed
       ret[1] += episode.power2BonusFixed
@@ -140,7 +142,8 @@ export class CardPowerCalculator {
     // 从5.1.0版本开始，画布加成直接算进基础综合力中
     if (hasMysekaiCanvas) {
       const cardMysekaiCanvasBonuses = await this.dataProvider.getMasterData<CardMysekaiCanvasBonus>('cardMysekaiCanvasBonuses')
-      const canvasBonus = findOrThrow(cardMysekaiCanvasBonuses, it => it.cardRarityType === card.cardRarityType)
+      const canvasBonus = findOrThrowBy(cardMysekaiCanvasBonuses, it => it.cardRarityType === card.cardRarityType,
+        `cardMysekaiCanvasBonuses rarity=${card.cardRarityType}`)
       ret[0] += canvasBonus.power1BonusFixed
       ret[1] += canvasBonus.power2BonusFixed
       ret[2] += canvasBonus.power3BonusFixed
@@ -199,10 +202,12 @@ export class CardPowerCalculator {
     const userCharacters = await this.dataProvider.getUserData<UserCharacter[]>('userCharacters')
 
     const userCharacter =
-      findOrThrow(userCharacters, it => it.characterId === characterId)
-    const characterRank = findOrThrow(characterRanks,
+      findOrThrowBy(userCharacters, it => it.characterId === characterId,
+        `userCharacters characterId=${characterId}`)
+    const characterRank = findOrThrowBy(characterRanks,
       it => it.characterId === userCharacter.characterId &&
-        it.characterRank === userCharacter.characterRank)
+        it.characterRank === userCharacter.characterRank,
+      `characterRanks characterId=${userCharacter.characterId} rank=${userCharacter.characterRank}`)
     const rates = [
       characterRank.power1BonusRate,
       characterRank.power2BonusRate,

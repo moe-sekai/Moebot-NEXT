@@ -5,7 +5,7 @@ import {
 } from '../user-data/user-mysekai-fixture-game-character-performance-bonus'
 import { type MysekaiGateLevel } from '../master-data/mysekai-gate-level'
 import { type UserMysekaiGate } from '../user-data/user-mysekai-gate'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import { type MysekaiGate } from '../master-data/mysekai-gate'
 
 export class MysekaiService {
@@ -49,9 +49,11 @@ export class MysekaiService {
     const mysekaiGateLevels =
         await this.dataProvider.getMasterData<MysekaiGateLevel>('mysekaiGateLevels')
     return userMysekaiGates.map(it => {
-      const gate = findOrThrow(mysekaiGates, g => g.id === it.mysekaiGateId)
-      const level = findOrThrow(mysekaiGateLevels,
-        l => l.mysekaiGateId === it.mysekaiGateId && l.level === it.mysekaiGateLevel)
+      const gate = findOrThrowBy(mysekaiGates, g => g.id === it.mysekaiGateId,
+        `mysekaiGates id=${it.mysekaiGateId}`)
+      const level = findOrThrowBy(mysekaiGateLevels,
+        l => l.mysekaiGateId === it.mysekaiGateId && l.level === it.mysekaiGateLevel,
+        `mysekaiGateLevels gateId=${it.mysekaiGateId} level=${it.mysekaiGateLevel}`)
       return {
         unit: gate.unit,
         powerBonusRate: level.powerBonusRate

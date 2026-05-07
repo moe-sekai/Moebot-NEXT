@@ -7,7 +7,7 @@ import {
 } from '../deck-information/deck-calculator'
 import { type UserCard } from '../user-data/user-card'
 import { type MusicMeta } from '../common/music-meta'
-import { duplicateObj, findOrThrow } from '../util/collection-util'
+import { duplicateObj, findOrThrowBy } from '../util/collection-util'
 import { type ScoreFunction } from '../deck-recommend/base-deck-recommend'
 import { EventService } from '../event-point/event-service'
 
@@ -27,7 +27,8 @@ export class LiveCalculator {
    */
   public async getMusicMeta (musicId: number, musicDiff: string): Promise<MusicMeta> {
     const musicMetas = await this.dataProvider.getMusicMeta()
-    return findOrThrow(musicMetas, it => it.music_id === musicId && it.difficulty === musicDiff)
+    return findOrThrowBy(musicMetas, it => it.music_id === musicId && it.difficulty === musicDiff,
+      `musicMetas musicId=${musicId} difficulty=${musicDiff}`)
   }
 
   /**
@@ -196,7 +197,8 @@ export class LiveCalculator {
     liveSkills: LiveSkill[] | undefined, skillDetails: DeckCardDetail[]
   ): DeckCardSkillDetail[] | undefined {
     if (liveSkills === undefined) return undefined
-    const skills = liveSkills.map(liveSkill => findOrThrow(skillDetails, it => it.cardId === liveSkill.cardId).skill)
+    const skills = liveSkills.map(liveSkill => findOrThrowBy(skillDetails, it => it.cardId === liveSkill.cardId,
+      `liveSkill cardId=${liveSkill.cardId}`).skill)
     const ret: DeckCardSkillDetail[] = []
     // 因为可能会有技能空缺，先将无任何效果的技能放入6个位置
     for (let i = 0; i < 6; ++i) {

@@ -1,6 +1,6 @@
 import { type Card } from '../master-data/card'
 import { type GameCharacter } from '../master-data/game-character'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import { type UserCard } from '../user-data/user-card'
 import { type CardRarity } from '../master-data/card-rarity'
 import { type CardConfig } from './card-calculator'
@@ -20,7 +20,8 @@ export class CardService {
     // 组合（V家支援组合、角色原始组合）
     const units = [] as string[]
     if (card.supportUnit !== 'none') units.push(card.supportUnit)
-    units.push(findOrThrow(gameCharacters, it => it.id === card.characterId).unit)
+    units.push(findOrThrowBy(gameCharacters, it => it.id === card.characterId,
+      `gameCharacters id=${card.characterId} cardId=${card.id}`).unit)
     return units
   }
 
@@ -47,7 +48,8 @@ export class CardService {
     if (!rankMax && !episodeRead && !masterMax && !skillMax) return userCard
 
     const cardRarities = await this.dataProvider.getMasterData<CardRarity>('cardRarities')
-    const cardRarity = findOrThrow(cardRarities, it => it.cardRarityType === card.cardRarityType)
+    const cardRarity = findOrThrowBy(cardRarities, it => it.cardRarityType === card.cardRarityType,
+      `cardRarities type=${card.cardRarityType} cardId=${card.id}`)
     // 深拷贝一下原始对象，避免污染
     const ret = JSON.parse(JSON.stringify(userCard)) as UserCard
 

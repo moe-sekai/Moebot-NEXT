@@ -46,8 +46,6 @@ var masterFiles = []struct {
 	{"skills", func(d *MasterData) any { return &d.Skills }},
 	{"gameCharacterUnits", func(d *MasterData) any { return &d.CharacterUnits }},
 	{"honors", func(d *MasterData) any { return &d.Honors }},
-	{"bondsHonors", func(d *MasterData) any { return &d.BondsHonors }},
-	{"bondsHonorWords", func(d *MasterData) any { return &d.BondsHonorWords }},
 	{"musicVocals", func(d *MasterData) any { return &d.MusicVocals }},
 	{"challengeLiveHighScoreRewards", func(d *MasterData) any { return &d.ChallengeLiveHighScoreRewards }},
 	{"resourceBoxes", func(d *MasterData) any { return &d.ResourceBoxes }},

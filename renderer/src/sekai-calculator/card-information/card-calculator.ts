@@ -1,6 +1,6 @@
 import { type DataProvider } from '../data-provider/data-provider'
 import { type Card } from '../master-data/card'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import { CardPowerCalculator } from './card-power-calculator'
 import { CardSkillCalculator } from './card-skill-calculator'
 import { type UserCard } from '../user-data/user-card'
@@ -53,7 +53,8 @@ export class CardCalculator {
   ): Promise<CardDetail | undefined> {
     const { eventId = 0 } = eventConfig
     const cards = await this.dataProvider.getMasterData<Card>('cards')
-    const card = findOrThrow(cards, it => it.id === userCard.cardId)
+    const card = findOrThrowBy(cards, it => it.id === userCard.cardId,
+      `cards id=${userCard.cardId}`)
 
     // 单独卡配置覆盖稀有度卡配置
     let cfg: CardConfig | undefined

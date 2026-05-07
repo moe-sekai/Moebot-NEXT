@@ -124,8 +124,6 @@ func (s *Store) SetAll(data *MasterData) {
 	s.skills = data.Skills
 	s.characterUnits = data.CharacterUnits
 	s.honors = data.Honors
-	s.bondsHonors = data.BondsHonors
-	s.bondsHonorWords = data.BondsHonorWords
 	s.musicVocals = data.MusicVocals
 	s.challengeLiveHighScoreRewards = data.ChallengeLiveHighScoreRewards
 	s.resourceBoxes = data.ResourceBoxes

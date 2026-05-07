@@ -1,5 +1,5 @@
 import { type DataProvider } from '../data-provider/data-provider'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import { BaseDeckRecommend, type DeckRecommendConfig, type RecommendDeck } from './base-deck-recommend'
 import { type UserCard } from '../user-data/user-card'
 import { type Card } from '../master-data/card'
@@ -24,7 +24,8 @@ export class ChallengeLiveDeckRecommend {
     const userCards = await this.dataProvider.getUserData<UserCard[]>('userCards')
     const cards = await this.dataProvider.getMasterData<Card>('cards')
     const characterCards = userCards
-      .filter(userCard => findOrThrow(cards, it => it.id === userCard.cardId).characterId === characterId)
+      .filter(userCard => findOrThrowBy(cards, it => it.id === userCard.cardId,
+        `cards id=${userCard.cardId}`).characterId === characterId)
     return await this.baseRecommend.recommendHighScoreDeck(characterCards,
       LiveCalculator.getLiveScoreFunction(LiveType.SOLO), config, LiveType.CHALLENGE)
   }

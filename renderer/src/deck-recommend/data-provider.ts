@@ -60,6 +60,12 @@ export const PRELOAD_MASTER_KEYS = [
 	"worldBloomSupportDeckUnitEventLimitedBonuses",
 ];
 
+export const MASTER_DATA_BASES: Record<string, string> = {
+	jp: "https://sk.exmeaning.com/master",
+	cn: "https://sk-cn.exmeaning.com/master",
+	tw: "https://storage.sekai.best/sekai-tc-assets/master-data",
+};
+
 interface CardParameterEntry {
 	id: number;
 	cardId: number;
@@ -109,6 +115,22 @@ export function transformCards(cards: CardWithParameters[]): CardWithParameters[
 	});
 }
 
+function normalizeMasterData(data: MasterDataMap): MasterDataMap {
+	const normalized: MasterDataMap = { ...(data ?? {}) };
+	const rawEventDeckBonuses = normalized["eventDeckBonuses"];
+	if (Array.isArray(rawEventDeckBonuses)) {
+		normalized["eventDeckBonuses"] = rawEventDeckBonuses.map((item) => {
+			if (!item || typeof item !== "object") return item;
+			const entry = { ...(item as Record<string, unknown>) };
+			if (entry.gameCharacterUnitId === 0) {
+				delete entry.gameCharacterUnitId;
+			}
+			return entry;
+		});
+	}
+	return normalized;
+}
+
 export class MemoryDeckRecommendDataProvider implements DataProvider {
 	private readonly userData: UserDataMap;
 	private readonly masterData: MasterDataMap;
@@ -116,7 +138,7 @@ export class MemoryDeckRecommendDataProvider implements DataProvider {
 
 	constructor(input: { userData?: UserDataMap; masterData?: MasterDataMap; musicMetas?: MusicMeta[] }) {
 		this.userData = applyDefaultUserDataKeys(input.userData ?? {});
-		this.masterData = input.masterData ?? {};
+		this.masterData = normalizeMasterData(input.masterData ?? {});
 		this.musicMetas = input.musicMetas ?? [];
 	}
 
@@ -124,6 +146,11 @@ export class MemoryDeckRecommendDataProvider implements DataProvider {
 		let data = this.masterData[key] ?? [];
 		if (key === "cards") data = transformCards(data as CardWithParameters[]) as unknown[];
 		return data as T[];
+	}
+
+	getMasterDataSyncLength(key: string): number {
+		const data = this.masterData[key];
+		return Array.isArray(data) ? data.length : -1;
 	}
 
 	async getUserDataAll(): Promise<Record<string, any>> {

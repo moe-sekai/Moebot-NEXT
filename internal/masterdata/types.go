@@ -17,22 +17,20 @@ import (
 // MasterData is the aggregate container for a full masterdata snapshot.
 // It is passed to Store.SetAll to atomically swap all data.
 type MasterData struct {
-	Cards                             []CardInfo                         `json:"cards"`
-	Musics                            []MusicInfo                        `json:"musics"`
-	MusicDifficulties                 []MusicDifficulty                  `json:"musicDifficulties"`
-	Events                            []EventInfo                        `json:"events"`
-	EventDeckBonuses                  []EventDeckBonus                   `json:"eventDeckBonuses"`
-	EventCards                        []EventCard                        `json:"eventCards"`
-	EventMusics                       []EventMusic                       `json:"eventMusics"`
-	VirtualLives                      []VirtualLive                      `json:"virtualLives"`
-	Gachas                            []GachaInfo                        `json:"gachas"`
-	CardSupplies                      []CardSupplyInfo                   `json:"cardSupplies"`
-	Skills                            []SkillInfo                        `json:"skills"`
-	CharacterUnits                    []GameCharacterUnit                `json:"gameCharacterUnits"`
-	Honors                            []HonorInfo                        `json:"honors"`
-	BondsHonors                       []BondsHonorInfo                   `json:"bondsHonors"`
-	BondsHonorWords                   []BondsHonorWordInfo               `json:"bondsHonorWords"`
-	MusicVocals                       []MusicVocal                       `json:"musicVocals"`
+	Cards             []CardInfo          `json:"cards"`
+	Musics            []MusicInfo         `json:"musics"`
+	MusicDifficulties []MusicDifficulty   `json:"musicDifficulties"`
+	Events            []EventInfo         `json:"events"`
+	EventDeckBonuses  []EventDeckBonus    `json:"eventDeckBonuses"`
+	EventCards        []EventCard         `json:"eventCards"`
+	EventMusics       []EventMusic        `json:"eventMusics"`
+	VirtualLives      []VirtualLive       `json:"virtualLives"`
+	Gachas            []GachaInfo         `json:"gachas"`
+	CardSupplies      []CardSupplyInfo    `json:"cardSupplies"`
+	Skills            []SkillInfo         `json:"skills"`
+	CharacterUnits    []GameCharacterUnit `json:"gameCharacterUnits"`
+	Honors                            []HonorInfo                       `json:"honors"`
+	MusicVocals                       []MusicVocal                      `json:"musicVocals"`
 	ChallengeLiveHighScoreRewards     []ChallengeLiveHighScoreReward     `json:"challengeLiveHighScoreRewards"`
 	ResourceBoxes                     []ResourceBox                      `json:"resourceBoxes"`
 	ResourceBoxDetails                []ResourceBoxDetail                `json:"resourceBoxDetails"`
@@ -166,21 +164,27 @@ type MusicDifficulty struct {
 	TotalNoteCount  int    `json:"totalNoteCount"`
 }
 
-// MusicVocal represents a vocal version of a song.
-type MusicVocal struct {
-	ID              int                   `json:"id"`
-	MusicID         int                   `json:"musicId"`
-	Caption         string                `json:"caption"`
-	AssetbundleName string                `json:"assetbundleName"`
-	MusicVocalType  string                `json:"musicVocalType"`
-	Characters      []MusicVocalCharacter `json:"characters"`
+// MusicVocalCharacter represents one singer/character entry inside a vocal version.
+type MusicVocalCharacter struct {
+	ID            int    `json:"id"`
+	MusicID       int    `json:"musicId"`
+	MusicVocalID  int    `json:"musicVocalId"`
+	CharacterType string `json:"characterType"`
+	CharacterID   int    `json:"characterId"`
+	Seq           int    `json:"seq"`
 }
 
-// MusicVocalCharacter links a vocal version to its singing character.
-type MusicVocalCharacter struct {
-	CharacterID   int    `json:"characterId"`
-	CharacterType string `json:"characterType"`
-	Seq           int    `json:"seq"`
+// MusicVocal represents a vocal version of a song.
+type MusicVocal struct {
+	ID                 int                   `json:"id"`
+	MusicID            int                   `json:"musicId"`
+	MusicVocalType     string                `json:"musicVocalType"`
+	Seq                int                   `json:"seq"`
+	ReleaseConditionID int                   `json:"releaseConditionId"`
+	Caption            string                `json:"caption"`
+	Characters         []MusicVocalCharacter `json:"characters"`
+	AssetbundleName    string                `json:"assetbundleName"`
+	ArchivePublishedAt int64                 `json:"archivePublishedAt"`
 }
 
 func parseCardParameters(raw json.RawMessage, cardID int) ([]CardParameter, error) {
@@ -283,9 +287,12 @@ type EventDeckBonus struct {
 
 // EventCard links an event to its featured cards.
 type EventCard struct {
-	ID      int `json:"id"`
-	EventID int `json:"eventId"`
-	CardID  int `json:"cardId"`
+	ID                 int     `json:"id"`
+	EventID            int     `json:"eventId"`
+	CardID             int     `json:"cardId"`
+	BonusRate          float64 `json:"bonusRate"`
+	LeaderBonusRate    float64 `json:"leaderBonusRate"`
+	IsDisplayCardStory bool    `json:"isDisplayCardStory"`
 }
 
 // EventMusic links an event to its written / associated music.
@@ -429,12 +436,12 @@ type ResourceBox struct {
 
 // ResourceBoxDetail is a concrete resource in an expanded resource box.
 type ResourceBoxDetail struct {
-	ResourceBoxPurpose string `json:"resourceBoxPurpose"`
-	ResourceBoxID      int    `json:"resourceBoxId"`
-	Seq                int    `json:"seq"`
-	ResourceType       string `json:"resourceType"`
-	ResourceID         int    `json:"resourceId"`
-	ResourceQuantity   int    `json:"resourceQuantity"`
+	ResourceBoxPurpose  string `json:"resourceBoxPurpose"`
+	ResourceBoxID       int    `json:"resourceBoxId"`
+	Seq                 int    `json:"seq"`
+	ResourceType        string `json:"resourceType"`
+	ResourceID          int    `json:"resourceId"`
+	ResourceQuantity    int    `json:"resourceQuantity"`
 }
 
 // CharacterMissionV2ParameterGroup defines requirement/exp rows for character missions.
@@ -479,14 +486,14 @@ type HonorLevel struct {
 
 // BondsHonorInfo represents a kizuna / bonds profile title.
 type BondsHonorInfo struct {
-	ID                   int               `json:"id"`
-	Seq                  int               `json:"seq"`
-	BondsGroupID         int               `json:"bondsGroupId"`
-	GameCharacterUnitID1 int               `json:"gameCharacterUnitId1"`
-	GameCharacterUnitID2 int               `json:"gameCharacterUnitId2"`
-	HonorRarity          string            `json:"honorRarity"`
-	Name                 string            `json:"name"`
-	Levels               []BondsHonorLevel `json:"levels"`
+	ID                   int                `json:"id"`
+	Seq                  int                `json:"seq"`
+	BondsGroupID         int                `json:"bondsGroupId"`
+	GameCharacterUnitID1 int                `json:"gameCharacterUnitId1"`
+	GameCharacterUnitID2 int                `json:"gameCharacterUnitId2"`
+	HonorRarity          string             `json:"honorRarity"`
+	Name                 string             `json:"name"`
+	Levels               []BondsHonorLevel  `json:"levels"`
 }
 
 type BondsHonorLevel struct {

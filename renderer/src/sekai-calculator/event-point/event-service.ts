@@ -1,6 +1,6 @@
 import { type DataProvider } from '../data-provider/data-provider'
 import { type Event } from '../master-data/event'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import { type EventDeckBonus } from '../master-data/event-deck-bonus'
 import { type GameCharacterUnit } from '../master-data/game-character-unit'
 import type { WorldBloomDifferentAttributeBonus } from '../master-data/world-bloom-different-attribute-bonus'
@@ -23,7 +23,7 @@ export class EventService {
    */
   public async getEventType (eventId: number): Promise<EventType> {
     const events = await this.dataProvider.getMasterData<Event>('events')
-    const event = findOrThrow(events, it => it.id === eventId)
+    const event = findOrThrowBy(events, it => it.id === eventId, `events id=${eventId}`)
     switch (event.eventType) {
       case 'marathon':
         return EventType.MARATHON
@@ -80,12 +80,14 @@ export class EventService {
     const bonuses = eventDeckBonuses
       .filter(it => it.eventId === eventId && it.gameCharacterUnitId !== undefined)
       .map(it =>
-        findOrThrow(gameCharacterUnits, a => a.id === it.gameCharacterUnitId))
+        findOrThrowBy(gameCharacterUnits, a => a.id === it.gameCharacterUnitId,
+          `gameCharacterUnits id=${it.gameCharacterUnitId} eventId=${eventId}`))
     // 用Map统计每个组合数量
     const map = new Map<string, number>()
     bonuses.forEach(gcu => {
       const gameCharacter =
-            findOrThrow(gameCharacters, it => it.id === gcu.gameCharacterId)
+            findOrThrowBy(gameCharacters, it => it.id === gcu.gameCharacterId,
+              `gameCharacters id=${gcu.gameCharacterId} unitId=${gcu.id}`)
       // 角色原始组合
       map.set(gameCharacter.unit, (map.get(gameCharacter.unit) ?? 0) + 1)
       // VS应援组合
@@ -171,7 +173,8 @@ export class EventService {
       return undefined
     }
     const gameCharacters = await this.dataProvider.getMasterData<GameCharacter>('gameCharacters')
-    const gameCharacter = findOrThrow(gameCharacters, it => it.id === specialCharacterId)
+    const gameCharacter = findOrThrowBy(gameCharacters, it => it.id === specialCharacterId,
+      `gameCharacters id=${specialCharacterId}`)
     return gameCharacter.unit
   }
 

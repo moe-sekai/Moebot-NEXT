@@ -9,7 +9,7 @@ import { EventService, EventType } from './event-service'
 import { type DeckDetail } from '../deck-information/deck-calculator'
 import { safeNumber } from '../util/number-util'
 import { type WorldBloomDifferentAttributeBonus } from '../master-data/world-bloom-different-attribute-bonus'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import type { CardDetailMapEventBonus } from '../card-information/card-detail-map-event-bonus'
 import { type Card } from '../master-data/card'
 
@@ -31,7 +31,8 @@ export class EventCalculator {
     const masterCards = await this.dataProvider.getMasterData<Card>('cards')
     const cardDetails = await Promise.all(deckCards
       .map(async userCard => {
-        const card = findOrThrow(masterCards, it => it.id === userCard.cardId)
+        const card = findOrThrowBy(masterCards, it => it.id === userCard.cardId,
+          `cards id=${userCard.cardId}`)
         const eventBonus = await this.cardEventCalculator.getCardEventBonus(userCard, eventId)
         return {
           attr: card.attr,
@@ -120,8 +121,9 @@ export class EventCalculator {
     if (worldBloomDifferentAttributeBonuses === undefined) return bonus
     const set = new Set<string>()
     deckCards.forEach(it => set.add(it.attr))
-    return bonus + findOrThrow(worldBloomDifferentAttributeBonuses,
-      it => it.attributeCount === set.size).bonusRate
+    return bonus + findOrThrowBy(worldBloomDifferentAttributeBonuses,
+      it => it.attributeCount === set.size,
+      `worldBloomDifferentAttributeBonuses attributeCount=${set.size}`).bonusRate
   }
 
   /**

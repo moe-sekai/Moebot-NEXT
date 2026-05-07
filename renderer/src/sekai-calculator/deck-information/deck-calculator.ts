@@ -3,7 +3,7 @@ import type { UserCard } from '../user-data/user-card'
 import { type UserHonor } from '../user-data/user-honor'
 import { type Honor } from '../master-data/honor'
 import { CardCalculator, type CardDetail } from '../card-information/card-calculator'
-import { computeWithDefault, findOrThrow, getOrThrow } from '../util/collection-util'
+import { computeWithDefault, findOrThrowBy, getOrThrow } from '../util/collection-util'
 import { EventCalculator } from '../event-point/event-calculator'
 import { type AreaItemLevel } from '../master-data/area-item-level'
 import { type EventConfig } from '../event-point/event-service'
@@ -37,8 +37,10 @@ export class DeckCalculator {
     const userHonors = await this.dataProvider.getUserData<UserHonor[]>('userHonors')
     return userHonors
       .map(userHonor => {
-        const honor = findOrThrow(honors, it => it.id === userHonor.honorId)
-        return findOrThrow(honor.levels, it => it.level === userHonor.level)
+        const honor = findOrThrowBy(honors, it => it.id === userHonor.honorId,
+          `honors id=${userHonor.honorId}`)
+        return findOrThrowBy(honor.levels, it => it.level === userHonor.level,
+          `honorLevels honorId=${userHonor.honorId} level=${userHonor.level}`)
       })
       .reduce((v, it) => v + it.bonus, 0)
   }

@@ -2,7 +2,7 @@ import { type DataProvider } from '../data-provider/data-provider'
 import { type Card } from '../master-data/card'
 import { type EventDeckBonus } from '../master-data/event-deck-bonus'
 import { type GameCharacterUnit } from '../master-data/game-character-unit'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import { type UserCard } from '../user-data/user-card'
 import { type EventCard } from '../master-data/event-card'
 import { type EventRarityBonusRate } from '../master-data/event-rarity-bonus-rate'
@@ -30,8 +30,9 @@ export class CardEventCalculator {
         // 无指定角色
         if (eventDeckBonus.gameCharacterUnitId === undefined) return Math.max(v, eventDeckBonus.bonusRate)
 
-        const gameCharacterUnit = findOrThrow(gameCharacterUnits,
-          unit => unit.id === eventDeckBonus.gameCharacterUnitId)
+        const gameCharacterUnit = findOrThrowBy(gameCharacterUnits,
+          unit => unit.id === eventDeckBonus.gameCharacterUnitId,
+          `gameCharacterUnits id=${eventDeckBonus.gameCharacterUnitId} eventDeckBonusId=${eventDeckBonus.id}`)
 
         // 角色不匹配
         if (gameCharacterUnit.gameCharacterId !== card.characterId) return v
@@ -57,12 +58,15 @@ export class CardEventCalculator {
     const eventRarityBonusRates = await this.dataProvider.getMasterData<EventRarityBonusRate>('eventRarityBonusRates')
 
     // 计算角色、属性加成
-    const card = findOrThrow(cards, it => it.id === userCard.cardId)
-    let fixedBonus = await this.getEventDeckBonus(eventId, card)
+    const card = findOrThrowBy(cards, it => it.id === userCard.cardId,
+      `cards id=${userCard.cardId}`)
+    const deckBonus = await this.getEventDeckBonus(eventId, card)
+    let fixedBonus = deckBonus
 
     // 计算突破等级加成
-    const masterRankBonus = findOrThrow(eventRarityBonusRates,
-      it => it.cardRarityType === card.cardRarityType && it.masterRank === userCard.masterRank)
+    const masterRankBonus = findOrThrowBy(eventRarityBonusRates,
+      it => it.cardRarityType === card.cardRarityType && it.masterRank === userCard.masterRank,
+      `eventRarityBonusRates rarity=${card.cardRarityType} masterRank=${userCard.masterRank} cardId=${card.id}`)
     fixedBonus += masterRankBonus.bonusRate
 
     // 计算指定卡牌（正常是当期四星，World Link Finale为当年组合限定四星）加成
@@ -74,6 +78,22 @@ export class CardEventCalculator {
     // 处理World Link Finale的Leader活动排名称号加成、Leader卡牌加成（因为和Leader位相关，要单独加进返回结构，不能简单加算）
     const leaderBonus =
         await this.getCardLeaderBonus(eventId, card.characterId, cardBonus0?.leaderBonusRate ?? 0)
+
+    if (userCard.cardId === 683 && eventId === 101) {
+      console.debug('[DeckRecommend] card event bonus detail', {
+        cardId: userCard.cardId,
+        eventId,
+        cardAttr: card.attr,
+        characterId: card.characterId,
+        supportUnit: card.supportUnit,
+        masterRank: userCard.masterRank,
+        deckBonus,
+        masterRankBonus: masterRankBonus.bonusRate,
+        cardBonus,
+        leaderBonus,
+        eventCard: cardBonus0,
+      })
+    }
 
     // 与卡组相关的内容要单独加进返回结构，不能简单加算
     const bonus = new CardDetailMapEventBonus()

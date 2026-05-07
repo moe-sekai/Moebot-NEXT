@@ -25,6 +25,7 @@ export interface DeckRecommendOptions {
 	targetBonus?: number;
 	targetBonusList?: number[];
 	filterOtherUnit?: boolean;
+	supportCharacterId?: number;
 }
 
 export interface DeckRecommendCalculateRequest {

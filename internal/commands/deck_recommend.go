@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,6 +30,28 @@ const musicMetaURL = "https://moe.exmeaning.com/data/music_meta/music_metas.json
 const musicMetaCacheTTL = 6 * time.Hour
 const deckRecommendDefaultMasterCacheTTL = time.Hour
 
+//go:embed deck_recommend_data/*.json
+var deckRecommendLocalMasterData embed.FS
+
+var deckRecommendLocalMasterKeys = map[string]string{
+	"worldBloomSupportDeckBonusesWL1": "deck_recommend_data/worldBloomSupportDeckBonusesWL1.json",
+	"worldBloomSupportDeckBonusesWL2": "deck_recommend_data/worldBloomSupportDeckBonusesWL2.json",
+	"worldBloomSupportDeckBonusesWL3": "deck_recommend_data/worldBloomSupportDeckBonusesWL3.json",
+}
+
+type deckRecommendUserCardEntry struct {
+	CardID int `json:"cardId"`
+}
+
+type deckRecommendUserHonorEntry struct {
+	HonorID int `json:"honorId"`
+}
+
+const (
+	deckRecommendDefaultMusicID    = 74
+	deckRecommendDefaultDifficulty = "expert"
+)
+
 var musicMetaCache struct {
 	sync.Mutex
 	data      []map[string]any
@@ -45,16 +68,55 @@ var deckMasterDataCache struct {
 	items map[string]deckMasterCacheEntry
 }
 
-var deckRecommendSuiteFields = []string{
-	suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserDecks, suite.FieldUserCards,
-	suite.FieldUserBonds, suite.FieldUserMaterials, suite.FieldUserAreas, suite.FieldUserCharacters,
-	suite.FieldUserChallengeLiveSoloDecks, suite.FieldUserChallengeLiveSoloStages,
-	suite.FieldUserChallengeLiveSoloResults, suite.FieldUserChallengeLiveSoloHighScoreRewards,
-	suite.FieldUserCharacterMissionV2s, suite.FieldUserCharacterMissionV2Statuses,
-	suite.FieldUserMysekaiFixtureGameCharacterPerformanceBonuses, suite.FieldUserMysekaiGates,
-	"userMusics", "userMusicResults", "userMysekaiMaterials", "userMysekaiCanvases",
-	"userWorldBloomSupportDecks", "userHonors", "userMysekaiCharacterTalks",
-	"userEvents", "userWorldBlooms", "userMusicAchievements", "userPlayerFrames",
+var deckRecommendCommonSuiteFields = []string{
+	suite.FieldUploadTime,
+	suite.FieldUserGamedata,
+	suite.FieldUserDecks,
+	suite.FieldUserCards,
+	suite.FieldUserBonds,
+	suite.FieldUserMaterials,
+	suite.FieldUserAreas,
+	suite.FieldUserCharacters,
+	suite.FieldUserChallengeLiveSoloDecks,
+	suite.FieldUserChallengeLiveSoloStages,
+	suite.FieldUserChallengeLiveSoloResults,
+	suite.FieldUserChallengeLiveSoloHighScoreRewards,
+	suite.FieldUserCharacterMissionV2s,
+	suite.FieldUserCharacterMissionV2Statuses,
+	suite.FieldUserMysekaiFixtureGameCharacterPerformanceBonuses,
+	suite.FieldUserMysekaiGates,
+	"userMusics",
+	"userMusicResults",
+	"userMysekaiMaterials",
+	"userMysekaiCanvases",
+	"userWorldBloomSupportDecks",
+	"userHonors",
+	"userMysekaiCharacterTalks",
+	"userEvents",
+	"userWorldBlooms",
+	"userMusicAchievements",
+	"userPlayerFrames",
+}
+
+var deckRecommendMinimalSuiteFields = []string{
+	suite.FieldUploadTime,
+	suite.FieldUserGamedata,
+	suite.FieldUserDecks,
+	suite.FieldUserCards,
+	suite.FieldUserBonds,
+	suite.FieldUserMaterials,
+	suite.FieldUserAreas,
+	suite.FieldUserCharacters,
+	suite.FieldUserChallengeLiveSoloDecks,
+	suite.FieldUserChallengeLiveSoloStages,
+	suite.FieldUserChallengeLiveSoloResults,
+	suite.FieldUserChallengeLiveSoloHighScoreRewards,
+	suite.FieldUserCharacterMissionV2s,
+	suite.FieldUserCharacterMissionV2Statuses,
+	suite.FieldUserMysekaiFixtureGameCharacterPerformanceBonuses,
+	suite.FieldUserMysekaiGates,
+	"userMusics",
+	"userMusicResults",
 }
 
 var deckRecommendMasterKeys = []string{
@@ -117,11 +179,12 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 			ctx.SendChain(message.Text("正在组卡中，请稍等一下喵~"))
 
 			var userData map[string]any
-			if err := runtime.Suite.GetUserData(user.GameID, "", deckRecommendSuiteFields, &userData); err != nil {
+			if err := loadDeckRecommendUserData(runtime.Suite, user.GameID, &userData); err != nil {
 				ctx.SendChain(message.Text(fmt.Sprintf("读取 Suite 数据失败：%v", err)))
 				return
 			}
 			masterMap, warnings := buildDeckRecommendMasterData(runtime)
+			userData = filterDeckRecommendUserDataWithJPMaster(userData, masterMap, runtime.Store)
 			musicMetas, err := fetchMusicMetas()
 			if err != nil {
 				ctx.SendChain(message.Text(fmt.Sprintf("获取歌曲分数元数据失败：%v", err)))
@@ -142,7 +205,7 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 				return
 			}
 			calc.Warnings = append(calc.Warnings, warnings...)
-			payload := map[string]any{"title": deckRecommendTitle(mode), "regionLabel": runtime.Label, "profile": calc.Profile, "event": calc.Event, "music": calc.Music, "options": calc.Options, "algorithm": calc.Algorithm, "costMs": calc.CostMS, "warnings": calc.Warnings, "decks": calc.Decks, "assetSource": assetSourceForRuntime(runtime.Assets)}
+			payload := buildDeckRecommendPayload(runtime, mode, calc)
 			png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "deck_recommend", Data: payload, Width: 980})
 			if err != nil {
 				ctx.SendChain(message.Text(formatDeckRecommendText(calc)))
@@ -157,7 +220,7 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (renderer.DeckRecommendOptions, *masterdata.MusicInfo, *masterdata.EventInfo, error) {
 	args := strings.Fields(strings.TrimSpace(raw))
 	mode = normalizeDeckRecommendMode(mode)
-	options := renderer.DeckRecommendOptions{Mode: mode, MusicID: 10000, Difficulty: "master", LiveType: defaultDeckLiveType(mode), Algorithm: "ga", Target: defaultDeckTarget(mode), Limit: 3, TimeoutMS: 15000, BestSkillAsLeader: true, CardConfig: defaultDeckCardConfig()}
+	options := renderer.DeckRecommendOptions{Mode: mode, MusicID: deckRecommendDefaultMusicID, Difficulty: deckRecommendDefaultDifficulty, LiveType: defaultDeckLiveType(mode), Algorithm: "ga", Target: defaultDeckTarget(mode), Limit: 3, TimeoutMS: 15000, BestSkillAsLeader: true, CardConfig: defaultDeckCardConfig()}
 	var eventID, musicID int
 	bonusTargets := []int{}
 	challengeSet := false
@@ -318,6 +381,9 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 		options.EventID = event.ID
 	}
 	music := store.GetMusic(options.MusicID)
+	if music == nil && options.MusicID == deckRecommendDefaultMusicID {
+		music = &masterdata.MusicInfo{ID: deckRecommendDefaultMusicID, Title: "默认曲目"}
+	}
 	if options.MusicID == 10000 {
 		music = &masterdata.MusicInfo{ID: 10000, Title: "おまかせ"}
 	}
@@ -361,6 +427,269 @@ func deckRecommendTitle(mode string) string {
 	default:
 		return "活动组卡推荐"
 	}
+}
+
+func deckRecommendModeFields(mode string) []string {
+	mode = normalizeDeckRecommendMode(mode)
+	if mode == "" {
+		return append([]string(nil), deckRecommendCommonSuiteFields...)
+	}
+	return append([]string(nil), deckRecommendCommonSuiteFields...)
+}
+
+func loadDeckRecommendUserData(client *suite.Client, gameID string, out *map[string]any) error {
+	if client == nil {
+		return fmt.Errorf("suite client is nil")
+	}
+	if out == nil {
+		return fmt.Errorf("suite response output is nil")
+	}
+	var userData map[string]any
+	if err := client.GetUserData(gameID, "", deckRecommendCommonSuiteFields, &userData); err != nil {
+		return err
+	}
+	*out = normalizeDeckRecommendUserData(userData)
+	return nil
+}
+
+func normalizeDeckRecommendUserData(userData map[string]any) map[string]any {
+	normalized := make(map[string]any, len(deckRecommendCommonSuiteFields))
+	for key, value := range userData {
+		normalized[key] = value
+	}
+	for _, key := range deckRecommendCommonSuiteFields {
+		if _, ok := normalized[key]; ok {
+			continue
+		}
+		normalized[key] = deckRecommendDefaultUserDataValue(key)
+	}
+	return normalized
+}
+
+func deckRecommendDefaultUserDataValue(key string) any {
+	switch key {
+	case suite.FieldUserGamedata, suite.FieldUploadTime:
+		return nil
+	default:
+		return []any{}
+	}
+}
+
+func filterDeckRecommendUserData(userData map[string]any, store *masterdata.Store) map[string]any {
+	if userData == nil {
+		return nil
+	}
+	filtered := make(map[string]any, len(userData))
+	for key, value := range userData {
+		filtered[key] = value
+	}
+	if store == nil {
+		return filtered
+	}
+	if rawCards, ok := filtered[suite.FieldUserCards]; ok {
+		filtered[suite.FieldUserCards] = filterDeckRecommendUserCards(rawCards, store)
+	}
+	if rawHonors, ok := filtered["userHonors"]; ok {
+		filtered["userHonors"] = filterDeckRecommendUserHonors(rawHonors, store)
+	}
+	return filtered
+}
+
+func filterDeckRecommendUserDataWithJPMaster(userData map[string]any, masterMap map[string]any, store *masterdata.Store) map[string]any {
+	if userData == nil {
+		return nil
+	}
+	filtered := make(map[string]any, len(userData))
+	for key, value := range userData {
+		filtered[key] = value
+	}
+	if rawCards, ok := filtered[suite.FieldUserCards]; ok {
+		filtered[suite.FieldUserCards] = filterDeckRecommendUserCardsFromJPMaster(rawCards, masterMap)
+	}
+	if rawHonors, ok := filtered["userHonors"]; ok {
+		filtered["userHonors"] = filterDeckRecommendUserHonorsFromJPMaster(rawHonors, masterMap, store)
+	}
+	return filtered
+}
+
+func filterDeckRecommendUserCardsFromJPMaster(raw any, masterMap map[string]any) any {
+	items, ok := raw.([]any)
+	if !ok {
+		return raw
+	}
+	jpCards, ok := masterMap["cards"]
+	if !ok {
+		return raw
+	}
+	cardList, ok := jpCards.([]any)
+	if !ok {
+		return raw
+	}
+	valid := make(map[int]struct{}, len(cardList))
+	for _, card := range cardList {
+		entry, ok := card.(map[string]any)
+		if !ok {
+			continue
+		}
+		cardID := intValueFromAny(entry["id"])
+		if cardID != 0 {
+			valid[cardID] = struct{}{}
+		}
+	}
+	if len(valid) == 0 {
+		return raw
+	}
+	filtered := make([]any, 0, len(items))
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		cardID := intValueFromAny(entry["cardId"])
+		if _, exists := valid[cardID]; exists {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func filterDeckRecommendUserCards(raw any, store *masterdata.Store) any {
+	items, ok := raw.([]any)
+	if !ok {
+		return raw
+	}
+	masterCards := store.AllCards()
+	valid := make(map[int]struct{}, len(masterCards))
+	for _, card := range masterCards {
+		valid[card.ID] = struct{}{}
+	}
+	filtered := make([]any, 0, len(items))
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		cardID := intValueFromAny(entry["cardId"])
+		if _, exists := valid[cardID]; exists {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func filterDeckRecommendUserHonors(raw any, store *masterdata.Store) any {
+	if store == nil {
+		return raw
+	}
+	masterHonors := store.AllHonors()
+	return filterDeckRecommendUserHonorsByValidLevels(raw, deckRecommendValidHonorLevelsFromMaster(masterHonors))
+}
+
+func filterDeckRecommendUserHonorsFromJPMaster(raw any, masterMap map[string]any, store *masterdata.Store) any {
+	if levels := deckRecommendValidHonorLevelsFromMasterMap(masterMap); len(levels) > 0 {
+		return filterDeckRecommendUserHonorsByValidLevels(raw, levels)
+	}
+	return filterDeckRecommendUserHonors(raw, store)
+}
+
+func deckRecommendValidHonorLevelsFromMaster(masterHonors []masterdata.HonorInfo) map[int]map[int]struct{} {
+	valid := make(map[int]map[int]struct{}, len(masterHonors))
+	for _, honor := range masterHonors {
+		levels := make(map[int]struct{}, len(honor.Levels))
+		for _, level := range honor.Levels {
+			levels[level.Level] = struct{}{}
+		}
+		valid[honor.ID] = levels
+	}
+	return valid
+}
+
+func deckRecommendValidHonorLevelsFromMasterMap(masterMap map[string]any) map[int]map[int]struct{} {
+	jpHonors, ok := masterMap["honors"]
+	if !ok {
+		return nil
+	}
+	honorList, ok := jpHonors.([]any)
+	if !ok {
+		return nil
+	}
+	valid := make(map[int]map[int]struct{}, len(honorList))
+	for _, honor := range honorList {
+		entry, ok := honor.(map[string]any)
+		if !ok {
+			continue
+		}
+		honorID := intValueFromAny(entry["id"])
+		if honorID == 0 {
+			continue
+		}
+		levels := map[int]struct{}{}
+		if rawLevels, ok := entry["levels"].([]any); ok {
+			for _, rawLevel := range rawLevels {
+				levelEntry, ok := rawLevel.(map[string]any)
+				if !ok {
+					continue
+				}
+				level := intValueFromAny(levelEntry["level"])
+				if level != 0 {
+					levels[level] = struct{}{}
+				}
+			}
+		}
+		valid[honorID] = levels
+	}
+	return valid
+}
+
+func filterDeckRecommendUserHonorsByValidLevels(raw any, valid map[int]map[int]struct{}) any {
+	items, ok := raw.([]any)
+	if !ok || len(valid) == 0 {
+		return raw
+	}
+	filtered := make([]any, 0, len(items))
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		honorID := intValueFromAny(entry["honorId"])
+		level := intValueFromAny(entry["level"])
+		levels, exists := valid[honorID]
+		if !exists {
+			continue
+		}
+		if len(levels) > 0 {
+			if _, ok := levels[level]; !ok {
+				continue
+			}
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered
+}
+
+func intValueFromAny(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case float32:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+func buildDeckRecommendPayload(runtime *servers.Runtime, mode string, calc *renderer.DeckRecommendCalculateResponse) map[string]any {
+	if calc == nil {
+		return nil
+	}
+	return map[string]any{"title": deckRecommendTitle(mode), "regionLabel": runtime.Label, "profile": calc.Profile, "event": calc.Event, "music": calc.Music, "options": calc.Options, "algorithm": calc.Algorithm, "costMs": calc.CostMS, "warnings": calc.Warnings, "decks": calc.Decks, "assetSource": assetSourceForRuntime(runtime.Assets)}
 }
 
 func parseDeckFixedToken(token string, options *renderer.DeckRecommendOptions) error {
@@ -487,35 +816,70 @@ func searchMusicID(store *masterdata.Store, keyword string) int {
 	return 0
 }
 
+func ParseDeckRecommendArgsForDebug(raw string, store *masterdata.Store, mode string) (renderer.DeckRecommendOptions, *masterdata.MusicInfo, *masterdata.EventInfo, error) {
+	return parseDeckRecommendArgs(raw, store, mode)
+}
+
+func LoadDeckRecommendUserDataForDebug(client *suite.Client, gameID string, out *map[string]any) error {
+	return loadDeckRecommendUserData(client, gameID, out)
+}
+
+func FilterDeckRecommendUserDataForDebug(userData map[string]any, store *masterdata.Store) map[string]any {
+	return filterDeckRecommendUserData(userData, store)
+}
+
+func FilterDeckRecommendUserDataWithJPMasterForDebug(userData map[string]any, masterMap map[string]any, store *masterdata.Store) map[string]any {
+	return filterDeckRecommendUserDataWithJPMaster(userData, masterMap, store)
+}
+
+func BuildDeckRecommendMasterDataForDebug(runtime *servers.Runtime) (map[string]any, []string) {
+	return buildDeckRecommendMasterData(runtime)
+}
+
+func FetchMusicMetasForDebug() ([]map[string]any, error) {
+	return fetchMusicMetas()
+}
+
+func BuildDeckRecommendCardAssetsForDebug(store *masterdata.Store, resolver *assets.Resolver) map[int]map[string]any {
+	return buildDeckRecommendCardAssets(store, resolver)
+}
+
+func SuiteProfileFromUserDataForDebug(userData map[string]any, fallbackUID string) map[string]any {
+	return suiteProfileFromUserData(userData, fallbackUID)
+}
+
+func DeckMusicPayloadForDebug(store *masterdata.Store, music *masterdata.MusicInfo, resolver *assets.Resolver, difficulty string) any {
+	return deckMusicPayload(store, music, resolver, difficulty)
+}
+
+func BuildDeckRecommendPayloadForDebug(runtime *servers.Runtime, mode string, calc *renderer.DeckRecommendCalculateResponse) map[string]any {
+	return buildDeckRecommendPayload(runtime, mode, calc)
+}
+
+func DeckRecommendTitleForDebug(mode string) string {
+	return deckRecommendTitle(mode)
+}
+
 func buildDeckRecommendMasterData(runtime *servers.Runtime) (map[string]any, []string) {
 	out := map[string]any{}
 	warnings := []string{}
-	if runtime == nil || runtime.Store == nil {
-		return out, []string{"masterdata 不可用"}
+	if runtime == nil {
+		return out, []string{"runtime 不可用"}
 	}
-	store := runtime.Store
-	out["cards"] = store.AllCards()
-	out["events"] = store.AllEvents()
-	out["eventCards"] = store.AllEventCards()
-	out["eventDeckBonuses"] = allEventDeckBonuses(store)
-	out["gameCharacterUnits"] = store.AllCharacterUnits()
-	out["honors"] = store.AllHonors()
-	out["skills"] = store.AllSkills()
-	out["musics"] = store.AllMusics()
-	out["musicDifficulties"] = allMusicDifficulties(store)
-	resolved, err := config.ResolveMasterdata(runtime.Profile.Masterdata, runtime.Region)
+	jpCfg := config.MasterdataConfig{
+		Region: config.RegionJP,
+		Source: config.MasterdataSourceMoeSekai,
+	}
+	resolved, err := config.ResolveMasterdata(jpCfg, config.RegionJP)
 	if err != nil {
-		return out, append(warnings, "部分组卡 masterdata 解析失败")
+		return out, append(warnings, "JP masterdata endpoint 解析失败")
 	}
-	cacheTTL := time.Duration(runtime.Profile.Masterdata.RefreshInterval) * time.Second
-	if cacheTTL <= 0 {
-		cacheTTL = deckRecommendDefaultMasterCacheTTL
+	cacheTTL := deckRecommendDefaultMasterCacheTTL
+	if runtime.Profile.Masterdata.RefreshInterval > 0 {
+		cacheTTL = time.Duration(runtime.Profile.Masterdata.RefreshInterval) * time.Second
 	}
 	for _, key := range deckRecommendMasterKeys {
-		if _, exists := out[key]; exists {
-			continue
-		}
-		if data, err := loadMasterDataAny(key, resolved, cacheTTL); err == nil {
+		if data, err := loadDeckRecommendMasterDataAny(key, resolved, cacheTTL); err == nil {
 			out[key] = data
 		} else {
 			out[key] = []any{}
@@ -538,6 +902,29 @@ func allMusicDifficulties(store *masterdata.Store) []masterdata.MusicDifficulty 
 		out = append(out, store.GetMusicDifficulties(music.ID)...)
 	}
 	return out
+}
+
+func loadDeckRecommendMasterDataAny(key string, resolved config.ResolvedMasterdata, ttl time.Duration) ([]any, error) {
+	if _, ok := deckRecommendLocalMasterKeys[key]; ok {
+		return loadDeckRecommendLocalMasterData(key)
+	}
+	return loadMasterDataAny(key, resolved, ttl)
+}
+
+func loadDeckRecommendLocalMasterData(key string) ([]any, error) {
+	path, ok := deckRecommendLocalMasterKeys[key]
+	if !ok {
+		return nil, fmt.Errorf("local masterdata %s not configured", key)
+	}
+	body, err := deckRecommendLocalMasterData.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read local masterdata %s: %w", key, err)
+	}
+	var data []any
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, fmt.Errorf("decode local masterdata %s: %w", key, err)
+	}
+	return data, nil
 }
 
 func loadMasterDataAny(key string, resolved config.ResolvedMasterdata, ttl time.Duration) ([]any, error) {

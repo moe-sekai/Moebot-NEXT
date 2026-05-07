@@ -30,6 +30,22 @@ func TestBest30FieldsIncludeMusicResultCompatibilitySources(t *testing.T) {
 	}
 }
 
+func TestDeckRecommendMinimalFieldsAreSubsetOfCommonFields(t *testing.T) {
+	for _, field := range deckRecommendMinimalSuiteFields {
+		if !containsField(deckRecommendCommonSuiteFields, field) {
+			t.Fatalf("minimal deck fields contain %q, but common fields do not: %#v", field, deckRecommendCommonSuiteFields)
+		}
+	}
+}
+
+func TestDeckRecommendMinimalFieldsKeepCoreCardContext(t *testing.T) {
+	for _, want := range []string{suite.FieldUploadTime, suite.FieldUserGamedata, suite.FieldUserDecks, suite.FieldUserCards, suite.FieldUserBonds, suite.FieldUserChallengeLiveSoloResults, suite.FieldUserMusicResults} {
+		if !containsField(deckRecommendMinimalSuiteFields, want) {
+			t.Fatalf("minimal deck fields = %#v, missing %s", deckRecommendMinimalSuiteFields, want)
+		}
+	}
+}
+
 func containsField(fields []string, want string) bool {
 	for _, field := range fields {
 		if field == want {

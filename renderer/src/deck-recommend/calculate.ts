@@ -136,6 +136,62 @@ function friendlyError(error: unknown): string {
 	return message;
 }
 
+function logDeckRecommendInputSummary(provider: MemoryDeckRecommendDataProvider, req: DeckRecommendCalculateRequest, options: DeckRecommendOptions, liveType: LiveType, musicMeta: any) {
+	const masterData = (req.masterData ?? {}) as Record<string, unknown[]>;
+	const userData = (req.userData ?? {}) as Record<string, unknown>;
+	const listSize = (value: unknown) => Array.isArray(value) ? value.length : -1;
+	console.debug("[DeckRecommend] input summary", {
+		region: req.region,
+		regionLabel: req.regionLabel,
+		mode: normalizeMode(options.mode),
+		liveType,
+		options: {
+			eventId: options.eventId,
+			musicId: options.musicId,
+			difficulty: options.difficulty,
+			target: options.target,
+			limit: options.limit,
+			bestSkillAsLeader: options.bestSkillAsLeader,
+			filterOtherUnit: options.filterOtherUnit,
+			skillReferenceChooseStrategy: options.skillReferenceChooseStrategy,
+		},
+		musicMeta: musicMeta ? {
+			music_id: musicMeta.music_id,
+			difficulty: musicMeta.difficulty,
+			base_score: musicMeta.base_score,
+			base_score_auto: musicMeta.base_score_auto,
+			event_rate: musicMeta.event_rate,
+			skill_score_solo_len: Array.isArray(musicMeta.skill_score_solo) ? musicMeta.skill_score_solo.length : -1,
+			skill_score_multi_len: Array.isArray(musicMeta.skill_score_multi) ? musicMeta.skill_score_multi.length : -1,
+			skill_score_auto_len: Array.isArray(musicMeta.skill_score_auto) ? musicMeta.skill_score_auto.length : -1,
+		} : null,
+		masterCounts: {
+			cards: listSize(masterData.cards),
+			events: listSize(masterData.events),
+			eventCards: listSize(masterData.eventCards),
+			eventDeckBonuses: listSize(masterData.eventDeckBonuses),
+			eventRarityBonusRates: listSize(masterData.eventRarityBonusRates),
+			characterRanks: listSize(masterData.characterRanks),
+			cardRarities: listSize(masterData.cardRarities),
+			skills: listSize(masterData.skills),
+			gameCharacters: listSize(masterData.gameCharacters),
+			gameCharacterUnits: listSize(masterData.gameCharacterUnits),
+		},
+		userCounts: {
+			userCards: listSize(userData.userCards),
+			userCharacters: listSize(userData.userCharacters),
+			userHonors: listSize(userData.userHonors),
+			userAreas: listSize(userData.userAreas),
+			userDecks: listSize(userData.userDecks),
+			userBonds: listSize(userData.userBonds),
+		},
+		providerSummary: {
+			cards: provider.getMasterDataSyncLength?.("cards") ?? listSize(masterData.cards),
+			eventDeckBonuses: provider.getMasterDataSyncLength?.("eventDeckBonuses") ?? listSize(masterData.eventDeckBonuses),
+		},
+	});
+}
+
 async function recommendByMode(mode: string, provider: MemoryDeckRecommendDataProvider, req: DeckRecommendCalculateRequest, config: DeckRecommendConfig, liveType: LiveType): Promise<any[]> {
 	if (mode === "challenge") {
 		const characterId = Number(req.options.challengeCharacterId || req.options.fixedCharacters?.[0] || 0);
@@ -161,7 +217,34 @@ async function recommendByMode(mode: string, provider: MemoryDeckRecommendDataPr
 		return await recommender.recommendHighScoreDeck(userCards, LiveCalculator.getLiveScoreFunction(liveType), config, liveType, {});
 	}
 	const recommender = new EventDeckRecommend(provider);
-	return await recommender.recommendEventDeck(Number(req.options.eventId), liveType, config);
+	return await recommender.recommendEventDeck(Number(req.options.eventId), liveType, config, Number(req.options.supportCharacterId || 0));
+}
+
+function logDeckRecommendDeckSummary(deck: any, req: DeckRecommendCalculateRequest, mode: string, index: number) {
+	const cards = Array.isArray(deck?.cards) ? deck.cards : [];
+	console.debug("[DeckRecommend] deck summary", {
+		mode,
+		index,
+		target: req.options?.target,
+		score: deck?.score,
+		eventBonus: deck?.eventBonus,
+		supportDeckBonus: deck?.supportDeckBonus,
+		multiLiveScoreUp: deck?.multiLiveScoreUp,
+		power: deck?.power,
+		cards: cards.map((card: any) => ({
+			cardId: card?.cardId,
+			characterId: card?.characterId,
+			attr: card?.attr,
+			level: card?.level,
+			masterRank: card?.masterRank,
+			skillLevel: card?.skillLevel,
+			defaultImage: card?.defaultImage,
+			power: card?.power,
+			eventBonus: card?.eventBonus,
+			supportDeckBonus: card?.supportDeckBonus,
+			skill: card?.skill,
+		})),
+	});
 }
 
 export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest): Promise<DeckRecommendCalculateResponse> {
@@ -177,14 +260,23 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 			musicMetas: req.musicMetas,
 		});
 		const config = buildConfig(req);
-		const liveType = normalizeLiveType(req.options.liveType);
+		let liveType = normalizeLiveType(req.options.liveType);
 		const mode = normalizeMode(req.options.mode);
+		if (mode === "event") {
+			const events = await provider.getMasterData<any>("events");
+			const event = events.find((it) => Number(it.id) === Number(req.options.eventId));
+			if (event && String(event.eventType || "").toLowerCase() === "cheerful_carnival" && liveType === LiveType.MULTI) {
+				liveType = LiveType.CHEERFUL;
+			}
+		}
+		logDeckRecommendInputSummary(provider, req, req.options, liveType, config.musicMeta);
 		const algorithms = String(req.options.algorithm || "ga").toLowerCase() === "all" && mode !== "bonus"
 			? [RecommendAlgorithm.GA, RecommendAlgorithm.DFS]
 			: [config.algorithm ?? RecommendAlgorithm.GA];
 		const merged = new Map<string, any>();
 		for (const algorithm of algorithms) {
 			const decks = await recommendByMode(mode, provider, req, { ...config, algorithm }, liveType);
+			decks.forEach((deck, index) => logDeckRecommendDeckSummary(deck, req, mode, index));
 			for (const deck of decks) {
 				const hash = deckHash(deck);
 				const prev = merged.get(hash);

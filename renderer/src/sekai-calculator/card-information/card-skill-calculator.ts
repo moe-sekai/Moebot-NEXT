@@ -1,7 +1,7 @@
 import { type DataProvider } from '../data-provider/data-provider'
 import { type UserCard } from '../user-data/user-card'
 import { type Card } from '../master-data/card'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import { type Skill } from '../master-data/skill'
 import type { UserCharacter } from '../user-data/user-character'
 import { CardDetailMapSkill } from './card-detail-map-skill'
@@ -112,8 +112,9 @@ export class CardSkillCalculator {
     }
 
     for (const skillEffect of skill.skillEffects) {
-      const skillEffectDetail = findOrThrow(skillEffect.skillEffectDetails,
-        it => it.level === userCard.skillLevel)
+      const skillEffectDetail = findOrThrowBy(skillEffect.skillEffectDetails,
+        it => it.level === userCard.skillLevel,
+        `skillEffectDetails skillId=${skill.id} effectId=${skillEffect.id} level=${userCard.skillLevel}`)
       if (skillEffect.skillEffectType === 'score_up' ||
         skillEffect.skillEffectType === 'score_up_condition_life' ||
         skillEffect.skillEffectType === 'score_up_keep') {
@@ -163,7 +164,7 @@ export class CardSkillCalculator {
       skillId = card.specialTrainingSkillId
     }
     const skills = await this.dataProvider.getMasterData<Skill>('skills')
-    return findOrThrow(skills, it => it.id === skillId)
+    return findOrThrowBy(skills, it => it.id === skillId, `skills id=${skillId} cardId=${card.id}`)
   }
 
   /**
@@ -173,7 +174,8 @@ export class CardSkillCalculator {
   private async getCharacterRank (characterId: number): Promise<number> {
     const userCharacters = await this.dataProvider.getUserData<UserCharacter[]>('userCharacters')
     const userCharacter =
-      findOrThrow(userCharacters, it => it.characterId === characterId)
+      findOrThrowBy(userCharacters, it => it.characterId === characterId,
+        `userCharacters characterId=${characterId}`)
     return userCharacter.characterRank
   }
 }

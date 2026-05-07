@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/suite"
 )
 
 func testDeckRecommendStore() *masterdata.Store {
@@ -45,6 +46,35 @@ func TestParseDeckRecommendArgsEventMusicDifficulty(t *testing.T) {
 		t.Fatalf("music = %d/%d", music.ID, options.MusicID)
 	}
 	if options.Difficulty != "expert" {
+		t.Fatalf("difficulty = %s", options.Difficulty)
+	}
+}
+
+func TestParseDeckRecommendArgsDefaultMusicAndDifficulty(t *testing.T) {
+	options, music, event, err := parseDeckRecommendArgs("", testDeckRecommendStore(), "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if event == nil || event.ID != 123 {
+		t.Fatalf("event = %#v", event)
+	}
+	if options.MusicID != deckRecommendDefaultMusicID {
+		t.Fatalf("music id = %d, want %d", options.MusicID, deckRecommendDefaultMusicID)
+	}
+	if options.Difficulty != deckRecommendDefaultDifficulty {
+		t.Fatalf("difficulty = %s, want %s", options.Difficulty, deckRecommendDefaultDifficulty)
+	}
+	if music == nil || music.ID != deckRecommendDefaultMusicID {
+		t.Fatalf("default parse should provide fallback music payload, got %#v", music)
+	}
+}
+
+func TestParseDeckRecommendArgsExplicitDifficultyOverridesDefault(t *testing.T) {
+	options, _, _, err := parseDeckRecommendArgs("master", testDeckRecommendStore(), "strongest")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if options.Difficulty != "master" {
 		t.Fatalf("difficulty = %s", options.Difficulty)
 	}
 }
@@ -138,5 +168,148 @@ func TestParseBonusDeckArgs(t *testing.T) {
 	}
 	if len(options.TargetBonusList) != 3 || options.TargetBonusList[0] != 250 || options.TargetBonusList[2] != 270 {
 		t.Fatalf("targets = %#v", options.TargetBonusList)
+	}
+}
+
+func TestNormalizeDeckRecommendUserDataFillsMissingKeys(t *testing.T) {
+	userData := normalizeDeckRecommendUserData(map[string]any{})
+	if _, ok := userData[suite.FieldUserCards]; !ok {
+		t.Fatalf("missing default userCards: %#v", userData)
+	}
+	if _, ok := userData[suite.FieldUserGamedata]; !ok {
+		t.Fatalf("missing default userGamedata: %#v", userData)
+	}
+	if userData[suite.FieldUserGamedata] != nil {
+		t.Fatalf("userGamedata default = %#v, want nil", userData[suite.FieldUserGamedata])
+	}
+	if userData[suite.FieldUploadTime] != nil {
+		t.Fatalf("upload_time default = %#v, want nil", userData[suite.FieldUploadTime])
+	}
+}
+
+func TestFilterDeckRecommendUserDataFiltersCardsAndHonors(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Cards: []masterdata.CardInfo{{ID: 101}},
+		Honors: []masterdata.HonorInfo{{
+			ID:     201,
+			Levels: []masterdata.HonorLevel{{HonorID: 201, Level: 1}, {HonorID: 201, Level: 2}},
+		}},
+	})
+	userData := map[string]any{
+		suite.FieldUserCards: []any{map[string]any{"cardId": 101}, map[string]any{"cardId": 999}},
+		"userHonors": []any{
+			map[string]any{"honorId": 201, "level": 2},
+			map[string]any{"honorId": 201, "level": 9},
+			map[string]any{"honorId": 999, "level": 1},
+		},
+	}
+	filtered := filterDeckRecommendUserData(userData, store)
+	cards, _ := filtered[suite.FieldUserCards].([]any)
+	honors, _ := filtered["userHonors"].([]any)
+	if len(cards) != 1 {
+		t.Fatalf("filtered cards = %#v", cards)
+	}
+	if len(honors) != 1 {
+		t.Fatalf("filtered honors = %#v", honors)
+	}
+}
+
+func TestAllEventDeckBonusesPreserveAttrOnlyBonus(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Events: []masterdata.EventInfo{{ID: 203}},
+		EventDeckBonuses: []masterdata.EventDeckBonus{
+			{ID: 1, EventID: 203, GameCharacterUnitID: 1, BonusRate: 25},
+			{ID: 2, EventID: 203, CardAttr: "mysterious", BonusRate: 25},
+		},
+	})
+	bonuses := allEventDeckBonuses(store)
+	if len(bonuses) != 2 {
+		t.Fatalf("bonuses = %#v", bonuses)
+	}
+	if bonuses[1].GameCharacterUnitID != 0 || bonuses[1].CardAttr != "mysterious" {
+		t.Fatalf("attr-only bonus should remain encoded with zero unit id: %#v", bonuses[1])
+	}
+}
+
+func TestFilterDeckRecommendUserCardsFromJPMaster(t *testing.T) {
+	jpMaster := map[string]any{
+		"cards": []any{
+			map[string]any{"id": float64(101), "characterId": float64(1)},
+			map[string]any{"id": float64(102), "characterId": float64(2)},
+			map[string]any{"id": float64(103), "characterId": float64(3)},
+		},
+	}
+	userCards := []any{
+		map[string]any{"cardId": float64(101), "level": float64(50)},
+		map[string]any{"cardId": float64(102), "level": float64(60)},
+		map[string]any{"cardId": float64(999), "level": float64(40)},
+	}
+	filtered := filterDeckRecommendUserCardsFromJPMaster(userCards, jpMaster)
+	result, ok := filtered.([]any)
+	if !ok {
+		t.Fatalf("expected []any, got %T", filtered)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 cards, got %d: %#v", len(result), result)
+	}
+	first := result[0].(map[string]any)
+	second := result[1].(map[string]any)
+	if intValueFromAny(first["cardId"]) != 101 {
+		t.Fatalf("first card = %v, want 101", first["cardId"])
+	}
+	if intValueFromAny(second["cardId"]) != 102 {
+		t.Fatalf("second card = %v, want 102", second["cardId"])
+	}
+}
+
+func TestFilterDeckRecommendUserCardsFromJPMasterFallsBackWhenNoCards(t *testing.T) {
+	jpMaster := map[string]any{}
+	userCards := []any{
+		map[string]any{"cardId": float64(101)},
+		map[string]any{"cardId": float64(999)},
+	}
+	filtered := filterDeckRecommendUserCardsFromJPMaster(userCards, jpMaster)
+	result, ok := filtered.([]any)
+	if !ok {
+		t.Fatalf("expected []any, got %T", filtered)
+	}
+	if len(result) != 2 {
+		t.Fatalf("should return all cards when JP cards unavailable, got %d", len(result))
+	}
+}
+
+func TestFilterDeckRecommendUserDataWithJPMaster(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Honors: []masterdata.HonorInfo{{
+			ID:     201,
+			Levels: []masterdata.HonorLevel{{HonorID: 201, Level: 1}},
+		}},
+	})
+	jpMaster := map[string]any{
+		"cards": []any{
+			map[string]any{"id": float64(101)},
+		},
+	}
+	userData := map[string]any{
+		suite.FieldUserCards: []any{
+			map[string]any{"cardId": float64(101)},
+			map[string]any{"cardId": float64(999)},
+		},
+		"userHonors": []any{
+			map[string]any{"honorId": 201, "level": 1},
+			map[string]any{"honorId": 999, "level": 1},
+		},
+	}
+	filtered := filterDeckRecommendUserDataWithJPMaster(userData, jpMaster, store)
+	cards, _ := filtered[suite.FieldUserCards].([]any)
+	honors, _ := filtered["userHonors"].([]any)
+	if len(cards) != 1 {
+		t.Fatalf("filtered cards = %d, want 1", len(cards))
+	}
+	if len(honors) != 1 {
+		t.Fatalf("filtered honors = %d, want 1", len(honors))
 	}
 }

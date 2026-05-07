@@ -1,6 +1,6 @@
 import { type DataProvider } from '../data-provider/data-provider'
 import { type UserArea } from '../user-data/user-area'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import { type AreaItemLevel } from '../master-data/area-item-level'
 import { type AreaItem } from '../master-data/area-item'
 import { type ShopItem } from '../master-data/shop-item'
@@ -25,7 +25,8 @@ export class AreaItemService {
    */
   public async getAreaItemLevel (areaItemId: number, level: number): Promise<AreaItemLevel> {
     const areaItemLevels = await this.dataProvider.getMasterData<AreaItemLevel>('areaItemLevels')
-    return findOrThrow(areaItemLevels, it => it.areaItemId === areaItemId && it.level === level)
+    return findOrThrowBy(areaItemLevels, it => it.areaItemId === areaItemId && it.level === level,
+      `areaItemLevels areaItemId=${areaItemId} level=${level}`)
   }
 
   /**
@@ -56,6 +57,6 @@ export class AreaItemService {
       ? (1000 + (areaItemLevel.areaItemId - 1) * 10)
       : (1550 - 10 + (areaItemLevel.areaItemId - 1) * 5)
     const id = idOffset + areaItemLevel.level
-    return findOrThrow(shopItems, it => it.id === id)
+    return findOrThrowBy(shopItems, it => it.id === id, `shopItems id=${id}`)
   }
 }

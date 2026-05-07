@@ -1,7 +1,7 @@
 import { type DataProvider } from '../data-provider/data-provider'
 import { type UserCard } from '../user-data/user-card'
 import { type Card } from '../master-data/card'
-import { findOrThrow } from '../util/collection-util'
+import { findOrThrowBy } from '../util/collection-util'
 import { type WorldBloomSupportDeckBonus } from '../master-data/world-bloom-support-deck-bonus'
 import { type EventConfig } from './event-service'
 import {
@@ -52,21 +52,25 @@ export class CardBloomEventCalculator {
       worldBloomSupportDeckBonuses =
         await this.dataProvider.getMasterData<WorldBloomSupportDeckBonus>('worldBloomSupportDeckBonuses')
     }
-    const bonus = findOrThrow(worldBloomSupportDeckBonuses,
-      it => it.cardRarityType === card.cardRarityType)
+    const bonus = findOrThrowBy(worldBloomSupportDeckBonuses,
+      it => it.cardRarityType === card.cardRarityType,
+      `worldBloomSupportDeckBonuses key=${worldBloomSupportDeckBonusKey} rarity=${card.cardRarityType} cardId=${card.id}`)
     let total = 0
 
     // 角色加成
     const type =
       specialCharacterId > 0 && card.characterId === specialCharacterId ? 'specific' : 'others'
-    total += findOrThrow(bonus.worldBloomSupportDeckCharacterBonuses,
-      it => it.worldBloomSupportDeckCharacterType === type).bonusRate
+    total += findOrThrowBy(bonus.worldBloomSupportDeckCharacterBonuses,
+      it => it.worldBloomSupportDeckCharacterType === type,
+      `worldBloomSupportDeckCharacterBonuses rarity=${card.cardRarityType} type=${type}`).bonusRate
     // 专精等级加成
-    total += findOrThrow(bonus.worldBloomSupportDeckMasterRankBonuses,
-      it => it.masterRank === userCard.masterRank).bonusRate
+    total += findOrThrowBy(bonus.worldBloomSupportDeckMasterRankBonuses,
+      it => it.masterRank === userCard.masterRank,
+      `worldBloomSupportDeckMasterRankBonuses rarity=${card.cardRarityType} masterRank=${userCard.masterRank}`).bonusRate
     // 技能等级加成
-    total += findOrThrow(bonus.worldBloomSupportDeckSkillLevelBonuses,
-      it => it.skillLevel === userCard.skillLevel).bonusRate
+    total += findOrThrowBy(bonus.worldBloomSupportDeckSkillLevelBonuses,
+      it => it.skillLevel === userCard.skillLevel,
+      `worldBloomSupportDeckSkillLevelBonuses rarity=${card.cardRarityType} skillLevel=${userCard.skillLevel}`).bonusRate
 
     // 4.5周年，新增了上一期WL卡牌额外加成
     // World Link Finale会加成上一年的组合限定卡
