@@ -1,17 +1,123 @@
 package commands
 
 import (
+	"moebot-next/internal/commandparser"
+	"moebot-next/internal/renderer"
+
 	zero "github.com/wdvxdr1123/ZeroBot"
 	"github.com/wdvxdr1123/ZeroBot/message"
 )
+
+const helpVersion = "0.1.0"
+
+const helpFooter = "🌐 区服前缀: jp / cn / tw / kr / en；WL 加在区服与命令之间\n" +
+	"💡 例: /cn查卡 1204、/krsk 1k、/cnwlcf、/wlcsb 1 100\n" +
+	"💡 无前缀按你的绑定服务器，未绑定则默认日服"
+
+type helpCommandPayload struct {
+	Name string `json:"name"`
+}
+
+type helpGroupPayload struct {
+	Label    string               `json:"label"`
+	Commands []helpCommandPayload `json:"commands"`
+}
+
+type helpCardPayload struct {
+	Groups  []helpGroupPayload `json:"groups"`
+	Footer  string             `json:"footer,omitempty"`
+	Version string             `json:"version"`
+}
+
+// helpCategoryOrder controls the display order of grouped categories on the help card.
+var helpCategoryOrder = []string{
+	commandparser.CategoryQuery,
+	commandparser.CategoryProfile,
+	commandparser.CategorySuite,
+	commandparser.CategoryDeck,
+	commandparser.CategoryMisc,
+}
 
 // RegisterHelp registers the /帮助 command.
 func RegisterHelp(deps *Deps) {
 	for _, cmd := range parserCommands(deps, "帮助") {
 		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+			payload := buildHelpCardPayload(deps)
+			if deps != nil && deps.Renderer != nil && deps.Renderer.Health() {
+				if png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "help_card", Data: payload}); err == nil {
+					ctx.SendChain(message.ImageBytes(png))
+					return
+				}
+			}
 			ctx.SendChain(message.Text(helpText()))
 		})
 	}
+}
+
+// buildHelpCardPayload converts the registered command definitions into a help card payload
+// grouped by category. Descriptions are intentionally omitted to keep the layout compact.
+func buildHelpCardPayload(deps *Deps) helpCardPayload {
+	defs := definitionsForHelp(deps)
+
+	groupIndex := make(map[string]int)
+	groups := make([]helpGroupPayload, 0, len(helpCategoryOrder))
+	addCommand := func(category string, cmd helpCommandPayload) {
+		idx, ok := groupIndex[category]
+		if !ok {
+			groups = append(groups, helpGroupPayload{
+				Label:    commandparser.CategoryLabel(category),
+				Commands: []helpCommandPayload{},
+			})
+			idx = len(groups) - 1
+			groupIndex[category] = idx
+		}
+		groups[idx].Commands = append(groups[idx].Commands, cmd)
+	}
+
+	// Seed groups in the preferred order so empty categories fall back gracefully.
+	for _, cat := range helpCategoryOrder {
+		groupIndex[cat] = len(groups)
+		groups = append(groups, helpGroupPayload{
+			Label:    commandparser.CategoryLabel(cat),
+			Commands: []helpCommandPayload{},
+		})
+	}
+
+	for _, def := range defs {
+		category := def.Category
+		if category == "" {
+			category = commandparser.CategoryMisc
+		}
+		name := def.PrimaryCommand
+		if name == "" {
+			name = def.Name
+		}
+		if name == "" {
+			continue
+		}
+		addCommand(category, helpCommandPayload{Name: name})
+	}
+
+	// Drop empty groups so the card stays compact.
+	filtered := groups[:0]
+	for _, g := range groups {
+		if len(g.Commands) > 0 {
+			filtered = append(filtered, g)
+		}
+	}
+
+	return helpCardPayload{
+		Groups:  filtered,
+		Footer:  helpFooter,
+		Version: helpVersion,
+	}
+}
+
+func definitionsForHelp(deps *Deps) []commandparser.Definition {
+	if deps != nil && len(deps.Definitions) > 0 {
+		return deps.Definitions
+	}
+	return commandparser.BaseDefinitions()
 }
 
 func helpText() string {

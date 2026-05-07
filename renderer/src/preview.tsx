@@ -808,51 +808,69 @@ function createPreviewElement(id: string) {
 			return (
 				<HelpCard
 					version="0.1.0"
-					commands={[
+					footer={
+						"🌐 区服前缀: jp / cn / tw / kr / en；WL 加在区服与命令之间\n" +
+						"💡 例: /cn查卡 1204、/krsk 1k、/cnwlcf、/wlcsb 1 100\n" +
+						"💡 无前缀按你的绑定服务器，未绑定则默认日服"
+					}
+					groups={[
 						{
-							name: "查卡",
-							usage: "<关键词>",
-							description: "搜索卡牌，支持角色名、卡名与 ID。",
+							label: "查询 / 榜线",
+							commands: [
+								{ name: "查卡" },
+								{ name: "查曲" },
+								{ name: "查谱" },
+								{ name: "查活动" },
+								{ name: "查卡池" },
+								{ name: "查演唱会" },
+								{ name: "榜线" },
+								{ name: "sk" },
+								{ name: "查房" },
+								{ name: "查水表" },
+								{ name: "榜线预测" },
+							],
 						},
 						{
-							name: "查曲/查歌",
-							usage: "<关键词>",
-							description: "搜索曲目，支持别名、日文、罗马音与模糊匹配。",
+							label: "账号 / Profile",
+							commands: [
+								{ name: "绑定" },
+								{ name: "解绑" },
+								{ name: "个人信息" },
+							],
 						},
 						{
-							name: "查谱",
-							usage: "<关键词>",
-							description: "查询谱面等级与 notes。",
+							label: "Suite 数据",
+							commands: [
+								{ name: "抓包状态" },
+								{ name: "隐藏抓包" },
+								{ name: "展示抓包" },
+								{ name: "羁绊" },
+								{ name: "打歌进度" },
+								{ name: "best30" },
+								{ name: "挑战信息" },
+								{ name: "活动记录" },
+								{ name: "队长次数" },
+								{ name: "CR任务" },
+								{ name: "ANVO持有" },
+								{ name: "卡牌一览" },
+							],
 						},
 						{
-							name: "查活动",
-							usage: "[关键词/ID]",
-							description: "查询活动信息、活动类型与时间范围。",
+							label: "组卡推荐",
+							commands: [
+								{ name: "组卡" },
+								{ name: "最强组卡" },
+								{ name: "挑战组卡" },
+								{ name: "加成组卡" },
+								{ name: "烤森组卡" },
+							],
 						},
 						{
-							name: "查卡池/查扭蛋",
-							usage: "[关键词/ID]",
-							description: "查询招募扭蛋与 pickup 卡。",
-						},
-						{
-							name: "绑定",
-							usage: "<游戏ID>",
-							description: "绑定 Project SEKAI 游戏账号。",
-						},
-						{
-							name: "个人信息",
-							usage: "",
-							description: "查看已绑定账号的玩家资料。",
-						},
-						{
-							name: "排行",
-							usage: "[排名]",
-							description: "查询活动实时排行榜。",
-						},
-						{
-							name: "抽卡模拟",
-							usage: "",
-							description: "生成娱乐向抽卡结果图。",
+							label: "其它",
+							commands: [
+								{ name: "抽卡模拟" },
+								{ name: "帮助" },
+							],
 						},
 					]}
 				/>
