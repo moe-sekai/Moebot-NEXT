@@ -71,6 +71,73 @@ func TestSearchAndBuildCardListParsesLunabotStyleFilters(t *testing.T) {
 	}
 }
 
+func TestSearchAndBuildEventPayloadIncludesBonusCards(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Cards: []masterdata.CardInfo{{
+			ID:             1001,
+			CharacterID:    1,
+			CardRarityType: "rarity_4",
+			Attr:           "cute",
+			Prefix:         "测试加成卡",
+		}},
+		Events: []masterdata.EventInfo{{
+			ID:        2001,
+			Name:      "测试活动",
+			EventType: "marathon",
+			StartAt:   1700000000000,
+			ClosedAt:  1700100000000,
+		}},
+		EventCards: []masterdata.EventCard{{ID: 1, EventID: 2001, CardID: 1001}},
+	})
+	var def Definition
+	for _, candidate := range BaseDefinitions() {
+		if candidate.ID == "event-info" {
+			def = candidate
+			break
+		}
+	}
+
+	rows, selected := searchAndBuild(def, store, nil, nil, "", "2001")
+	if len(rows) != 1 || selected == nil || selected.Type != "event" {
+		t.Fatalf("rows=%#v selected=%#v, want single event selection", rows, selected)
+	}
+	payload, ok := selected.Payload.(renderer.EventInfoPayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want EventInfoPayload", selected.Payload)
+	}
+	if payload.ID != 2001 || len(payload.BonusCards) != 1 || payload.BonusCards[0].ID != 1001 {
+		t.Fatalf("payload event=%d bonusCards=%#v, want event 2001 with card 1001", payload.ID, payload.BonusCards)
+	}
+}
+
+func TestSearchAndBuildEventListPayload(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{Events: []masterdata.EventInfo{
+		{ID: 2001, Name: "测试活动A", EventType: "marathon", StartAt: 1700000000000, ClosedAt: 1700100000000},
+		{ID: 2002, Name: "测试活动B", EventType: "cheerful_carnival", StartAt: 1700200000000, ClosedAt: 1700300000000},
+	}})
+	var def Definition
+	for _, candidate := range BaseDefinitions() {
+		if candidate.ID == "event-info" {
+			def = candidate
+			break
+		}
+	}
+
+	rows, selected := searchAndBuild(def, store, nil, nil, "", "测试活动")
+	if len(rows) != 2 || selected == nil || selected.Type != "event_list" {
+		t.Fatalf("rows=%#v selected=%#v, want event_list", rows, selected)
+	}
+	payload, ok := selected.Payload.(renderer.EventListPayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want EventListPayload", selected.Payload)
+	}
+	if payload.Total != 2 || len(payload.Events) != 2 {
+		t.Fatalf("payload total=%d events=%d, want 2/2", payload.Total, len(payload.Events))
+	}
+}
+
 func TestParseSuiteStatusAliases(t *testing.T) {
 	service := NewService("/", nil, nil, nil, nil)
 	for _, input := range []string{"/抓包数据", "/抓包信息", "/suite", "/cn抓包数据", "/cnsuite"} {

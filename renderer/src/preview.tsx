@@ -276,6 +276,10 @@ export async function renderPreviewTemplate(
 	};
 }
 
+export function createPreviewElementForTest(id: string) {
+	return createPreviewElement(id);
+}
+
 function createPreviewElement(id: string) {
 	switch (id) {
 		case "card-detail":
@@ -448,6 +452,18 @@ function createPreviewElement(id: string) {
 						unit: "light_sound",
 						bonusAttr: "cool",
 						bonusCharacters: ["一歌", "咲希", "穗波", "志步"],
+						bonusCards: [
+							{
+								id: 1001,
+								prefix: "被星光照亮的舞台",
+								characterName: "初音未来",
+								rarity: "rarity_4",
+								cardRarityType: "rarity_4",
+								attr: "cool",
+								assetbundleName: "res001_no003",
+								supplyType: "期间限定",
+							},
+						],
 					}}
 				/>
 			);
@@ -473,6 +489,9 @@ function createPreviewElement(id: string) {
 							closedAt: Date.UTC(2026, 3, 30, 11, 0, 0),
 							bonusAttr: "cool",
 							bonusCharacters: ["一歌", "咲希", "穗波", "志步"],
+							bonusCards: [
+								{ id: 1001, prefix: "被星光照亮的舞台", characterName: "初音未来" },
+							],
 						},
 						{
 							id: 137,
