@@ -6,12 +6,6 @@
       </template>
     </PageHeader>
 
-    <UiAlert variant="warning" title="自定义关键词提示">
-      {{ aliasConfig?.risk_message || definitions?.risk_message || '自定义关键词会影响聊天端指令触发，请避免使用常见聊天词。' }}
-      <br />
-      {{ aliasConfig?.restart_note || definitions?.restart_note || '聊天端通常需要重启后生效。' }}
-    </UiAlert>
-
     <div class="command-parser-layout">
       <UiCard class-name="command-parser-main">
         <div class="card-heading">
@@ -23,7 +17,38 @@
         </div>
 
         <div class="command-input-row">
-          <input v-model="input" class="ui-input command-input" placeholder="例如 /查卡 1204、/card 初音未来、/cn查曲 Tell Your World" @keyup.enter="runParse" />
+          <div class="command-input-wrap" @focusout="handleInputBlur">
+            <input
+              ref="inputEl"
+              v-model="input"
+              class="ui-input command-input"
+              placeholder="例如 /查卡 1204、/card 初音未来、/cn查曲 Tell Your World"
+              autocomplete="off"
+              spellcheck="false"
+              @focus="suggestionsOpen = true"
+              @input="onInputChange"
+              @keydown="onInputKeydown"
+              @keyup.enter.exact="onInputEnter"
+            />
+            <ul v-if="suggestionsOpen && suggestions.length" class="command-suggest" role="listbox">
+              <li
+                v-for="(item, index) in suggestions"
+                :key="item.key"
+                class="command-suggest__item"
+                :class="{ 'command-suggest__item--active': index === activeSuggestion }"
+                role="option"
+                :aria-selected="index === activeSuggestion"
+                @mousedown.prevent="applySuggestion(item)"
+                @mouseenter="activeSuggestion = index"
+              >
+                <span class="command-suggest__cmd">{{ item.text }}</span>
+                <span class="command-suggest__meta">
+                  <span class="command-suggest__name">{{ item.name }}</span>
+                  <UiBadge variant="outline">{{ item.kind }}</UiBadge>
+                </span>
+              </li>
+            </ul>
+          </div>
           <UiButton :loading="parsing" @click="runParse">解析</UiButton>
           <UiButton variant="secondary" :loading="rendering" :disabled="!parsed?.definition" @click="runRender">渲染</UiButton>
         </div>
@@ -49,10 +74,6 @@
             </label>
           </div>
           <p class="debug-binding-hint">{{ debugBindingHint }}</p>
-        </div>
-
-        <div v-if="exampleCommands.length" class="command-examples">
-          <button v-for="example in exampleCommands" :key="example" class="alias-chip" type="button" @click="useExample(example)">{{ example }}</button>
         </div>
 
         <UiAlert v-if="parseError" variant="destructive" title="解析失败">{{ parseError }}</UiAlert>
@@ -138,75 +159,106 @@
       </UiCard>
     </div>
 
-    <UiCard>
+    <UiCard class-name="command-tabs-card">
       <div class="card-heading">
         <div>
-          <h2>自定义关键词</h2>
-          <p>只填写不带 / 的关键词；官方预设和原始指令受保护，恢复默认会清空自定义关键词。</p>
-        </div>
-        <div class="command-alias-actions">
-          <UiButton variant="outline" size="sm" @click="exportAliasesToFile">导出</UiButton>
-          <UiButton variant="outline" size="sm" @click="triggerImport">导入</UiButton>
-          <UiButton variant="secondary" size="sm" :loading="savingAliases" @click="resetAliasesToDefault">恢复默认</UiButton>
-          <UiButton size="sm" :loading="savingAliases" @click="saveAliases">保存关键词</UiButton>
-          <input ref="importInput" class="sr-only-input" type="file" accept="application/json" @change="handleImportFile" />
-        </div>
-      </div>
-
-      <UiAlert v-if="aliasMessage" variant="info">{{ aliasMessage }}</UiAlert>
-      <UiAlert v-if="aliasError" variant="destructive" title="关键词配置错误">{{ aliasError }}</UiAlert>
-
-      <div class="alias-editor-grid">
-        <div v-for="definition in commandDefinitions" :key="definition.id" class="alias-editor-item">
-          <div class="alias-editor-item__header">
-            <div>
-              <strong>{{ definition.name }}</strong>
-              <span>{{ definition.primary_command }} · {{ definition.usage }}</span>
-            </div>
-            <UiBadge variant="outline">{{ definition.template }}</UiBadge>
-          </div>
-          <div class="alias-chip-row">
-            <span v-for="alias in definition.preset_aliases" :key="alias" class="alias-chip alias-chip--preset">{{ alias }}</span>
-            <span v-for="alias in aliasDraft[definition.primary_command] || []" :key="alias" class="alias-chip alias-chip--custom">
-              {{ alias }}
-              <button type="button" @click="removeAlias(definition.primary_command, alias)">×</button>
-            </span>
-          </div>
-          <div class="alias-add-row">
-            <input v-model="aliasInputs[definition.primary_command]" class="ui-input" placeholder="添加自定义关键词" @keyup.enter="addAlias(definition.primary_command)" />
-            <UiButton variant="outline" size="sm" @click="addAlias(definition.primary_command)">添加</UiButton>
-          </div>
-        </div>
-      </div>
-    </UiCard>
-
-    <UiCard>
-      <div class="card-heading">
-        <div>
-          <h2>功能列表</h2>
-          <p>每个 Satori 渲染功能对应的解析方法、预设别名和示例。</p>
+          <h2>指令分类</h2>
+          <p>按功能类别浏览所有命令，点击 Tab 切换当前分类。选中指令可编辑自定义关键词。</p>
         </div>
         <UiBadge variant="secondary">{{ commandDefinitions.length }} 项</UiBadge>
       </div>
-      <div class="command-definition-grid">
-        <button v-for="definition in commandDefinitions" :key="definition.id" type="button" class="command-definition-card" @click="useExample(definition.examples?.[0] || definition.usage)">
-          <span class="command-definition-card__top">
-            <strong>{{ definition.name }}</strong>
-            <UiBadge variant="outline">{{ definition.render_mode }}</UiBadge>
-          </span>
-          <span class="command-definition-card__usage">{{ definition.usage }}</span>
-          <span class="command-definition-card__desc">{{ definition.description }}</span>
-          <span class="alias-chip-row">
-            <span v-for="alias in [...definition.preset_aliases, ...definition.custom_aliases].slice(0, 6)" :key="alias" class="alias-chip">{{ alias }}</span>
-          </span>
+
+      <div class="command-tabs">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          type="button"
+          class="command-tab"
+          :class="{ 'command-tab--active': activeCategory === tab.key }"
+          @click="setActiveCategory(tab.key)"
+        >
+          <span class="command-tab__icon" aria-hidden="true"><SvgIcon :name="tab.icon" :size="16" /></span>
+          <span class="command-tab__label">{{ tab.label }}</span>
+          <UiBadge :variant="activeCategory === tab.key ? 'secondary' : 'outline'">{{ tab.count }}</UiBadge>
         </button>
+      </div>
+
+      <p v-if="activeTabHint" class="command-tab__hint">{{ activeTabHint }}</p>
+
+      <div class="command-tab-section">
+        <h3 class="command-section-title">功能列表</h3>
+        <div v-if="activeDefinitions.length" class="command-definition-grid">
+          <button v-for="definition in activeDefinitions" :key="definition.id" type="button" class="command-definition-card" @click="useExample(definition.examples?.[0] || definition.usage)">
+            <span class="command-definition-card__top">
+              <strong>{{ definition.name }}</strong>
+              <UiBadge variant="outline">{{ definition.render_mode }}</UiBadge>
+            </span>
+            <span class="command-definition-card__usage">{{ definition.usage }}</span>
+            <span class="command-definition-card__desc">{{ definition.description }}</span>
+            <span v-if="definitionExamples(definition).length" class="command-definition-card__examples">
+              <span v-for="example in definitionExamples(definition).slice(0, 3)" :key="example" class="alias-chip alias-chip--example">{{ example }}</span>
+            </span>
+            <span v-if="definitionAliases(definition).length" class="alias-chip-row">
+              <span v-for="alias in definitionAliases(definition).slice(0, 8)" :key="alias" class="alias-chip">{{ alias }}</span>
+            </span>
+          </button>
+        </div>
+        <div v-else class="empty-state compact">
+          <p>该分类暂无指令。</p>
+        </div>
+      </div>
+
+      <div class="command-tab-section">
+        <div class="command-section-heading">
+          <h3 class="command-section-title">自定义关键词</h3>
+          <div class="command-alias-actions">
+            <UiButton variant="outline" size="sm" @click="exportAliasesToFile">导出</UiButton>
+            <UiButton variant="outline" size="sm" @click="triggerImport">导入</UiButton>
+            <UiButton variant="secondary" size="sm" :loading="savingAliases" @click="resetAliasesToDefault">恢复默认</UiButton>
+            <UiButton size="sm" :loading="savingAliases" @click="saveAliases">保存</UiButton>
+            <input ref="importInput" class="sr-only-input" type="file" accept="application/json" @change="handleImportFile" />
+          </div>
+        </div>
+
+        <UiAlert v-if="aliasMessage" variant="info">{{ aliasMessage }}</UiAlert>
+        <UiAlert v-if="aliasError" variant="destructive" title="关键词配置错误">{{ aliasError }}</UiAlert>
+
+        <div v-if="aliasEditDefinition" class="alias-editor-card">
+          <div class="alias-editor-card__row">
+            <label class="settings-field alias-editor-card__select">
+              选择指令
+              <select v-model="aliasEditCommand" class="ui-select">
+                <optgroup v-for="group in aliasEditOptions" :key="group.category" :label="group.label">
+                  <option v-for="def in group.items" :key="def.id" :value="def.primary_command">{{ def.name }} · /{{ def.primary_command }}</option>
+                </optgroup>
+              </select>
+            </label>
+            <UiBadge variant="outline">{{ aliasEditDefinition.template || aliasEditDefinition.render_mode }}</UiBadge>
+          </div>
+
+          <p class="alias-editor-card__desc">{{ aliasEditDefinition.usage }} · {{ aliasEditDefinition.description }}</p>
+
+          <div class="alias-chip-row">
+            <span v-for="alias in (aliasEditDefinition.preset_aliases || [])" :key="`p-${alias}`" class="alias-chip alias-chip--preset">{{ alias }}</span>
+            <span v-for="alias in aliasDraft[aliasEditDefinition.primary_command] || []" :key="`c-${alias}`" class="alias-chip alias-chip--custom">
+              {{ alias }}
+              <button type="button" @click="removeAlias(aliasEditDefinition.primary_command, alias)">×</button>
+            </span>
+            <span v-if="!(aliasEditDefinition.preset_aliases || []).length && !(aliasDraft[aliasEditDefinition.primary_command] || []).length" class="alias-editor-card__empty">暂无别名，可在下方添加。</span>
+          </div>
+
+          <div class="alias-add-row">
+            <input v-model="aliasInputs[aliasEditDefinition.primary_command]" class="ui-input" placeholder="添加自定义关键词，例如 cardx" @keyup.enter="addAlias(aliasEditDefinition.primary_command)" />
+            <UiButton variant="outline" size="sm" @click="addAlias(aliasEditDefinition.primary_command)">添加</UiButton>
+          </div>
+        </div>
       </div>
     </UiCard>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   downloadCommandAliases,
@@ -219,7 +271,7 @@ import {
   resetCommandAliases,
   updateCommandAliases,
 } from '../api/client'
-import type { CommandAliasConfig, CommandDefinition, ParsedCommand, RenderTiming } from '../api/types'
+import type { CommandAliasConfig, CommandCategory, CommandDefinition, ParsedCommand, RenderTiming } from '../api/types'
 import PageHeader from '../components/PageHeader.vue'
 import SvgIcon from '../components/icons/SvgIcon.vue'
 import UiAlert from '../components/ui/UiAlert.vue'
@@ -228,10 +280,29 @@ import UiButton from '../components/ui/UiButton.vue'
 import UiCard from '../components/ui/UiCard.vue'
 import UiSkeleton from '../components/ui/UiSkeleton.vue'
 
+import type { IconName } from '../components/icons/SvgIcon.vue'
+
+interface CategoryTab {
+  key: CommandCategory
+  label: string
+  icon: IconName
+  hint: string
+}
+
+const CATEGORY_TABS: CategoryTab[] = [
+  { key: 'profile', label: '账号 / Profile', icon: 'users', hint: '账号绑定与个人资料图，使用 Sekai Profile API。' },
+  { key: 'suite', label: 'Suite 数据', icon: 'database', hint: '需绑定账号且 Suite 公开，使用 Haruki Suite 公开 API 拉取真实数据。' },
+  { key: 'deck', label: '组卡推荐', icon: 'resources', hint: '基于 Suite 卡组数据，由内置 sekai-calculator 推荐配队。' },
+  { key: 'query', label: '查询 / 榜线', icon: 'search', hint: '查卡 / 查曲 / 活动 / 卡池 / 演唱会以及实时榜线、预测、查房、水表。' },
+  { key: 'misc', label: '其它', icon: 'sparkle', hint: '抽卡模拟、帮助菜单等娱乐与系统类指令。' },
+]
+
 const route = useRoute()
 const router = useRouter()
-const initialQuery = route.query.q
-const input = ref(typeof initialQuery === 'string' ? initialQuery : Array.isArray(initialQuery) && typeof initialQuery[0] === 'string' ? initialQuery[0] : '/查卡 1204')
+const initialQuery = pickStringFromQuery(route.query.q)
+const initialCategory = pickCategoryFromRoute(route.query.cat)
+
+const input = ref(initialQuery || '/查卡 1204')
 type CommandDefinitionsData = Awaited<ReturnType<typeof getCommandDefinitions>>
 
 const definitions = ref<CommandDefinitionsData | null>(null)
@@ -251,9 +322,43 @@ const aliasInputs = reactive<Record<string, string>>({})
 const importInput = ref<HTMLInputElement | null>(null)
 const timings = ref<RenderTiming>(emptyTiming())
 const debugBinding = reactive({ region: '', gameId: '' })
+const activeCategory = ref<CommandCategory>(initialCategory)
+const aliasEditCommand = ref('')
+const inputEl = ref<HTMLInputElement | null>(null)
+const suggestionsOpen = ref(false)
+const activeSuggestion = ref(0)
+
+interface SuggestionItem {
+  key: string
+  text: string
+  name: string
+  kind: string
+  category: CommandCategory
+  score: number
+}
 
 const commandDefinitions = computed<CommandDefinition[]>(() => aliasConfig.value?.data ?? definitions.value?.data ?? [])
-const exampleCommands = computed(() => commandDefinitions.value.flatMap(definition => definition.examples ?? []).slice(0, 12))
+const definitionsByCategory = computed(() => {
+  const groups: Record<string, CommandDefinition[]> = {}
+  for (const tab of CATEGORY_TABS) groups[tab.key] = []
+  for (const def of commandDefinitions.value) {
+    const key = def.category || 'misc'
+    if (!groups[key]) groups[key] = []
+    groups[key].push(def)
+  }
+  return groups
+})
+const tabs = computed(() => CATEGORY_TABS.map(tab => ({ ...tab, count: definitionsByCategory.value[tab.key]?.length ?? 0 })))
+const activeDefinitions = computed(() => definitionsByCategory.value[activeCategory.value] ?? [])
+const activeTabHint = computed(() => CATEGORY_TABS.find(tab => tab.key === activeCategory.value)?.hint ?? '')
+const aliasEditOptions = computed(() => CATEGORY_TABS
+  .map(tab => ({ category: tab.key, label: tab.label, items: definitionsByCategory.value[tab.key] ?? [] }))
+  .filter(group => group.items.length > 0))
+const aliasEditDefinition = computed<CommandDefinition | null>(() => {
+  if (!aliasEditCommand.value) return null
+  return commandDefinitions.value.find(def => def.primary_command === aliasEditCommand.value) ?? null
+})
+const suggestions = computed<SuggestionItem[]>(() => buildSuggestions(input.value, commandDefinitions.value))
 const regionOptions = computed(() => definitions.value?.regions ?? [])
 const showDebugBindingPanel = computed(() => Boolean(parsed.value?.definition?.requires_binding))
 const debugBindingHint = computed(() => {
@@ -271,6 +376,24 @@ const timingItems = computed(() => [
   { key: 'proxy', label: 'Go 代理', value: formatMs(timings.value.proxy_ms) },
   { key: 'network', label: '浏览器请求', value: formatMs(timings.value.network_ms) },
 ].filter(item => item.value !== '-'))
+
+watch(activeCategory, value => {
+  void router.replace({ query: { ...route.query, cat: value } })
+  ensureAliasEditSelection()
+})
+
+watch(commandDefinitions, () => {
+  ensureAliasEditSelection()
+}, { deep: false })
+
+function ensureAliasEditSelection() {
+  const activeList = activeDefinitions.value
+  if (activeList.length === 0) return
+  const exists = activeList.some(def => def.primary_command === aliasEditCommand.value)
+  if (!exists) {
+    aliasEditCommand.value = activeList[0].primary_command
+  }
+}
 
 onMounted(async () => {
   await loadAll()
@@ -301,7 +424,10 @@ async function runParse() {
     const response = await parseCommand(input.value, currentDebugBindingPayload())
     parsed.value = response.parsed
     syncDebugRegionFromParsed(response.parsed)
-    void router.replace({ query: { ...route.query, q: input.value } })
+    if (response.parsed?.definition?.category) {
+      activeCategory.value = response.parsed.definition.category
+    }
+    void router.replace({ query: { ...route.query, q: input.value, cat: activeCategory.value } })
   } catch (err) {
     parseError.value = err instanceof Error ? err.message : '解析失败。'
   } finally {
@@ -328,9 +454,138 @@ async function runRender() {
   }
 }
 
+function setActiveCategory(category: CommandCategory) {
+  activeCategory.value = category
+}
+
 function useExample(example: string) {
   input.value = example
+  suggestionsOpen.value = false
   void runParse()
+}
+
+function definitionExamples(def: CommandDefinition): string[] {
+  return Array.isArray(def?.examples) ? def.examples : []
+}
+
+function definitionAliases(def: CommandDefinition): string[] {
+  const preset = Array.isArray(def?.preset_aliases) ? def.preset_aliases : []
+  const custom = Array.isArray(def?.custom_aliases) ? def.custom_aliases : []
+  return [...preset, ...custom]
+}
+
+function onInputChange() {
+  activeSuggestion.value = 0
+  suggestionsOpen.value = true
+}
+
+function onInputKeydown(event: KeyboardEvent) {
+  if (!suggestionsOpen.value || suggestions.value.length === 0) return
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    activeSuggestion.value = (activeSuggestion.value + 1) % suggestions.value.length
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    activeSuggestion.value = (activeSuggestion.value - 1 + suggestions.value.length) % suggestions.value.length
+  } else if (event.key === 'Escape') {
+    suggestionsOpen.value = false
+  } else if (event.key === 'Tab') {
+    const picked = suggestions.value[activeSuggestion.value]
+    if (picked) {
+      event.preventDefault()
+      applySuggestionText(picked)
+    }
+  }
+}
+
+function onInputEnter(event: KeyboardEvent) {
+  if (suggestionsOpen.value && suggestions.value.length > 0 && activeSuggestion.value >= 0) {
+    const picked = suggestions.value[activeSuggestion.value]
+    const typed = input.value.trim().replace(/^\//, '').toLowerCase()
+    if (picked && typed !== picked.text.replace(/^\//, '').toLowerCase()) {
+      event.preventDefault()
+      applySuggestion(picked)
+      return
+    }
+  }
+  suggestionsOpen.value = false
+  void runParse()
+}
+
+function applySuggestion(item: SuggestionItem) {
+  applySuggestionText(item)
+  void runParse()
+}
+
+function applySuggestionText(item: SuggestionItem) {
+  input.value = item.text
+  suggestionsOpen.value = false
+  requestAnimationFrame(() => {
+    inputEl.value?.focus()
+    inputEl.value?.setSelectionRange(item.text.length, item.text.length)
+  })
+}
+
+function handleInputBlur(event: FocusEvent) {
+  const next = event.relatedTarget as HTMLElement | null
+  if (next && next.closest('.command-input-wrap')) return
+  suggestionsOpen.value = false
+}
+
+function buildSuggestions(raw: string, defs: CommandDefinition[]): SuggestionItem[] {
+  if (!defs.length) return []
+  const trimmed = raw.trim()
+  const stripped = trimmed.replace(/^\//, '')
+  const firstToken = stripped.split(/\s+/, 1)[0] ?? ''
+  const needle = firstToken.toLowerCase()
+  const out: SuggestionItem[] = []
+  const seen = new Set<string>()
+  const push = (text: string, name: string, kind: string, category: CommandCategory, score: number) => {
+    const normalized = text.startsWith('/') ? text : `/${text}`
+    const key = normalized.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push({ key, text: normalized, name, kind, category, score })
+  }
+
+  for (const def of defs) {
+    const category = (def.category || 'misc') as CommandCategory
+    const primary = def.primary_command
+    score(primary, def.name, '主指令', category, 120)
+    for (const cmd of def.commands ?? []) {
+      if (cmd === primary) continue
+      score(cmd, def.name, '指令', category, 110)
+    }
+    for (const alias of def.preset_aliases ?? []) {
+      score(alias, def.name, '预设别名', category, 95)
+    }
+    for (const alias of def.custom_aliases ?? []) {
+      score(alias, def.name, '自定义', category, 100)
+    }
+    for (const example of def.examples ?? []) {
+      score(example, def.name, '示例', category, 70)
+    }
+  }
+
+  function score(candidate: string, name: string, kind: string, category: CommandCategory, baseScore: number) {
+    const canon = candidate.startsWith('/') ? candidate.slice(1) : candidate
+    const canonLower = canon.toLowerCase()
+    let weight = baseScore
+    if (!needle) {
+      // Empty input: surface primary/preset only, keep list short.
+      if (kind !== '主指令' && kind !== '预设别名') return
+    } else if (canonLower.startsWith(needle)) {
+      weight += 40
+    } else if (canonLower.includes(needle)) {
+      weight += 15
+    } else {
+      return
+    }
+    push(canon, name, kind, category, weight)
+  }
+
+  out.sort((a, b) => b.score - a.score || a.text.localeCompare(b.text))
+  return out.slice(0, needle ? 10 : 8)
 }
 
 function currentDebugBindingPayload() {
@@ -478,5 +733,20 @@ function matchSourceLabel(source: string) {
     custom_alias: '用户自定义关键词',
   }
   return labels[source] ?? (source || '-')
+}
+
+function pickCategoryFromRoute(value: unknown): CommandCategory {
+  const known = CATEGORY_TABS.map(tab => tab.key)
+  const candidate = pickStringFromQuery(value)
+  return known.includes(candidate as CommandCategory) ? (candidate as CommandCategory) : 'profile'
+}
+
+function pickStringFromQuery(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    const first = value[0]
+    if (typeof first === 'string') return first
+  }
+  return ''
 }
 </script>

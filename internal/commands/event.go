@@ -247,6 +247,13 @@ func formatEventText(event renderer.EventInfoPayload) string {
 		}
 		lines = append(lines, "加成卡："+strings.Join(cards, "、"))
 	}
+	if len(event.PickupCards) > 0 {
+		cards := make([]string, 0, len(event.PickupCards))
+		for _, card := range event.PickupCards {
+			cards = append(cards, fmt.Sprintf("#%d %s · %s", card.ID, card.CharacterName, card.Prefix))
+		}
+		lines = append(lines, "Pickup卡："+strings.Join(cards, "、"))
+	}
 	return strings.Join(lines, "\n")
 }
 

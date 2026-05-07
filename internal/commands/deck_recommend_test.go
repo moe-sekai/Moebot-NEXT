@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"moebot-next/internal/assets"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/suite"
@@ -34,7 +35,7 @@ func testDeckRecommendStore() *masterdata.Store {
 }
 
 func TestParseDeckRecommendArgsFixedCardsAndCharacters(t *testing.T) {
-	options, _, event, err := parseDeckRecommendArgs("#123 456 miku 一歌", testDeckRecommendStore(), "event")
+	options, _, event, err := parseDeckRecommendArgs("#123 456 miku 一歌", testDeckRecommendStore(), nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -66,7 +67,7 @@ func TestDeckCharacterAliasUsesLocalAliasLibrary(t *testing.T) {
 }
 
 func TestParseDeckRecommendArgsEventCharacterAliasDoesNotOverrideDefaultMusic(t *testing.T) {
-	options, music, event, err := parseDeckRecommendArgs("event123 ick", testDeckRecommendStore(), "event")
+	options, music, event, err := parseDeckRecommendArgs("event123 ick", testDeckRecommendStore(), nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -85,7 +86,7 @@ func TestParseDeckRecommendArgsEventCharacterAliasDoesNotOverrideDefaultMusic(t 
 }
 
 func TestParseDeckRecommendArgsEventMusicDifficulty(t *testing.T) {
-	options, music, event, err := parseDeckRecommendArgs("event123 music456 expert", testDeckRecommendStore(), "event")
+	options, music, event, err := parseDeckRecommendArgs("event123 music456 expert", testDeckRecommendStore(), nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -101,7 +102,7 @@ func TestParseDeckRecommendArgsEventMusicDifficulty(t *testing.T) {
 }
 
 func TestParseDeckRecommendArgsDefaultMusicAndDifficulty(t *testing.T) {
-	options, music, event, err := parseDeckRecommendArgs("", testDeckRecommendStore(), "event")
+	options, music, event, err := parseDeckRecommendArgs("", testDeckRecommendStore(), nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -120,7 +121,7 @@ func TestParseDeckRecommendArgsDefaultMusicAndDifficulty(t *testing.T) {
 }
 
 func TestParseDeckRecommendArgsExplicitDifficultyOverridesDefault(t *testing.T) {
-	options, _, _, err := parseDeckRecommendArgs("master", testDeckRecommendStore(), "strongest")
+	options, _, _, err := parseDeckRecommendArgs("master", testDeckRecommendStore(), nil, "strongest")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestParseDeckRecommendArgsExplicitDifficultyOverridesDefault(t *testing.T) 
 }
 
 func TestParseDeckRecommendArgsOptions(t *testing.T) {
-	options, _, _, err := parseDeckRecommendArgs("综合力 auto all 3套 timeout30s 技能吸取最大 不换队长", testDeckRecommendStore(), "event")
+	options, _, _, err := parseDeckRecommendArgs("综合力 auto all 3套 timeout30s 技能吸取最大 不换队长", testDeckRecommendStore(), nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -158,7 +159,7 @@ func TestParseDeckRecommendArgsOptions(t *testing.T) {
 }
 
 func TestParseDeckRecommendArgsPreferMusicNearDifficulty(t *testing.T) {
-	options, music, _, err := parseDeckRecommendArgs("456 master", testDeckRecommendStore(), "event")
+	options, music, _, err := parseDeckRecommendArgs("456 master", testDeckRecommendStore(), nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -168,7 +169,7 @@ func TestParseDeckRecommendArgsPreferMusicNearDifficulty(t *testing.T) {
 }
 
 func TestParseStrongestDeckArgs(t *testing.T) {
-	options, _, event, err := parseDeckRecommendArgs("实效 5套", testDeckRecommendStore(), "strongest")
+	options, _, event, err := parseDeckRecommendArgs("实效 5套", testDeckRecommendStore(), nil, "strongest")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -187,7 +188,7 @@ func TestParseStrongestDeckArgs(t *testing.T) {
 }
 
 func TestParseChallengeDeckArgs(t *testing.T) {
-	options, _, event, err := parseDeckRecommendArgs("miku all", testDeckRecommendStore(), "challenge")
+	options, _, event, err := parseDeckRecommendArgs("miku all", testDeckRecommendStore(), nil, "challenge")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -206,7 +207,7 @@ func TestParseChallengeDeckArgs(t *testing.T) {
 }
 
 func TestParseBonusDeckArgs(t *testing.T) {
-	options, _, event, err := parseDeckRecommendArgs("event123 250 260 270", testDeckRecommendStore(), "bonus")
+	options, _, event, err := parseDeckRecommendArgs("event123 250 260 270", testDeckRecommendStore(), nil, "bonus")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -221,8 +222,57 @@ func TestParseBonusDeckArgs(t *testing.T) {
 	}
 }
 
+func TestParseMysekaiDeckArgs(t *testing.T) {
+	options, _, event, err := parseDeckRecommendArgs("event123", testDeckRecommendStore(), nil, "mysekai")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if options.Mode != "mysekai" {
+		t.Fatalf("mode = %s", options.Mode)
+	}
+	if event == nil || event.ID != 123 {
+		t.Fatalf("event = %#v", event)
+	}
+	if options.LiveType != "multi" {
+		t.Fatalf("liveType = %s", options.LiveType)
+	}
+	if options.Target != "score" {
+		t.Fatalf("target = %s", options.Target)
+	}
+}
+
+func TestParseMysekaiDeckArgsWorldBloomChapter(t *testing.T) {
+	options, _, event, err := parseDeckRecommendArgs("event140 miku", testDeckRecommendStore(), nil, "mysekai")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if options.Mode != "mysekai" {
+		t.Fatalf("mode = %s", options.Mode)
+	}
+	if event == nil || event.ID != 140 {
+		t.Fatalf("event = %#v", event)
+	}
+	if options.SupportCharacterID != 21 {
+		t.Fatalf("support character = %d", options.SupportCharacterID)
+	}
+}
+
+func TestParseMysekaiDeckArgsRejectsMusicKeyword(t *testing.T) {
+	options, _, event, err := parseDeckRecommendArgs("event123 Test Song", testDeckRecommendStore(), nil, "mysekai")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if event == nil || event.ID != 123 {
+		t.Fatalf("event = %#v", event)
+	}
+	// 烤森模式不应根据剩余 token 搜索曲目，仍使用默认曲目
+	if options.MusicID != deckRecommendDefaultMusicID {
+		t.Fatalf("music id = %d, want default %d", options.MusicID, deckRecommendDefaultMusicID)
+	}
+}
+
 func TestParseDeckRecommendArgsWorldBloomChapterNumber(t *testing.T) {
-	options, _, event, err := parseDeckRecommendArgs("event140 wl1", testDeckRecommendStore(), "event")
+	options, _, event, err := parseDeckRecommendArgs("event140 wl1", testDeckRecommendStore(), nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -235,7 +285,7 @@ func TestParseDeckRecommendArgsWorldBloomChapterNumber(t *testing.T) {
 }
 
 func TestParseDeckRecommendArgsWorldBloomCharacterAlias(t *testing.T) {
-	options, _, event, err := parseDeckRecommendArgs("event140 miku", testDeckRecommendStore(), "event")
+	options, _, event, err := parseDeckRecommendArgs("event140 miku", testDeckRecommendStore(), nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -248,7 +298,7 @@ func TestParseDeckRecommendArgsWorldBloomCharacterAlias(t *testing.T) {
 }
 
 func TestParseDeckRecommendArgsWorldBloomDefaultCurrentChapter(t *testing.T) {
-	options, _, _, err := parseDeckRecommendArgs("event140", testDeckRecommendStore(), "event")
+	options, _, _, err := parseDeckRecommendArgs("event140", testDeckRecommendStore(), nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -259,14 +309,14 @@ func TestParseDeckRecommendArgsWorldBloomDefaultCurrentChapter(t *testing.T) {
 
 func TestParseDeckRecommendArgsWorldBloomDefaultFutureAndPast(t *testing.T) {
 	store := testDeckRecommendStore()
-	future, _, _, err := parseDeckRecommendArgs("event141", store, "event")
+	future, _, _, err := parseDeckRecommendArgs("event141", store, nil, "event")
 	if err != nil {
 		t.Fatalf("future parse failed: %v", err)
 	}
 	if future.SupportCharacterID != 17 {
 		t.Fatalf("future support = %d", future.SupportCharacterID)
 	}
-	past, _, _, err := parseDeckRecommendArgs("event142", store, "event")
+	past, _, _, err := parseDeckRecommendArgs("event142", store, nil, "event")
 	if err != nil {
 		t.Fatalf("past parse failed: %v", err)
 	}
@@ -276,14 +326,14 @@ func TestParseDeckRecommendArgsWorldBloomDefaultFutureAndPast(t *testing.T) {
 }
 
 func TestParseDeckRecommendArgsWorldBloomNonWLError(t *testing.T) {
-	_, _, _, err := parseDeckRecommendArgs("event123 wl1", testDeckRecommendStore(), "event")
+	_, _, _, err := parseDeckRecommendArgs("event123 wl1", testDeckRecommendStore(), nil, "event")
 	if err == nil {
 		t.Fatal("expected non-WL chapter error")
 	}
 }
 
 func TestParseBonusDeckArgsWorldBloomSupportCharacter(t *testing.T) {
-	options, _, event, err := parseDeckRecommendArgs("event140 wl1 250", testDeckRecommendStore(), "bonus")
+	options, _, event, err := parseDeckRecommendArgs("event140 wl1 250", testDeckRecommendStore(), nil, "bonus")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -480,6 +530,60 @@ func TestFilterDeckRecommendUserDataWithJPMaster(t *testing.T) {
 	}
 	if rank := intValueFromAny(characters[0].(map[string]any)["characterRank"]); rank != 3 {
 		t.Fatalf("clamped character rank = %d, want 3", rank)
+	}
+}
+
+func TestParseDeckRecommendArgsResolvesMusicViaAlias(t *testing.T) {
+	store := testDeckRecommendStore()
+	aliases := map[int]assets.MusicAlias{
+		789: {MusicID: 789, Title: "另一个曲目", Aliases: []string{"龙"}},
+	}
+	options, music, _, err := parseDeckRecommendArgs("龙 hd", store, aliases, "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if music == nil || music.ID != 789 {
+		t.Fatalf("music = %#v, want id 789 from alias", music)
+	}
+	if options.MusicID != 789 {
+		t.Fatalf("options.MusicID = %d, want 789", options.MusicID)
+	}
+	if options.Difficulty != "hard" {
+		t.Fatalf("difficulty = %s, want hard", options.Difficulty)
+	}
+	if options.IsPresetDefault {
+		t.Fatalf("IsPresetDefault should be false when music resolved via alias")
+	}
+}
+
+func TestParseDeckRecommendArgsAliasMissFallsBackWithError(t *testing.T) {
+	store := testDeckRecommendStore()
+	aliases := map[int]assets.MusicAlias{
+		789: {MusicID: 789, Title: "另一个曲目", Aliases: []string{"龙"}},
+	}
+	_, _, _, err := parseDeckRecommendArgs("不存在的关键词 hd", store, aliases, "event")
+	if err == nil {
+		t.Fatal("expected error when keyword does not match any music")
+	}
+}
+
+func TestParseDeckRecommendArgsDefaultMusicMarksPresetDefault(t *testing.T) {
+	options, _, _, err := parseDeckRecommendArgs("", testDeckRecommendStore(), nil, "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if !options.IsPresetDefault {
+		t.Fatalf("IsPresetDefault should be true when no music specified, got false (MusicID=%d)", options.MusicID)
+	}
+}
+
+func TestParseDeckRecommendArgsExplicitMusicClearsPresetDefault(t *testing.T) {
+	options, _, _, err := parseDeckRecommendArgs("event123 music456", testDeckRecommendStore(), nil, "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if options.IsPresetDefault {
+		t.Fatalf("IsPresetDefault should be false when user picked music456")
 	}
 }
 

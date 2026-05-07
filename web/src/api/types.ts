@@ -451,7 +451,17 @@ export interface CommandDefinition {
 	binding_hint?: string;
 	search_type: CommandSearchType;
 	render_mode: CommandRenderMode;
+	category: CommandCategory;
+	category_label: string;
 }
+
+export type CommandCategory =
+	| "profile"
+	| "suite"
+	| "deck"
+	| "query"
+	| "misc"
+	| string;
 
 export interface CommandRegionInfo {
 	key: string;

@@ -43,12 +43,13 @@ type CardDetailPayload struct {
 }
 
 type CardEventPayload struct {
-	ID        int    `json:"id"`
-	Name      string `json:"name"`
-	EventType string `json:"eventType,omitempty"`
-	StartAt   int64  `json:"startAt,omitempty"`
-	ClosedAt  int64  `json:"closedAt,omitempty"`
-	Unit      string `json:"unit,omitempty"`
+	ID              int    `json:"id"`
+	Name            string `json:"name"`
+	EventType       string `json:"eventType,omitempty"`
+	AssetbundleName string `json:"assetbundleName,omitempty"`
+	StartAt         int64  `json:"startAt,omitempty"`
+	ClosedAt        int64  `json:"closedAt,omitempty"`
+	Unit            string `json:"unit,omitempty"`
 }
 
 // MusicDetailPayload is the normalized data contract consumed by MusicDetail.tsx.
@@ -87,23 +88,24 @@ type MusicDifficultyPayload struct {
 
 // EventInfoPayload is the normalized data contract consumed by EventInfo.tsx.
 type EventInfoPayload struct {
-	ID                int                     `json:"id"`
-	Name              string                  `json:"name"`
-	EventType         string                  `json:"eventType"`
-	Unit              string                  `json:"unit,omitempty"`
-	AssetbundleName   string                  `json:"assetbundleName,omitempty"`
-	StartAt           int64                   `json:"startAt"`
-	AggregateAt       int64                   `json:"aggregateAt,omitempty"`
-	ClosedAt          int64                   `json:"closedAt"`
-	DistributionEndAt int64                   `json:"distributionEndAt,omitempty"`
-	DeckBonuses       []EventDeckBonusPayload `json:"deckBonuses,omitempty"`
-	BonusAttr         string                  `json:"bonusAttr,omitempty"`
-	BonusCharacters   []string                `json:"bonusCharacters,omitempty"`
-	BonusCards        []CardDetailPayload     `json:"bonusCards,omitempty"`
-	BannerURL         string                  `json:"bannerUrl,omitempty"`
-	LogoURL           string                  `json:"logoUrl,omitempty"`
-	StoryBannerURL    string                  `json:"storyBannerUrl,omitempty"`
-	AssetSource       string                  `json:"assetSource,omitempty"`
+	ID                int                      `json:"id"`
+	Name              string                   `json:"name"`
+	EventType         string                   `json:"eventType"`
+	Unit              string                   `json:"unit,omitempty"`
+	AssetbundleName   string                   `json:"assetbundleName,omitempty"`
+	StartAt           int64                    `json:"startAt"`
+	AggregateAt       int64                    `json:"aggregateAt,omitempty"`
+	ClosedAt          int64                    `json:"closedAt"`
+	DistributionEndAt int64                    `json:"distributionEndAt,omitempty"`
+	DeckBonuses       []EventDeckBonusPayload  `json:"deckBonuses,omitempty"`
+	BonusAttr         string                   `json:"bonusAttr,omitempty"`
+	BonusCharacters   []string                 `json:"bonusCharacters,omitempty"`
+	BonusCards        []CardDetailPayload      `json:"bonusCards,omitempty"`
+	PickupCards       []GachaPickupCardPayload `json:"pickupCards,omitempty"`
+	BannerURL         string                   `json:"bannerUrl,omitempty"`
+	LogoURL           string                   `json:"logoUrl,omitempty"`
+	StoryBannerURL    string                   `json:"storyBannerUrl,omitempty"`
+	AssetSource       string                   `json:"assetSource,omitempty"`
 }
 
 // EventDeckBonusPayload enriches an event bonus row with character/unit labels.
@@ -1459,7 +1461,8 @@ func buildCardEvents(store *masterdata.Store, cardID int) []CardEventPayload {
 		}
 		events = append(events, CardEventPayload{
 			ID: event.ID, Name: event.Name, EventType: event.EventType,
-			StartAt: event.StartAt, ClosedAt: event.ClosedAt, Unit: event.Unit,
+			AssetbundleName: event.AssetbundleName,
+			StartAt:         event.StartAt, ClosedAt: event.ClosedAt, Unit: event.Unit,
 		})
 	}
 	sort.SliceStable(events, func(i, j int) bool {
@@ -1576,6 +1579,20 @@ func BuildEventInfoPayloadWithAssets(store *masterdata.Store, event masterdata.E
 		}
 
 		payload.DeckBonuses = append(payload.DeckBonuses, bonus)
+	}
+
+	// Populate pickup cards from gachas overlapping with the event.
+	seenPickupCards := make(map[int]struct{})
+	for _, gacha := range store.GetGachasForEvent(event.ID) {
+		for _, pickup := range gacha.GachaPickups {
+			if _, dup := seenPickupCards[pickup.CardID]; dup {
+				continue
+			}
+			seenPickupCards[pickup.CardID] = struct{}{}
+			if card := store.GetCard(pickup.CardID); card != nil {
+				payload.PickupCards = append(payload.PickupCards, buildGachaPickupCardPayload(*card, pickup.GachaPickupType, resolver))
+			}
+		}
 	}
 
 	return payload

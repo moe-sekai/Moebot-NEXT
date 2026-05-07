@@ -37,6 +37,7 @@ type DeckRecommendOptions struct {
 	TargetBonusList              []int                     `json:"targetBonusList,omitempty"`
 	FilterOtherUnit              bool                      `json:"filterOtherUnit,omitempty"`
 	SupportCharacterID           int                       `json:"supportCharacterId,omitempty"`
+	IsPresetDefault              bool                      `json:"isPresetDefault,omitempty"`
 }
 
 type DeckCardConfig struct {

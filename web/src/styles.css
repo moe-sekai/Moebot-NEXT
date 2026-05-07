@@ -317,8 +317,15 @@ button, input, select { font: inherit; }
 .timing-item strong { display: block; margin-top: 6px; font-size: 18px; }
 
 .command-parser-layout { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr); gap: 16px; align-items: start; }
-.command-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; margin-bottom: 12px; }
+.command-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; margin-bottom: 12px; align-items: start; }
+.command-input-wrap { position: relative; min-width: 0; }
 .command-input { width: 100%; }
+.command-suggest { list-style: none; margin: 6px 0 0; padding: 6px; position: absolute; top: 100%; left: 0; right: 0; z-index: 18; max-height: 320px; overflow-y: auto; background: rgba(255, 255, 255, .96); border: 1px solid rgba(165, 180, 252, .34); border-radius: 16px; box-shadow: 0 18px 42px rgba(78, 92, 146, .16); backdrop-filter: blur(6px); }
+.command-suggest__item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; cursor: pointer; color: var(--foreground); transition: background .12s, color .12s; }
+.command-suggest__item--active, .command-suggest__item:hover { background: linear-gradient(135deg, rgba(255, 120, 183, .14), rgba(108, 139, 255, .14)); color: #eb5aa3; }
+.command-suggest__cmd { font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace; font-size: 13.5px; font-weight: 900; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.command-suggest__meta { display: inline-flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 12px; flex-shrink: 0; }
+.command-suggest__name { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .debug-binding-panel { display: grid; gap: 12px; margin: 0 0 13px; padding: 14px; border: 1px solid rgba(255, 120, 183, .24); border-radius: 20px; background: linear-gradient(135deg, rgba(255,244,250,.78), rgba(238,248,255,.72)); }
 .debug-binding-panel__header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .debug-binding-panel__header strong { display: block; font-size: 15px; font-weight: 950; }
@@ -344,6 +351,11 @@ button, input, select { font: inherit; }
 .command-alias-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .sr-only-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .alias-editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 14px; }
+.alias-editor-card { display: grid; gap: 12px; padding: 16px; border: 1px solid rgba(165,180,252,.24); border-radius: 18px; background: rgba(255,255,255,.72); }
+.alias-editor-card__row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.alias-editor-card__select { flex: 1; min-width: 240px; }
+.alias-editor-card__desc { margin: 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.5; }
+.alias-editor-card__empty { color: var(--muted-foreground); font-size: 12px; }
 .alias-editor-item { display: grid; gap: 12px; padding: 15px; border: 1px solid rgba(165,180,252,.24); border-radius: 18px; background: rgba(255,255,255,.66); }
 .alias-editor-item__header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .alias-editor-item__header strong { display: block; }
@@ -355,6 +367,22 @@ button, input, select { font: inherit; }
 .command-definition-card__top { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
 .command-definition-card__usage { color: #eb5aa3; font-weight: 900; }
 .command-definition-card__desc { color: var(--muted-foreground); font-size: 13px; line-height: 1.45; }
+.command-definition-card__examples { display: flex; flex-wrap: wrap; gap: 6px; }
+.alias-chip--example { background: rgba(238, 248, 255, .82); color: #276b86; border-color: rgba(53, 199, 212, .28); cursor: default; font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace; font-size: 11.5px; }
+
+.command-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.command-tab { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(165, 180, 252, .3); background: rgba(255, 255, 255, .72); color: #52617e; font-size: 13.5px; font-weight: 850; cursor: pointer; transition: border-color .15s, background .15s, color .15s, box-shadow .15s; }
+.command-tab:hover { border-color: rgba(255, 120, 183, .36); color: #eb5aa3; }
+.command-tab--active { background: linear-gradient(135deg, #ff78b7, #6c8bff); color: #fff; border-color: transparent; box-shadow: 0 12px 26px rgba(255, 120, 183, .22); }
+.command-tab--active:hover { color: #fff; }
+.command-tab__icon { font-size: 15px; line-height: 1; }
+.command-tab__label { white-space: nowrap; }
+.command-tab__hint { margin: 0 0 14px; color: var(--muted-foreground); font-size: 12.5px; line-height: 1.55; }
+
+.command-tab-section { display: grid; gap: 12px; padding-top: 14px; border-top: 1px dashed rgba(165, 180, 252, .25); margin-top: 14px; }
+.command-tab-section:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+.command-section-title { margin: 0; font-size: 15px; font-weight: 950; letter-spacing: -.01em; color: #344063; }
+.command-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 .about-hero { display: flex; align-items: center; gap: 20px; }
 .about-hero__logo { width: min(430px, 100%); flex: none; }

@@ -163,6 +163,7 @@ function normalizeCard(data: any) {
 		compositeLayers: data.compositeLayers ?? data.CompositeLayers,
 		normalCompositeLayers: data.normalCompositeLayers ?? data.NormalCompositeLayers,
 		trainedCompositeLayers: data.trainedCompositeLayers ?? data.TrainedCompositeLayers,
+		events: data.events ?? data.Events ?? [],
 	};
 }
 
@@ -213,6 +214,8 @@ function normalizeEvent(data: any) {
 			data.bonusCharacters ??
 			data.BonusCharacters ??
 			deriveBonusCharacters(data.deckBonuses ?? data.DeckBonuses ?? []),
+		bonusCards: (data.bonusCards ?? data.BonusCards ?? []).map(normalizeCard),
+		pickupCards: (data.pickupCards ?? data.PickupCards ?? []).map(normalizeCard),
 	};
 }
 
@@ -462,7 +465,7 @@ async function prepareDeckRecommend(data: ReturnType<typeof normalizeDeckRecomme
 	const cards = (data.decks ?? []).flatMap((deck: any) => (deck.cards ?? []).map((entry: any) => entry.card ?? entry));
 	await hydrateCardCompositeLayersForCards(cards, {
 		assetSource: data.assetSource,
-		sizes: [112],
+		sizes: [58],
 		allowDownload: true,
 	});
 	return data;

@@ -1,4 +1,4 @@
-import { getCardFullUrl, getCardThumbnailUrl, type AssetSourceType } from '../../shared'
+import { getCardFullUrl, getCardThumbnailUrl, getEventBannerUrl, type AssetSourceType } from '../../shared'
 import { BaseCard } from './base'
 import { theme } from '../styles/theme'
 import { SekaiCardThumbnail, canUseTrainedArt, getAttributeColor } from './SekaiCardThumbnail'
@@ -28,6 +28,7 @@ interface CardDetailProps {
       id: number
       name: string
       eventType?: string
+      assetbundleName?: string
       startAt?: number
       closedAt?: number
       unit?: string
@@ -143,20 +144,89 @@ export function CardDetail({ card }: CardDetailProps) {
               display: 'flex',
               flexDirection: 'column',
               gap: theme.spacing.sm,
-              padding: theme.spacing.md,
               borderRadius: theme.borderRadius.lg,
               backgroundColor: theme.colors.surface,
               border: `1px solid ${theme.colors.border}`,
+              padding: theme.spacing.md,
             }}
           >
-            <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>关联活动</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {card.events.slice(0, 3).map((event) => (
-                <div key={event.id} style={{ display: 'flex', justifyContent: 'space-between', gap: theme.spacing.md }}>
-                  <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: 800 }}>#{event.id} {event.name}</span>
-                  <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: theme.fontSize.xs }}>{event.eventType ?? 'event'}</span>
-                </div>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+                <div style={{ display: 'flex', width: 6, height: 18, borderRadius: theme.borderRadius.round, backgroundColor: attrColor }} />
+                <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>关联活动</span>
+              </div>
+              <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: theme.fontSize.xs, fontWeight: 700 }}>共 {card.events.length} 个</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
+              {card.events.slice(0, 3).map((event) => {
+                const bannerUrl = event.assetbundleName ? getEventBannerUrl(event.assetbundleName, source) : undefined
+                const eventTypeLabel = event.eventType === 'marathon' ? '马拉松'
+                  : event.eventType === 'cheerful_carnival' ? '欢乐嘉年华'
+                  : event.eventType === 'world_bloom' ? '世界绽放'
+                  : event.eventType ?? 'event'
+                return (
+                  <div
+                    key={event.id}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      borderRadius: theme.borderRadius.lg,
+                      overflow: 'hidden',
+                      border: `1px solid ${theme.colors.border}`,
+                      backgroundColor: theme.colors.background,
+                    }}
+                  >
+                    {bannerUrl ? (
+                      <div style={{ display: 'flex', position: 'relative', width: '100%', height: 168, overflow: 'hidden' }}>
+                        <img
+                          src={bannerUrl}
+                          width={1024}
+                          height={168}
+                          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
+                        />
+                        <div style={{ display: 'flex', position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.15) 55%, transparent 100%)' }} />
+                        <div
+                          style={{
+                            display: 'flex',
+                            position: 'absolute',
+                            top: theme.spacing.sm,
+                            right: theme.spacing.sm,
+                            padding: '4px 10px',
+                            borderRadius: theme.borderRadius.round,
+                            backgroundColor: 'rgba(0,0,0,0.55)',
+                            color: '#ffffff',
+                            fontSize: 11,
+                            fontWeight: 800,
+                            letterSpacing: 0.4,
+                          }}
+                        >
+                          {eventTypeLabel}
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+                            gap: 2,
+                          }}
+                        >
+                          <span style={{ display: 'flex', color: 'rgba(255,255,255,0.78)', fontSize: 11, fontWeight: 700, letterSpacing: 0.6 }}>EVENT #{event.id}</span>
+                          <span style={{ display: 'flex', color: '#ffffff', fontSize: theme.fontSize.lg, fontWeight: 900, textShadow: '0 1px 6px rgba(0,0,0,0.65)' }}>{event.name}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: `${theme.spacing.sm}px ${theme.spacing.md}px` }}>
+                        <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: 800 }}>#{event.id} {event.name}</span>
+                        <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: theme.fontSize.xs }}>{eventTypeLabel}</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

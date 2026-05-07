@@ -2,6 +2,8 @@ import { BaseDeckRecommend, RecommendAlgorithm, RecommendTarget, type DeckRecomm
 import { ChallengeLiveDeckRecommend } from "../sekai-calculator/deck-recommend/challenge-live-deck-recommend";
 import { EventBonusDeckRecommend } from "../sekai-calculator/deck-recommend/event-bonus-deck-recommend";
 import { EventDeckRecommend } from "../sekai-calculator/deck-recommend/event-deck-recommend";
+import { MysekaiDeckRecommend } from "../sekai-calculator/deck-recommend/mysekai-deck-recommend";
+import { MysekaiEventCalculator } from "../sekai-calculator/mysekai-information/mysekai-event-calculator";
 import { SkillReferenceChooseStrategy } from "../sekai-calculator/deck-information/deck-calculator";
 import { LiveCalculator, LiveType } from "../sekai-calculator/live-score/live-calculator";
 import { MemoryDeckRecommendDataProvider } from "./data-provider";
@@ -17,6 +19,7 @@ function normalizeMode(value: unknown): string {
 		case "strongest":
 		case "challenge":
 		case "bonus":
+		case "mysekai":
 		case "event": return String(value || "event").toLowerCase();
 		default: return "event";
 	}
@@ -64,6 +67,13 @@ function selectMusicMeta(req: DeckRecommendCalculateRequest, options: DeckRecomm
 	const musicId = Number(options.musicId || 0);
 	const difficulty = String(options.difficulty || "master").toLowerCase();
 	const metas = req.musicMetas ?? [];
+	// 烤森模式不依赖歌曲元数据进行计分，使用首条可用元数据兜底
+	if (normalizeMode(options.mode) === "mysekai") {
+		const byDifficulty = metas.find((item) => String(item.difficulty).toLowerCase() === difficulty);
+		if (byDifficulty) return byDifficulty;
+		if (metas.length > 0) return metas[0];
+		throw new Error("music metas are empty");
+	}
 	if (musicId === 10000) {
 		const filtered = metas.filter((meta) => String(meta.difficulty).toLowerCase() === difficulty);
 		const source = filtered.length > 0 ? filtered : metas;
@@ -116,6 +126,7 @@ function buildConfig(req: DeckRecommendCalculateRequest): DeckRecommendConfig {
 function resultValue(deck: any, target: unknown, mode: string = "event"): { value: number; valueLabel: string } {
 	if (mode === "bonus") return { value: Number(deck.eventBonus ?? deck.score ?? 0), valueLabel: "活动加成" };
 	if (mode === "challenge") return { value: Number(deck.score || 0), valueLabel: "挑战分数" };
+	if (mode === "mysekai") return { value: Number(deck.mysekaiPt ?? deck.score ?? 0), valueLabel: "烤森PT" };
 	switch (String(target || (mode === "strongest" ? "power" : "score")).toLowerCase()) {
 		case "power": return { value: Number(deck.power?.total || 0), valueLabel: "综合力" };
 		case "skill": return { value: Number(deck.multiLiveScoreUp || 0), valueLabel: "实效" };
@@ -212,6 +223,17 @@ async function recommendByMode(mode: string, provider: MemoryDeckRecommendDataPr
 		}
 		return all;
 	}
+	if (mode === "mysekai") {
+		const eventID = Number(req.options.eventId || 0);
+		if (!eventID) throw new Error("烤森组卡需要指定活动 eventId");
+		const recommender = new MysekaiDeckRecommend(provider);
+		const decks = await recommender.recommendMysekaiDeck(eventID, config, Number(req.options.supportCharacterId || 0));
+		// 重新计算分段后的烤森 PT作为实际得分
+		return decks.map((deck: any) => {
+			const pt = MysekaiEventCalculator.getDeckMysekaiEventPoint(deck);
+			return { ...deck, score: pt.mysekaiEventPoint, mysekaiPt: pt.mysekaiEventPoint };
+		});
+	}
 	if (mode === "strongest") {
 		const userCards = await provider.getUserData<any[]>("userCards");
 		const recommender = new BaseDeckRecommend(provider);
@@ -254,7 +276,8 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 	try {
 		if (!req?.userData) throw new Error("userData is required");
 		if (!req?.masterData) throw new Error("masterData is required");
-		if (!req?.options?.eventId && normalizeMode(req?.options?.mode) !== "strongest" && normalizeMode(req?.options?.mode) !== "challenge") throw new Error("eventId is required");
+		const _mode = normalizeMode(req?.options?.mode);
+		if (!req?.options?.eventId && _mode !== "strongest" && _mode !== "challenge") throw new Error("eventId is required");
 		const provider = new MemoryDeckRecommendDataProvider({
 			userData: req.userData,
 			masterData: req.masterData,
@@ -271,7 +294,7 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 			}
 		}
 		logDeckRecommendInputSummary(provider, req, req.options, liveType, config.musicMeta);
-		const algorithms = String(req.options.algorithm || "ga").toLowerCase() === "all" && mode !== "bonus"
+		const algorithms = String(req.options.algorithm || "ga").toLowerCase() === "all" && mode !== "bonus" && mode !== "mysekai"
 			? [RecommendAlgorithm.GA, RecommendAlgorithm.DFS]
 			: [config.algorithm ?? RecommendAlgorithm.GA];
 		const merged = new Map<string, any>();
@@ -295,7 +318,9 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 			value,
 			valueLabel,
 			score: Math.round(Number(deck.score || 0)),
-			eventPoint: mode === "event" && String(req.options.target || "score").toLowerCase() === "score" ? Math.round(Number(deck.score || 0)) : undefined,
+			eventPoint: (mode === "event" && String(req.options.target || "score").toLowerCase() === "score") || mode === "mysekai"
+				? Math.round(Number(deck.score || 0))
+				: undefined,
 				eventBonus: deck.eventBonus,
 				supportDeckBonus: deck.supportDeckBonus,
 				power: deck.power,
@@ -303,6 +328,9 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 			cards: deck.cards.map((card: any) => {
 				const master = masterCards.find((it) => Number(it.id) === Number(card.cardId));
 				const asset = req.cardAssets?.[Number(card.cardId)] ?? {};
+				const rarity = master?.cardRarityType;
+				const isTrained = card.defaultImage === "special_training"
+					|| (card.defaultImage !== "original" && (rarity === "rarity_3" || rarity === "rarity_4"));
 				return {
 					...card,
 					card: {
@@ -310,11 +338,12 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 						cardId: card.cardId,
 						prefix: master?.prefix,
 						characterId: master?.characterId,
-						cardRarityType: master?.cardRarityType,
-						rarity: master?.cardRarityType,
+						cardRarityType: rarity,
+						rarity,
 						attr: master?.attr,
 						assetbundleName: master?.assetbundleName,
 						defaultImage: card.defaultImage,
+						isTrained,
 						level: card.level,
 						masterRank: card.masterRank,
 						skillLevel: card.skillLevel,

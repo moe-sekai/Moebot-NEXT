@@ -17,6 +17,7 @@ import (
 	"moebot-next/internal/config"
 	"moebot-next/internal/deckrecommenddata"
 	"moebot-next/internal/masterdata"
+	"moebot-next/internal/musicsearch"
 	"moebot-next/internal/renderer"
 	"moebot-next/internal/servers"
 	"moebot-next/internal/suite"
@@ -124,6 +125,7 @@ func RegisterDeckRecommend(deps *Deps) {
 	registerDeckRecommendMode(deps, "最强组卡", "strongest")
 	registerDeckRecommendMode(deps, "挑战组卡", "challenge")
 	registerDeckRecommendMode(deps, "加成组卡", "bonus")
+	registerDeckRecommendMode(deps, "烤森组卡", "mysekai")
 }
 
 func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
@@ -162,7 +164,7 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 				return
 			}
 
-			options, music, event, err := parseDeckRecommendArgs(commandArgs(ctx), runtime.Store, mode)
+			options, music, event, err := parseDeckRecommendArgs(commandArgs(ctx), runtime.Store, runtime.MusicAliases, mode)
 			if err != nil {
 				ctx.SendChain(message.Text(err.Error()))
 				return
@@ -185,7 +187,7 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 			req := renderer.DeckRecommendCalculateRequest{
 				Region: runtime.Region, RegionLabel: runtime.Label, UserData: userData, MasterData: masterMap,
 				MusicMetas: musicMetas, Options: options, CardAssets: buildDeckRecommendCardAssets(runtime.Store, runtime.Assets),
-				Music: deckMusicPayload(runtime.Store, music, runtime.Assets, options.Difficulty), Profile: profile,
+				Music: deckMusicPayload(runtime.Store, music, runtime.Assets, options.Difficulty, options.IsPresetDefault), Profile: profile,
 			}
 			if event != nil {
 				req.Event = renderer.BuildEventInfoPayloadWithAssets(runtime.Store, *event, runtime.Assets)
@@ -208,11 +210,12 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 	}
 }
 
-func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (renderer.DeckRecommendOptions, *masterdata.MusicInfo, *masterdata.EventInfo, error) {
+func parseDeckRecommendArgs(raw string, store *masterdata.Store, aliases map[int]assets.MusicAlias, mode string) (renderer.DeckRecommendOptions, *masterdata.MusicInfo, *masterdata.EventInfo, error) {
 	args := strings.Fields(strings.TrimSpace(raw))
 	mode = normalizeDeckRecommendMode(mode)
 	options := renderer.DeckRecommendOptions{Mode: mode, MusicID: deckRecommendDefaultMusicID, Difficulty: deckRecommendDefaultDifficulty, LiveType: defaultDeckLiveType(mode), Algorithm: "ga", Target: defaultDeckTarget(mode), Limit: 3, TimeoutMS: 15000, BestSkillAsLeader: true, CardConfig: defaultDeckCardConfig()}
 	var eventID, musicID int
+	musicExplicit := false
 	bonusTargets := []int{}
 	challengeSet := false
 	wlChapterNo := 0
@@ -238,7 +241,7 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 			}
 			continue
 		}
-		if mode == "event" || mode == "bonus" {
+		if mode == "event" || mode == "bonus" || mode == "mysekai" {
 			if chapterNo, ok := parseDeckWLChapterToken(token); ok {
 				wlChapterNo = chapterNo
 				continue
@@ -316,6 +319,7 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 			}
 			if ok, id := parsePrefixedID(token, "music", "曲", "歌"); ok {
 				musicID = id
+				musicExplicit = true
 				continue
 			}
 			if limit, ok := parseLimitToken(token); ok {
@@ -334,10 +338,12 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 					challengeSet = true
 				} else if shouldPreferMusicID(args, i) && store.GetMusic(id) != nil {
 					musicID = id
+					musicExplicit = true
 				} else if store.GetEvent(id) != nil {
 					eventID = id
 				} else if store.GetMusic(id) != nil {
 					musicID = id
+					musicExplicit = true
 				}
 				continue
 			}
@@ -368,14 +374,14 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 			return options, nil, nil, fmt.Errorf("找不到活动：%d", eventID)
 		}
 	}
-	if (mode == "event" || mode == "bonus") && event != nil {
+	if (mode == "event" || mode == "bonus" || mode == "mysekai") && event != nil {
 		var err error
 		remaining, err = applyDeckWorldBloomChapter(store, event, wlChapterNo, remaining, &options)
 		if err != nil {
 			return options, nil, nil, err
 		}
 	}
-	if mode == "event" || mode == "bonus" {
+	if mode == "event" || mode == "bonus" || mode == "mysekai" {
 		remaining = applyDeckSupportCharacterAlias(remaining, &options)
 	} else if mode != "challenge" {
 		remaining = applyDeckFixedCharacterAliases(remaining, &options)
@@ -383,11 +389,15 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 	if mode == "bonus" && len(options.TargetBonusList) == 0 {
 		return options, nil, nil, fmt.Errorf("请输入目标活动加成，例如 /加成组卡 300")
 	}
-	if musicID == 0 && mode != "bonus" && len(remaining) > 0 {
-		musicID = searchMusicID(store, strings.Join(remaining, " "))
+	if mode == "mysekai" && event == nil {
+		return options, nil, nil, fmt.Errorf("烤森组卡需要指定活动，例如 /烤森组卡 event180")
+	}
+	if musicID == 0 && mode != "bonus" && mode != "mysekai" && len(remaining) > 0 {
+		musicID = searchMusicID(store, aliases, strings.Join(remaining, " "))
 		if musicID == 0 {
 			return options, nil, nil, fmt.Errorf("找不到曲目关键词：%s", strings.Join(remaining, " "))
 		}
+		musicExplicit = true
 	}
 	if musicID != 0 {
 		options.MusicID = musicID
@@ -395,6 +405,7 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 	if event != nil {
 		options.EventID = event.ID
 	}
+	options.IsPresetDefault = !musicExplicit && options.MusicID == deckRecommendDefaultMusicID
 	music := store.GetMusic(options.MusicID)
 	if music == nil && options.MusicID == deckRecommendDefaultMusicID {
 		music = &masterdata.MusicInfo{ID: deckRecommendDefaultMusicID, Title: "默认曲目"}
@@ -410,7 +421,7 @@ func parseDeckRecommendArgs(raw string, store *masterdata.Store, mode string) (r
 
 func normalizeDeckRecommendMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "strongest", "challenge", "bonus", "event":
+	case "strongest", "challenge", "bonus", "event", "mysekai":
 		return strings.ToLower(strings.TrimSpace(mode))
 	default:
 		return "event"
@@ -439,6 +450,8 @@ func deckRecommendTitle(mode string) string {
 		return "挑战组卡推荐"
 	case "bonus":
 		return "加成/控分组卡推荐"
+	case "mysekai":
+		return "烤森组卡推荐"
 	default:
 		return "活动组卡推荐"
 	}
@@ -1165,27 +1178,23 @@ func currentEventID(store *masterdata.Store) int {
 	}
 	return 0
 }
-func searchMusicID(store *masterdata.Store, keyword string) int {
-	keyword = strings.ToLower(strings.TrimSpace(keyword))
-	if keyword == "" {
+func searchMusicID(store *masterdata.Store, aliases map[int]assets.MusicAlias, keyword string) int {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" || store == nil {
 		return 0
 	}
-	musics := store.AllMusics()
-	for _, music := range musics {
-		if strings.ToLower(music.Title) == keyword || strings.ToLower(music.Pronunciation) == keyword {
-			return music.ID
-		}
+	result := musicsearch.Search(store, aliases, keyword, musicsearch.Options{Limit: 1})
+	if result.Music != nil {
+		return result.Music.ID
 	}
-	for _, music := range musics {
-		if strings.Contains(strings.ToLower(music.Title), keyword) || strings.Contains(strings.ToLower(music.Pronunciation), keyword) {
-			return music.ID
-		}
+	if len(result.Musics) > 0 {
+		return result.Musics[0].ID
 	}
 	return 0
 }
 
-func ParseDeckRecommendArgsForDebug(raw string, store *masterdata.Store, mode string) (renderer.DeckRecommendOptions, *masterdata.MusicInfo, *masterdata.EventInfo, error) {
-	return parseDeckRecommendArgs(raw, store, mode)
+func ParseDeckRecommendArgsForDebug(raw string, store *masterdata.Store, aliases map[int]assets.MusicAlias, mode string) (renderer.DeckRecommendOptions, *masterdata.MusicInfo, *masterdata.EventInfo, error) {
+	return parseDeckRecommendArgs(raw, store, aliases, mode)
 }
 
 func LoadDeckRecommendUserDataForDebug(client *suite.Client, gameID string, out *map[string]any) error {
@@ -1216,8 +1225,8 @@ func SuiteProfileFromUserDataForDebug(userData map[string]any, fallbackUID strin
 	return suiteProfileFromUserData(userData, fallbackUID)
 }
 
-func DeckMusicPayloadForDebug(store *masterdata.Store, music *masterdata.MusicInfo, resolver *assets.Resolver, difficulty string) any {
-	return deckMusicPayload(store, music, resolver, difficulty)
+func DeckMusicPayloadForDebug(store *masterdata.Store, music *masterdata.MusicInfo, resolver *assets.Resolver, difficulty string, isPresetDefault bool) any {
+	return deckMusicPayload(store, music, resolver, difficulty, isPresetDefault)
 }
 
 func BuildDeckRecommendPayloadForDebug(runtime *servers.Runtime, mode string, calc *renderer.DeckRecommendCalculateResponse) map[string]any {
@@ -1401,16 +1410,33 @@ func suiteProfileFromUserData(userData map[string]any, fallbackUID string) map[s
 	profile["source"] = suite.PublicSource
 	return profile
 }
-func deckMusicPayload(store *masterdata.Store, music *masterdata.MusicInfo, resolver *assets.Resolver, difficulty string) any {
+func deckMusicPayload(store *masterdata.Store, music *masterdata.MusicInfo, resolver *assets.Resolver, difficulty string, isPresetDefault bool) any {
 	if music == nil {
 		return nil
 	}
 	if music.ID == 10000 {
-		return map[string]any{"id": 10000, "title": "おまかせ", "selectedDifficulty": difficulty}
+		out := map[string]any{"id": 10000, "title": "おまかせ", "selectedDifficulty": difficulty}
+		if isPresetDefault {
+			out["isPresetDefault"] = true
+		}
+		return out
 	}
 	payload := renderer.BuildMusicDetailPayloadWithAssets(store, *music, resolver)
 	payload.SelectedDifficulty = difficulty
-	return payload
+	if !isPresetDefault {
+		return payload
+	}
+	// Attach isPresetDefault as an extra field by converting to map.
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return payload
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return payload
+	}
+	out["isPresetDefault"] = true
+	return out
 }
 func assetSourceForRuntime(resolver *assets.Resolver) string {
 	if resolver == nil {

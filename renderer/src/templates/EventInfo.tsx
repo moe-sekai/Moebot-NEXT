@@ -200,25 +200,64 @@ export function EventInfo({ event }: EventInfoProps) {
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: theme.spacing.sm,
+              gap: theme.spacing.md,
               backgroundColor: theme.colors.surface,
               border: `1px solid ${theme.colors.border}`,
               borderRadius: theme.borderRadius.xl,
               padding: theme.spacing.md,
             }}
           >
-            <SectionTitle title="加成卡片" color={accent} />
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm }}>
-              {event.bonusCards.slice(0, 6).map((card) => {
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <SectionTitle title="加成卡片" color={accent} />
+              <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: theme.fontSize.xs, fontWeight: 700 }}>共 {event.bonusCards.length} 张</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.md }}>
+              {event.bonusCards.slice(0, 8).map((card) => {
                 const rarity = card.cardRarityType ?? card.rarity ?? 'rarity_unknown'
                 const trained = canUseTrainedArt(rarity)
                 const imageUrl = card.thumbnailUrl ?? (card.assetbundleName ? getCardThumbnailUrl(card.assetbundleName, trained, source, 'png') : undefined)
                 return (
-                  <div key={card.id} style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.xs, width: 224 }}>
-                    <SekaiCardThumbnail imageUrl={imageUrl} rarity={rarity} attr={card.attr ?? 'cute'} isTrained={trained} characterName={card.characterName} supplyType={card.supplyType} size={64} />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-                      <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.xs, fontWeight: 900 }}>#{card.id} {card.characterName ?? ''}</span>
-                      <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: 10, lineHeight: 1.25 }}>{card.prefix ?? rarity}</span>
+                  <div
+                    key={card.id}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: theme.spacing.xs,
+                      width: 132,
+                      padding: `${theme.spacing.sm}px ${theme.spacing.xs}px`,
+                      borderRadius: theme.borderRadius.lg,
+                      backgroundColor: theme.colors.background,
+                      border: `1px solid ${theme.colors.border}`,
+                    }}
+                  >
+                    <SekaiCardThumbnail
+                      imageUrl={imageUrl}
+                      rarity={rarity}
+                      attr={card.attr ?? 'cute'}
+                      isTrained={trained}
+                      characterName={card.characterName}
+                      supplyType={card.supplyType}
+                      size={96}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, width: '100%' }}>
+                      <span
+                        style={{
+                          display: 'flex',
+                          color: theme.colors.text,
+                          fontSize: theme.fontSize.xs,
+                          fontWeight: 900,
+                          maxWidth: '100%',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {card.prefix ?? rarity}
+                      </span>
+                      <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: 10, fontWeight: 700 }}>
+                        #{card.id} · {card.characterName ?? ''}
+                      </span>
                     </div>
                   </div>
                 )

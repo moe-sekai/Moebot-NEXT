@@ -87,6 +87,7 @@ export async function getCardThumbnailCompositeSvg(input: CardThumbnailComposite
   if (!allowDownload) return undefined
 
   const generated = await generateComposite(normalized, true)
+  if (!generated) console.debug(`[renderer] card thumbnail composite miss: ${normalized.imageUrl} (${normalized.trained ? 'after' : 'before'} ${normalized.size}px) reason=${failedComposites.get(compositeKey(normalized)) ?? 'unknown'}`)
   return generated ? generated.toString('utf8') : undefined
 }
 

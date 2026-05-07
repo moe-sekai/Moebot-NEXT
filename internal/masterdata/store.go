@@ -336,6 +336,26 @@ func (s *Store) GetEventCards(eventID int) []EventCard {
 	return append([]EventCard(nil), s.eventCardsByEventID[eventID]...)
 }
 
+// GetGachasForEvent returns gachas whose active period overlaps with the event.
+// This is used to find the pickup gacha(s) associated with an event.
+func (s *Store) GetGachasForEvent(eventID int) []GachaInfo {
+	event := s.GetEvent(eventID)
+	if event == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []GachaInfo
+	for i := range s.gachas {
+		g := &s.gachas[i]
+		// Overlap: gacha starts before event closes and ends after event starts
+		if g.StartAt <= event.ClosedAt && g.EndAt >= event.StartAt {
+			out = append(out, *g)
+		}
+	}
+	return out
+}
+
 // GetEventMusics returns all music links for an event ID.
 func (s *Store) GetEventMusics(eventID int) []EventMusic {
 	s.mu.RLock()

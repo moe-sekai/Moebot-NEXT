@@ -6,7 +6,7 @@ import type { LiveType } from "../sekai-calculator/live-score/live-calculator";
 import type { MasterDataMap, UserDataMap } from "./data-provider";
 
 export interface DeckRecommendOptions {
-	mode?: "event" | "strongest" | "challenge" | "bonus" | string;
+	mode?: "event" | "strongest" | "challenge" | "bonus" | "mysekai" | string;
 	eventId: number;
 	musicId: number;
 	difficulty: string;
@@ -48,7 +48,7 @@ export interface DeckRecommendResultCard {
 	skillLevel: number;
 	masterRank: number;
 	defaultImage?: string;
-	eventBonus?: string;
+	eventBonus?: number | string;
 	supportDeckBonus?: number;
 	power?: any;
 	skill?: any;

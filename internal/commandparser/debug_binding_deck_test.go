@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"moebot-next/internal/assets"
 	"moebot-next/internal/config"
 	"moebot-next/internal/masterdata"
 )
@@ -25,7 +26,7 @@ func TestSuiteDebugDeckMode(t *testing.T) {
 
 func TestSuiteDebugDeckRecommendArgsDefaultMusicAndDifficulty(t *testing.T) {
 	store := masterdata.NewStore()
-	options, music, event, err := parseSuiteDebugDeckRecommendArgs("", store, "event")
+	options, music, event, err := parseSuiteDebugDeckRecommendArgs("", store, nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -45,7 +46,7 @@ func TestSuiteDebugDeckRecommendArgsDefaultMusicAndDifficulty(t *testing.T) {
 
 func TestSuiteDebugDeckRecommendArgsExplicitDifficultyOverridesDefault(t *testing.T) {
 	store := masterdata.NewStore()
-	options, _, _, err := parseSuiteDebugDeckRecommendArgs("master", store, "bonus")
+	options, _, _, err := parseSuiteDebugDeckRecommendArgs("master", store, nil, "bonus")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -56,7 +57,7 @@ func TestSuiteDebugDeckRecommendArgsExplicitDifficultyOverridesDefault(t *testin
 
 func TestSuiteDebugChallengeDeckRequiresCharacter(t *testing.T) {
 	store := masterdata.NewStore()
-	_, _, _, err := parseSuiteDebugDeckRecommendArgs("挑战组卡", store, "challenge")
+	_, _, _, err := parseSuiteDebugDeckRecommendArgs("挑战组卡", store, nil, "challenge")
 	if err == nil {
 		t.Fatal("expected missing challenge character error")
 	}
@@ -64,7 +65,7 @@ func TestSuiteDebugChallengeDeckRequiresCharacter(t *testing.T) {
 
 func TestSuiteDebugChallengeDeckUsesLocalCharacterAlias(t *testing.T) {
 	store := masterdata.NewStore()
-	options, music, event, err := parseSuiteDebugDeckRecommendArgs("挑战组卡 miku", store, "challenge")
+	options, music, event, err := parseSuiteDebugDeckRecommendArgs("挑战组卡 miku", store, nil, "challenge")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestSuiteDebugChallengeDeckUsesLocalCharacterAlias(t *testing.T) {
 func TestSuiteDebugEventDeckCharacterAliasDoesNotOverrideDefaultMusic(t *testing.T) {
 	store := masterdata.NewStore()
 	store.SetAll(&masterdata.MasterData{Events: []masterdata.EventInfo{{ID: 202, Name: "测试活动", EventType: "marathon"}}})
-	options, music, event, err := parseSuiteDebugDeckRecommendArgs("活动组卡 202 ick", store, "event")
+	options, music, event, err := parseSuiteDebugDeckRecommendArgs("活动组卡 202 ick", store, nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -107,7 +108,7 @@ func TestSuiteDebugEventDeckWorldBloomAliasSetsSupportCharacter(t *testing.T) {
 		Events:      []masterdata.EventInfo{{ID: 202, Name: "WL3", EventType: "world_bloom", StartAt: now - 1000, AggregateAt: now + 1000, ClosedAt: now + 2000}},
 		WorldBlooms: []masterdata.WorldBloom{{ID: 1, EventID: 202, GameCharacterID: 1, ChapterNo: 1, ChapterStartAt: now - 1000, ChapterEndAt: now + 1000}},
 	})
-	options, music, event, err := parseSuiteDebugDeckRecommendArgs("活动组卡 202 ick", store, "event")
+	options, music, event, err := parseSuiteDebugDeckRecommendArgs("活动组卡 202 ick", store, nil, "event")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -142,6 +143,54 @@ func TestDebugFilterDeckRecommendUserCardsAndHonors(t *testing.T) {
 	}, store).([]any)
 	if len(cards) != 1 || len(honors) != 1 {
 		t.Fatalf("cards=%#v honors=%#v", cards, honors)
+	}
+}
+
+func TestSuiteDebugDeckRecommendArgsResolvesMusicViaAlias(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Musics: []masterdata.MusicInfo{{ID: 789, Title: "另一个曲目", Pronunciation: "another"}},
+	})
+	aliases := map[int]assets.MusicAlias{
+		789: {MusicID: 789, Title: "另一个曲目", Aliases: []string{"龙"}},
+	}
+	options, music, _, err := parseSuiteDebugDeckRecommendArgs("龙 hd", store, aliases, "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if music == nil || music.ID != 789 {
+		t.Fatalf("music = %#v, want id 789 from alias", music)
+	}
+	if options.Difficulty != "hard" {
+		t.Fatalf("difficulty = %s, want hard", options.Difficulty)
+	}
+	if options.IsPresetDefault {
+		t.Fatalf("IsPresetDefault should be false when alias resolved")
+	}
+}
+
+func TestSuiteDebugDeckRecommendArgsDefaultMusicMarksPresetDefault(t *testing.T) {
+	store := masterdata.NewStore()
+	options, _, _, err := parseSuiteDebugDeckRecommendArgs("", store, nil, "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if !options.IsPresetDefault {
+		t.Fatalf("IsPresetDefault should be true when no music specified")
+	}
+}
+
+func TestSuiteDebugDeckRecommendArgsDefaultUsesStoreTitle(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Musics: []masterdata.MusicInfo{{ID: deckRecommendDefaultMusicID, Title: "RealDefaultSong"}},
+	})
+	_, music, _, err := parseSuiteDebugDeckRecommendArgs("", store, nil, "event")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if music == nil || music.Title != "RealDefaultSong" {
+		t.Fatalf("music = %#v, want real title from store", music)
 	}
 }
 
