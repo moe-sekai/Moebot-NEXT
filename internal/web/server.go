@@ -90,6 +90,7 @@ func (s *Server) registerRoutes() {
 	api.Get("/status", s.handleStatus)
 	// /api/masterdata/summary is registered by the moesekai plugin.
 	api.Get("/renderer/health", s.handleRendererHealth)
+	api.Get("/renderer/fonts", s.handleRendererFonts)
 	api.Get("/renderer/previews", s.handleRendererPreviews)
 	api.Get("/renderer/previews/:id/image", s.handleRendererPreviewImage)
 	api.Get("/commands/recent", s.handleRecentCommands)

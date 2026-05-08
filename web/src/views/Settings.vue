@@ -306,6 +306,59 @@
               <strong>普通图片约 {{ rendererOutputScaleText }}，谱面约 {{ chartRendererOutputScaleText }}；越高越清晰但图片体积和耗时越大。</strong>
             </div>
           </div>
+          <div class="renderer-fonts-panel">
+            <div class="renderer-fonts-panel__header">
+              <div>
+                <strong>渲染字体</strong>
+                <span>放置字体文件到 <code>renderer/assets/fonts/</code> 目录即可自动加载，支持 .otf / .ttf / .woff。保存设置后即时生效。</span>
+              </div>
+              <UiBadge :variant="fontsLoaded ? 'success' : 'warning'">{{ fontsLoaded ? `${fontsData?.total ?? 0} 字体` : '未加载' }}</UiBadge>
+            </div>
+            <div v-if="fontsLoading" class="renderer-fonts-panel__loading">
+              <UiSkeleton height="60px" />
+            </div>
+            <template v-else-if="fontsData">
+              <div class="settings-form">
+                <label class="settings-field">
+                  <span>正文字体</span>
+                  <select v-model="form.renderer.fonts.body_family" class="ui-select">
+                    <option value="">默认（{{ fontsData.config.body }}）</option>
+                    <option v-for="family in fontsData.families" :key="`body-${family}`" :value="family">{{ family }}</option>
+                  </select>
+                </label>
+                <label class="settings-field">
+                  <span>PT 得分字体（黑体）</span>
+                  <select v-model="form.renderer.fonts.score_family" class="ui-select">
+                    <option value="">默认（{{ fontsData.config.score }}）</option>
+                    <option v-for="family in fontsData.families" :key="`score-${family}`" :value="family">{{ family }}</option>
+                  </select>
+                </label>
+                <div class="settings-field settings-field--readonly settings-field--full">
+                  <span>当前生效</span>
+                  <strong style="font-size: 11px; line-height: 1.6;">
+                    正文：{{ fontsData.defaults.body }}<br />
+                    PT：{{ fontsData.defaults.score }}
+                  </strong>
+                </div>
+              </div>
+              <div class="renderer-fonts-panel__families">
+                <div v-for="family in fontsData.families" :key="family" class="renderer-fonts-panel__family">
+                  <span class="renderer-fonts-panel__family-name">{{ family }}</span>
+                  <div class="renderer-fonts-panel__family-weights">
+                    <UiBadge v-for="font in fontsByFamily(family)" :key="`${font.name}-${font.weight}-${font.style}`" variant="outline">
+                      {{ font.weight }}{{ font.style === 'italic' ? 'i' : '' }}
+                    </UiBadge>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <div v-else class="renderer-fonts-panel__empty">
+              <span>无法获取字体信息，请检查 Renderer 服务状态。</span>
+            </div>
+            <div class="settings-actions-row">
+              <UiButton variant="outline" size="sm" :loading="fontsLoading" @click="loadFontsInfo">刷新字体</UiButton>
+            </div>
+          </div>
           <div id="renderer-cache" class="renderer-cache-panel">
             <div class="renderer-cache-panel__header">
               <div>
@@ -354,6 +407,7 @@ import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref } from "v
 import {
 	getPublicConfig,
 	getRendererCardThumbnailCacheStatus,
+	getRendererFonts,
 	preloadRendererCardThumbnails,
 	reloadMasterdata,
 	testSekaiSystem,
@@ -365,6 +419,7 @@ import type {
 	PublicConfig,
 	PublicServerProfile,
 	RendererCardThumbnailCacheStatus,
+	RendererFontsResponse,
 	SekaiSystemTestResponse,
 	UpdatePublicConfigPayload,
 } from "../api/types";
@@ -430,7 +485,11 @@ interface ServerProfileForm {
 
 interface SettingsForm {
 	server: { region: string };
-	renderer: { precision: number; chart_precision: number };
+	renderer: {
+		precision: number;
+		chart_precision: number;
+		fonts: { body_family: string; score_family: string };
+	};
 	servers: Record<string, ServerProfileForm>;
 }
 
@@ -488,6 +547,26 @@ const thumbnailCache = ref<RendererCardThumbnailCacheStatus | null>(null);
 const thumbnailCacheLoading = ref(false);
 const thumbnailCachePreloading = ref(false);
 let thumbnailCachePollTimer: ReturnType<typeof window.setTimeout> | null = null;
+
+const fontsData = ref<RendererFontsResponse | null>(null);
+const fontsLoading = ref(false);
+const fontsLoaded = computed(() => fontsData.value?.ok === true && (fontsData.value?.total ?? 0) > 0);
+
+function fontsByFamily(family: string) {
+	if (!fontsData.value) return [];
+	return fontsData.value.fonts.filter((f) => f.name === family);
+}
+
+async function loadFontsInfo() {
+	fontsLoading.value = true;
+	try {
+		fontsData.value = await getRendererFonts();
+	} catch {
+		fontsData.value = null;
+	} finally {
+		fontsLoading.value = false;
+	}
+}
 
 const regionOptions = computed(
 	() => config.value?.presets.regions ?? fallbackRegions,
@@ -747,6 +826,7 @@ async function loadConfig() {
 		config.value = data;
 		applyConfigToForm(data);
 		await refreshThumbnailCacheStatus(true);
+		void loadFontsInfo();
 	} catch (err) {
 		error.value = getErrorMessage(err, "加载配置失败。");
 	} finally {
@@ -769,6 +849,7 @@ async function saveSettings() {
 		config.value = response.config;
 		applyConfigToForm(response.config);
 		success.value = response.message || "设置已保存。";
+		void loadFontsInfo();
 	} catch (err) {
 		error.value = getErrorMessage(err, "保存设置失败。");
 	} finally {
@@ -882,7 +963,11 @@ function clearThumbnailCachePoll() {
 function createEmptyForm(): SettingsForm {
 	return {
 		server: { region: "jp" },
-		renderer: { precision: 1.5, chart_precision: 4 },
+		renderer: {
+			precision: 1.5,
+			chart_precision: 4,
+			fonts: { body_family: "", score_family: "" },
+		},
 		servers: {},
 	};
 }
@@ -891,7 +976,14 @@ function applyConfigToForm(data: PublicConfig) {
 	const defaultRegion = data.server.region || "jp";
 	form.value = {
 		server: { region: defaultRegion },
-		renderer: { precision: data.renderer.precision || 1.5, chart_precision: data.renderer.chart_precision || 4 },
+		renderer: {
+			precision: data.renderer.precision || 1.5,
+			chart_precision: data.renderer.chart_precision || 4,
+			fonts: {
+				body_family: data.renderer.fonts?.body_family ?? "",
+				score_family: data.renderer.fonts?.score_family ?? "",
+			},
+		},
 		servers: {},
 	};
 	for (const option of regionOptions.value) {
@@ -920,6 +1012,10 @@ function buildPayload(): UpdatePublicConfigPayload {
 		renderer: {
 			precision: Number(form.value.renderer.precision) || 1.5,
 			chart_precision: Number(form.value.renderer.chart_precision) || 4,
+			fonts: {
+				body_family: form.value.renderer.fonts.body_family,
+				score_family: form.value.renderer.fonts.score_family,
+			},
 		},
 		masterdata: buildMasterdataPayload(defaultProfile.masterdata),
 		assets: buildAssetsPayload(defaultProfile.assets),

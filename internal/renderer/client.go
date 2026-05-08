@@ -29,6 +29,7 @@ type Client struct {
 	precision      float64
 	chartPrecision float64
 	cache          config.CacheConfig
+	fonts          config.RendererFontConfig
 }
 
 // RenderRequest is sent to the renderer service.
@@ -141,6 +142,7 @@ func New(cfg config.RendererConfig) *Client {
 		precision:      precision,
 		chartPrecision: chartPrecision,
 		cache:          cfg.Cache,
+		fonts:          cfg.Fonts,
 		httpClient: &http.Client{
 			Timeout: defaultRendererRequestTimeout,
 		},
@@ -163,6 +165,7 @@ func (c *Client) StartProcess(rendererDir string, port int) error {
 		fmt.Sprintf("RENDER_PRECISION=%g", c.precision),
 	)
 	cmd.Env = append(cmd.Env, rendererCacheEnv(c.cache)...)
+	cmd.Env = append(cmd.Env, rendererFontEnv(c.fonts)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -430,6 +433,53 @@ func (c *Client) RenderPreviewWithTrace(id string, width int, height int) (*Prev
 	}, nil
 }
 
+// FontEntry describes a single font face loaded by the renderer.
+type FontEntry struct {
+	Name   string `json:"name"`
+	Weight int    `json:"weight"`
+	Style  string `json:"style"`
+}
+
+// FontDefaults contains the default fontFamily CSS strings used for rendering.
+type FontDefaults struct {
+	Body  string `json:"body"`
+	Score string `json:"score"`
+}
+
+// FontConfig contains named font family constants.
+type FontConfig struct {
+	Score        string `json:"score"`
+	Body         string `json:"body"`
+	BodyFallback string `json:"bodyFallback"`
+	Decorative   string `json:"decorative"`
+}
+
+// FontsResponse is the response from the renderer /fonts endpoint.
+type FontsResponse struct {
+	OK       bool         `json:"ok"`
+	Fonts    []FontEntry  `json:"fonts"`
+	Families []string     `json:"families"`
+	Defaults FontDefaults `json:"defaults"`
+	Config   FontConfig   `json:"config"`
+	Total    int          `json:"total"`
+	Message  string       `json:"message,omitempty"`
+}
+
+// GetFonts fetches font information from the renderer service.
+func (c *Client) GetFonts() (*FontsResponse, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/fonts")
+	if err != nil {
+		return nil, fmt.Errorf("fonts request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result FontsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode fonts response: %w", err)
+	}
+	return &result, nil
+}
+
 // BaseURL returns the renderer service base URL.
 func (c *Client) BaseURL() string {
 	return c.baseURL
@@ -465,6 +515,75 @@ func (c *Client) ChartPrecision() float64 {
 		return config.DefaultChartRendererPrecision
 	}
 	return c.chartPrecision
+}
+
+// UpdateFontsRequest is the body of POST /fonts on the renderer.
+type UpdateFontsRequest struct {
+	Body  string `json:"body,omitempty"`
+	Score string `json:"score,omitempty"`
+}
+
+// UpdateFontsResponse mirrors the renderer-side POST /fonts response.
+type UpdateFontsResponse struct {
+	OK          bool         `json:"ok"`
+	Defaults    FontDefaults `json:"defaults"`
+	Preferences struct {
+		Body  string `json:"body"`
+		Score string `json:"score"`
+	} `json:"preferences"`
+	Message string `json:"message,omitempty"`
+}
+
+// UpdateFonts pushes the given font preferences to the running renderer
+// without restarting it. Empty values keep the current preference.
+func (c *Client) UpdateFonts(body, score string) (*UpdateFontsResponse, error) {
+	payload, err := json.Marshal(UpdateFontsRequest{Body: body, Score: score})
+	if err != nil {
+		return nil, fmt.Errorf("marshal fonts request: %w", err)
+	}
+	resp, err := c.httpClient.Post(c.baseURL+"/fonts", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("fonts update request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	var result UpdateFontsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode fonts update response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK || !result.OK {
+		msg := result.Message
+		if msg == "" {
+			msg = fmt.Sprintf("renderer returned %d", resp.StatusCode)
+		}
+		return &result, fmt.Errorf("renderer rejected fonts update: %s", msg)
+	}
+	return &result, nil
+}
+
+// SetFonts updates the cached font preferences (used on next process restart)
+// and pushes them to the running renderer.
+func (c *Client) SetFonts(fonts config.RendererFontConfig) error {
+	c.fonts = fonts
+	if _, err := c.UpdateFonts(fonts.BodyFamily, fonts.ScoreFamily); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Fonts returns the currently cached font preferences.
+func (c *Client) Fonts() config.RendererFontConfig {
+	return c.fonts
+}
+
+func rendererFontEnv(fonts config.RendererFontConfig) []string {
+	env := []string{}
+	if fonts.BodyFamily != "" {
+		env = append(env, "RENDER_FONT_BODY="+fonts.BodyFamily)
+	}
+	if fonts.ScoreFamily != "" {
+		env = append(env, "RENDER_FONT_SCORE="+fonts.ScoreFamily)
+	}
+	return env
 }
 
 func rendererCacheEnv(cache config.CacheConfig) []string {

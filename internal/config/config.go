@@ -151,11 +151,19 @@ type B30Config struct {
 
 // RendererConfig holds the Bun renderer service settings.
 type RendererConfig struct {
-	Host           string      `yaml:"host"`            // renderer listen host
-	Port           int         `yaml:"port"`            // renderer listen port
-	Precision      float64     `yaml:"precision"`       // SVG -> PNG render scale
-	ChartPrecision float64     `yaml:"chart_precision"` // chart SVG -> PNG render scale
-	Cache          CacheConfig `yaml:"cache"`
+	Host           string             `yaml:"host"`            // renderer listen host
+	Port           int                `yaml:"port"`            // renderer listen port
+	Precision      float64            `yaml:"precision"`       // SVG -> PNG render scale
+	ChartPrecision float64            `yaml:"chart_precision"` // chart SVG -> PNG render scale
+	Cache          CacheConfig        `yaml:"cache"`
+	Fonts          RendererFontConfig `yaml:"fonts"`
+}
+
+// RendererFontConfig holds the user-selected primary font family names for renderer text.
+// Empty values mean "use renderer defaults".
+type RendererFontConfig struct {
+	BodyFamily  string `yaml:"body_family"`  // primary CJK body font family name
+	ScoreFamily string `yaml:"score_family"` // PT score numeric font family name (黑体)
 }
 
 // CacheConfig holds image cache settings. Non-positive max size means unlimited;

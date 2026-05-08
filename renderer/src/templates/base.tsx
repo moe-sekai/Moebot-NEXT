@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { theme } from '../styles/theme'
 import { getMoebotLogoDataUri } from '../styles/logo'
+import { defaultFontFamily } from '../fonts'
 
 interface BaseCardProps {
   title?: string
@@ -26,7 +27,7 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
         border: `1px solid ${theme.colors.border}`,
         borderRadius: theme.borderRadius.xl,
         overflow: 'hidden',
-        fontFamily: 'Noto Sans CJK SC, Noto Sans SC, sans-serif',
+        fontFamily: defaultFontFamily,
         color: theme.colors.text,
       }}
     >

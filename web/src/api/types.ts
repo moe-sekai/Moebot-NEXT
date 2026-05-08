@@ -238,6 +238,10 @@ export interface PublicConfig {
 		port: number;
 		precision: number;
 		chart_precision: number;
+		fonts: {
+			body_family: string;
+			score_family: string;
+		};
 		cache: {
 			enabled: boolean;
 			path: string;
@@ -314,6 +318,10 @@ export interface UpdateServerProfilePayload {
 export interface UpdateRendererPayload {
 	precision: number;
 	chart_precision: number;
+	fonts?: {
+		body_family?: string;
+		score_family?: string;
+	};
 }
 
 export interface UpdateBotDriverPayload {
@@ -431,6 +439,34 @@ export interface RendererCardThumbnailCacheStatus {
 	composite_source_failed?: number;
 	composite_render_ms?: number;
 	renderer_message?: string;
+}
+
+export interface RendererFontEntry {
+	name: string;
+	weight: number;
+	style: string;
+}
+
+export interface RendererFontDefaults {
+	body: string;
+	score: string;
+}
+
+export interface RendererFontConfig {
+	score: string;
+	body: string;
+	bodyFallback: string;
+	decorative: string;
+}
+
+export interface RendererFontsResponse {
+	ok: boolean;
+	fonts: RendererFontEntry[];
+	families: string[];
+	defaults: RendererFontDefaults;
+	config: RendererFontConfig;
+	total: number;
+	message?: string;
 }
 
 export type CommandMatchSource =

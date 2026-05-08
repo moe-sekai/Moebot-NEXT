@@ -31,6 +31,7 @@ import type {
 	PublicConfig,
 	RecentCommandsResponse,
 	UpdatePublicConfigPayload,
+	RendererFontsResponse,
 	RendererHealth,
 	RendererCardThumbnailCacheStatus,
 	RendererPreviewImageResult,
@@ -71,6 +72,11 @@ export async function getMasterdataSummary() {
 
 export async function getRendererHealth() {
 	const { data } = await api.get<RendererHealth>("/renderer/health");
+	return data;
+}
+
+export async function getRendererFonts() {
+	const { data } = await api.get<RendererFontsResponse>("/renderer/fonts");
 	return data;
 }
 

@@ -8,6 +8,72 @@ export interface FontData {
   style: 'normal' | 'italic'
 }
 
+// Well-known font family names used throughout the renderer.
+// Components reference these constants for their fontFamily CSS values.
+export const FONT_FAMILY = {
+  /** Score/number display font — bold/black weight, used for PT scores */
+  score: 'Moebot Score Sans',
+  /** Primary CJK body font */
+  body: 'LXGW WenKai Lite',
+  /** Fallback body CJK font */
+  bodyFallback: 'Noto Sans CJK SC',
+  /** Decorative / hand-written style */
+  decorative: 'Maoken Assorted Sans',
+} as const
+
+/**
+ * Build a fontFamily CSS string with the given primary family followed by safe fallbacks.
+ */
+function buildFontFamilyChain(primary: string): string {
+  const fallbacks = [FONT_FAMILY.bodyFallback, 'Noto Sans SC', 'sans-serif']
+  const seen = new Set<string>()
+  const parts: string[] = []
+  for (const part of [primary, ...fallbacks]) {
+    const trimmed = part.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    parts.push(trimmed)
+  }
+  return parts.join(', ')
+}
+
+/**
+ * Currently selected primary font families. Mutable so the running renderer can
+ * switch fonts via POST /fonts without restarting.
+ */
+export const fontPreferences = {
+  body: process.env.RENDER_FONT_BODY?.trim() || FONT_FAMILY.body,
+  score: process.env.RENDER_FONT_SCORE?.trim() || FONT_FAMILY.score,
+}
+
+/**
+ * Default fontFamily value for card body text.
+ * Prioritizes the configured primary family, falls back to system CJK fonts.
+ * Mutable (export let) so changes propagate via ESM live bindings.
+ */
+export let defaultFontFamily = buildFontFamilyChain(fontPreferences.body)
+
+/**
+ * fontFamily value used for rendering numeric PT scores (ranking cutoff lines, etc.).
+ * Uses a black-weight sans-serif (黑体) for clarity.
+ */
+export let scoreFontFamily = buildFontFamilyChain(fontPreferences.score)
+
+/**
+ * Update the default fontFamily strings used by templates. Pass undefined/empty
+ * to leave that preference unchanged.
+ */
+export function setFontPreferences(body?: string | null, score?: string | null): void {
+  if (typeof body === 'string' && body.trim()) {
+    fontPreferences.body = body.trim()
+    defaultFontFamily = buildFontFamilyChain(fontPreferences.body)
+  }
+  if (typeof score === 'string' && score.trim()) {
+    fontPreferences.score = score.trim()
+    scoreFontFamily = buildFontFamilyChain(fontPreferences.score)
+  }
+}
+
 const FONTS_DIR = join(process.cwd(), 'assets', 'fonts')
 // Satori currently accepts TTF/OTF/WOFF font data, but not WOFF2.
 // WOFF2 files are allowed to live in assets/fonts for humans, but must be
@@ -133,12 +199,14 @@ function fileExtension(fileName: string): string {
 
 function inferFontFamily(fileName: string): string {
   const normalized = fileName.toLowerCase()
-  if (normalized.includes('moebotscoresans')) return 'Moebot Score Sans'
-  if (normalized.includes('noto')) return 'Noto Sans CJK SC'
+  if (normalized.includes('moebotscoresans')) return FONT_FAMILY.score
+  if (normalized.includes('lxgw') || normalized.includes('wenkai')) return FONT_FAMILY.body
+  if (normalized.includes('noto')) return FONT_FAMILY.bodyFallback
   if (normalized.includes('plex')) return 'IBM Plex Sans'
   if (normalized.includes('yuruka')) return 'Yuruka Std'
   if (normalized.includes('fangtang') || normalized.includes('shangshou')) return 'ShangShou FangTangTi'
-  if (normalized.includes('maoken')) return 'Maoken Assorted Sans'
+  if (normalized.includes('maoken')) return FONT_FAMILY.decorative
+  // Custom fonts: use filename (without extension) as family name
   return fileName.replace(/\.(otf|ttf|woff2?)$/i, '')
 }
 
@@ -157,10 +225,11 @@ function inferFontWeight(fileName: string): number {
 function scoreFontFile(fileName: string): number {
   const normalized = fileName.toLowerCase()
   if (normalized.includes('moebotscoresans')) return 0
-  if (normalized.includes('noto')) return 1
-  if (normalized.includes('plex')) return 2
-  if (normalized.includes('maoken')) return 3
-  if (normalized.includes('fangtang') || normalized.includes('shangshou')) return 4
-  if (normalized.includes('yuruka')) return 5
+  if (normalized.includes('lxgw') || normalized.includes('wenkai')) return 1
+  if (normalized.includes('noto')) return 2
+  if (normalized.includes('plex')) return 3
+  if (normalized.includes('maoken')) return 4
+  if (normalized.includes('fangtang') || normalized.includes('shangshou')) return 5
+  if (normalized.includes('yuruka')) return 6
   return 10
 }

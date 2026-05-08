@@ -3,6 +3,7 @@ import { rendererAssetCache } from "./asset-cache";
 import { getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, startCardThumbnailCompositePreload, statusForCardThumbnailComposites, type CardThumbnailCompositeLayer, type CardThumbnailCompositeRequest } from "./card-thumbnail-composites";
 import { calculateDeckRecommend } from "./deck-recommend/calculate";
 import { renderWithTrace } from "./engine";
+import { loadFonts, FONT_FAMILY, defaultFontFamily, scoreFontFamily, setFontPreferences, fontPreferences } from "./fonts";
 import { renderChartSvg } from "./chart-svg-renderer";
 import { preloadFixedChartNoteAssets } from "./svg-assets";
 import { listRenderPreviews, renderPreviewTemplate } from "./preview";
@@ -935,6 +936,7 @@ Bun.serve({
 				version: "0.1.0",
 				endpoints: [
 					"GET /health",
+					"GET /fonts",
 					"GET /previews",
 					"GET /preview/:id",
 					"POST /render",
@@ -944,6 +946,73 @@ Bun.serve({
 				],
 				note: "这是内部 Satori 渲染服务；管理面板请访问 http://127.0.0.1:8080/",
 			});
+		}
+
+		if (url.pathname === "/fonts" && request.method === "GET") {
+			try {
+				const fonts = await loadFonts();
+				const fontList = fonts.map((f) => ({
+					name: f.name,
+					weight: f.weight,
+					style: f.style,
+				}));
+				const uniqueFamilies = [...new Set(fonts.map((f) => f.name))];
+				return Response.json({
+					ok: true,
+					fonts: fontList,
+					families: uniqueFamilies,
+					defaults: {
+						body: defaultFontFamily,
+						score: scoreFontFamily,
+					},
+					preferences: {
+						body: fontPreferences.body,
+						score: fontPreferences.score,
+					},
+					config: FONT_FAMILY,
+					total: fonts.length,
+				});
+			} catch (error) {
+				return Response.json(
+					{
+						ok: false,
+						fonts: [],
+						families: [],
+						defaults: { body: defaultFontFamily, score: scoreFontFamily },
+						preferences: { body: fontPreferences.body, score: fontPreferences.score },
+						config: FONT_FAMILY,
+						total: 0,
+						message: error instanceof Error ? error.message : String(error),
+					},
+					{ status: 500 },
+				);
+			}
+		}
+
+		if (url.pathname === "/fonts" && request.method === "POST") {
+			try {
+				const body = (await request.json()) as { body?: string; score?: string };
+				setFontPreferences(body.body, body.score);
+				return Response.json({
+					ok: true,
+					defaults: {
+						body: defaultFontFamily,
+						score: scoreFontFamily,
+					},
+					preferences: {
+						body: fontPreferences.body,
+						score: fontPreferences.score,
+					},
+				});
+			} catch (error) {
+				return Response.json(
+					{
+						ok: false,
+						message: error instanceof Error ? error.message : String(error),
+					},
+					{ status: 400 },
+				);
+			}
 		}
 
 		if (url.pathname === "/previews" && request.method === "GET") {

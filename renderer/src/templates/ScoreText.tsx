@@ -1,6 +1,7 @@
 import { theme } from '../styles/theme'
+import { scoreFontFamily } from '../fonts'
 
-export const scoreFontFamily = 'Moebot Score Sans, Noto Sans SC, Noto Sans CJK SC, sans-serif'
+export { scoreFontFamily }
 
 export function scoreTextStyle({
   color = theme.colors.text,

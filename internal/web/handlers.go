@@ -7,14 +7,15 @@ import (
 	"strings"
 	"time"
 
-	"moebot-next/internal/plugins/moesekai/assets"
-	"moebot-next/internal/plugins/moesekai/b30"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
+	"moebot-next/internal/plugins/moesekai/assets"
+	"moebot-next/internal/plugins/moesekai/b30"
 	"moebot-next/internal/plugins/moesekai/masterdata"
 	"moebot-next/internal/renderer"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog/log"
 )
 
 const appVersion = "0.1.0"
@@ -127,6 +128,32 @@ func (s *Server) handleRendererHealth(c *fiber.Ctx) error {
 		"chart_precision": s.Config.Renderer.ChartPrecision,
 		"note":            fmt.Sprintf("%d 是 Satori/Bun 图片渲染服务，%d 才是 Moebot NEXT 管理面板。", s.Config.Renderer.Port, s.Config.Web.Port),
 	})
+}
+
+// handleRendererFonts returns the list of loaded fonts from the renderer service.
+func (s *Server) handleRendererFonts(c *fiber.Ctx) error {
+	if s.Renderer == nil {
+		return c.JSON(fiber.Map{
+			"ok":       false,
+			"fonts":    []interface{}{},
+			"families": []string{},
+			"total":    0,
+			"message":  "Renderer client is not configured",
+		})
+	}
+
+	result, err := s.Renderer.GetFonts()
+	if err != nil {
+		return c.JSON(fiber.Map{
+			"ok":       false,
+			"fonts":    []interface{}{},
+			"families": []string{},
+			"total":    0,
+			"message":  err.Error(),
+		})
+	}
+
+	return c.JSON(result)
 }
 
 // handleRendererPreviews returns Satori preview metadata through the Go admin API.
@@ -243,8 +270,14 @@ type serverSettingsRequest struct {
 }
 
 type rendererSettingsRequest struct {
-	Precision      *float64 `json:"precision"`
-	ChartPrecision *float64 `json:"chart_precision"`
+	Precision      *float64                     `json:"precision"`
+	ChartPrecision *float64                     `json:"chart_precision"`
+	Fonts          *rendererFontSettingsRequest `json:"fonts"`
+}
+
+type rendererFontSettingsRequest struct {
+	BodyFamily  *string `json:"body_family"`
+	ScoreFamily *string `json:"score_family"`
 }
 
 type gameServerSettingsRequest struct {
@@ -496,6 +529,14 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 			}
 			next.Renderer.ChartPrecision = *req.Renderer.ChartPrecision
 		}
+		if req.Renderer.Fonts != nil {
+			if req.Renderer.Fonts.BodyFamily != nil {
+				next.Renderer.Fonts.BodyFamily = strings.TrimSpace(*req.Renderer.Fonts.BodyFamily)
+			}
+			if req.Renderer.Fonts.ScoreFamily != nil {
+				next.Renderer.Fonts.ScoreFamily = strings.TrimSpace(*req.Renderer.Fonts.ScoreFamily)
+			}
+		}
 	}
 
 	config.NormalizeConfig(&next)
@@ -508,6 +549,9 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 	if s.Renderer != nil {
 		s.Renderer.SetPrecision(s.Config.Renderer.Precision)
 		s.Renderer.SetChartPrecision(s.Config.Renderer.ChartPrecision)
+		if err := s.Renderer.SetFonts(s.Config.Renderer.Fonts); err != nil {
+			log.Warn().Err(err).Msg("Failed to push font preferences to renderer; will apply on next restart")
+		}
 	}
 	if s.Servers != nil {
 		s.Servers.ApplyConfig(s.Config)
@@ -742,6 +786,10 @@ func (s *Server) publicConfigMap() fiber.Map {
 			"port":            s.Config.Renderer.Port,
 			"precision":       s.Config.Renderer.Precision,
 			"chart_precision": s.Config.Renderer.ChartPrecision,
+			"fonts": fiber.Map{
+				"body_family":  s.Config.Renderer.Fonts.BodyFamily,
+				"score_family": s.Config.Renderer.Fonts.ScoreFamily,
+			},
 			"cache": fiber.Map{
 				"enabled":     s.Config.Renderer.Cache.Enabled,
 				"path":        s.Config.Renderer.Cache.Path,
