@@ -11,6 +11,8 @@ COPY web/package.json web/package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 COPY web/ ./
+# web 源码通过 ../../../assets/moebot.svg 引用仓库根目录下的 assets,需要把它放到相对位置
+COPY assets/ /app/assets/
 RUN npm run build
 
 
