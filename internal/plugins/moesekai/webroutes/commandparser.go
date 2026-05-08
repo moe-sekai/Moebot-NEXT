@@ -14,7 +14,7 @@ import (
 // RegisterCommandParser registers /api/commands/* routes onto the given group.
 // The PJSK command parser is moesekai-specific business; this used to live in
 // internal/web/command_handlers.go.
-func RegisterCommandParser(api fiber.Router, d Deps) {
+func RegisterCommandParser(api fiber.Router, d *Deps) {
 	h := &commandParserHandlers{d: d}
 	api.Get("/commands/definitions", h.definitions)
 	api.Get("/commands/parse", h.parse)
@@ -27,7 +27,7 @@ func RegisterCommandParser(api fiber.Router, d Deps) {
 }
 
 type commandParserHandlers struct {
-	d Deps
+	d *Deps
 }
 
 func (h *commandParserHandlers) service() *commandparser.Service {

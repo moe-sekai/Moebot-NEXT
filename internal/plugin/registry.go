@@ -28,6 +28,10 @@ type Registry struct {
 	dataDir   string // data/plugins/
 	contexts  map[string]*Context
 	restartCh chan struct{}
+
+	// baseCtx 缓存 InitEnabled 传入的依赖容器，供 SetEnabled(true) 时
+	// 重新构造插件 ctx 复用（进程内 re-Init，不必重启进程）。
+	baseCtx *Context
 }
 
 var (
@@ -125,21 +129,23 @@ func (r *Registry) IsEnabled(name string) bool {
 	return s.Enabled
 }
 
-// SetEnabled 持久化启用状态变更。
+// SetEnabled 持久化启用状态变更，并在进程内联动加载/卸载插件：
 //
-//   - enabled=false 时立即触发该插件已注册的 OnShutdown 钩子（例如停止
-//     周期任务、断开外部连接），从而无需重启即可"停服"。
-//   - enabled=true 仍需要进程重启才会重新 Init（webroutes / 命令注册等无
-//     法在 fiber/zerobot 运行期安全重复挂载）。
+//   - enabled=false 时立即触发该插件的 OnShutdown 钩子（停止周期任务、
+//     断开外部连接、重置 ZeroBot Engine 等），从而无需重启进程即可"停服"。
+//   - enabled=true 时在当前进程内重新调用 Init（复用首次 InitEnabled
+//     注入的 baseCtx）。Init 会重新注册 ZeroBot matchers / webroutes /
+//     周期任务。由于 Fiber 不支持注销路由，重复 Init 会叠加路由但不会
+//     影响功能（先注册的 handler 先匹配）。
 func (r *Registry) SetEnabled(name string, enabled bool) error {
-	found := false
+	var target Plugin
 	for _, p := range r.plugins {
 		if p.Manifest().Name == name {
-			found = true
+			target = p
 			break
 		}
 	}
-	if !found {
+	if target == nil {
 		return errors.New("plugin not found: " + name)
 	}
 	s := models.PluginState{Name: name, Enabled: enabled, UpdatedAt: time.Now()}
@@ -157,15 +163,37 @@ func (r *Registry) SetEnabled(name string, enabled bool) error {
 			log.Info().Str("plugin", name).Msg("plugin disabled, running shutdown hooks")
 			ctx.RunShutdownHooks()
 		}
-	} else {
-		// 启用 = 需要重新 Init（命令 / Web 路由等无法运行时安全热加），
-		// 触发一次进程内 supervisor 重启，让该插件随重启一起加载。
-		// 若该插件其实已经处于 loaded 状态（例如重复点击），则不重启。
-		if !r.IsLoaded(name) {
-			log.Info().Str("plugin", name).Msg("plugin enabled, requesting in-process restart")
-			r.RequestRestart()
-		}
+		return nil
 	}
+
+	// enabled = true
+	if r.IsLoaded(name) {
+		return nil // 已在运行，无需动作
+	}
+
+	r.mu.RLock()
+	base := r.baseCtx
+	r.mu.RUnlock()
+	if base == nil {
+		// 还没调用过 InitEnabled，保留原"请求重启"兜底（理论上不会走到）。
+		log.Warn().Str("plugin", name).Msg("plugin enabled before InitEnabled; requesting process restart")
+		r.RequestRestart()
+		return nil
+	}
+
+	ctx := *base
+	ctx.PluginName = name
+	ctx.PluginDataDir = r.dataDir
+	ctx.PluginConfigPath = filepath.Join(r.dataDir, name+".yml")
+	log.Info().Str("plugin", name).Msg("plugin enabled, running Init in-process")
+	if err := target.Init(&ctx); err != nil {
+		log.Error().Err(err).Str("plugin", name).Msg("plugin init failed")
+		return err
+	}
+	r.mu.Lock()
+	r.contexts[name] = &ctx
+	r.mu.Unlock()
+	log.Info().Str("plugin", name).Str("version", target.Manifest().Version).Msg("plugin loaded (in-process)")
 	return nil
 }
 
@@ -222,6 +250,12 @@ func (r *Registry) Lookup(name string) Plugin {
 //
 // 任意单个插件 Init 失败只会日志告警，不影响其它插件。
 func (r *Registry) InitEnabled(baseCtx Context) {
+	// 缓存 baseCtx 副本，供后续 SetEnabled(true) 的进程内 re-Init 复用。
+	saved := baseCtx
+	r.mu.Lock()
+	r.baseCtx = &saved
+	r.mu.Unlock()
+
 	for _, p := range r.plugins {
 		name := p.Manifest().Name
 		if !r.IsEnabled(name) {

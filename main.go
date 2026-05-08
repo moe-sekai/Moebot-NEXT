@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -41,15 +42,39 @@ func main() {
 	if cfgPath == "" {
 		cfgPath = "data/config.yml"
 	}
-	for {
-		restart := runOnce(cfgPath)
-		if !restart {
-			return
-		}
-		log.Info().Msg("Moebot NEXT restarting (in-process)…")
-		// 短暂 sleep 让操作系统回收监听端口，避免 bind error。
-		time.Sleep(500 * time.Millisecond)
+	restart := runOnce(cfgPath)
+	if !restart {
+		return
 	}
+	// 进程内重启不可行：ZeroBot 的 WSServer 没有 Shutdown 接口，无法释放
+	// ws-reverse 监听端口；而且其命令 handler 是全局注册、无法注销。
+	// 因此用重新 exec 自身的方式触发一次真正干净的进程重启。
+	log.Info().Msg("Moebot NEXT restarting (re-exec)…")
+	if err := reExecSelf(); err != nil {
+		log.Fatal().Err(err).Msg("Failed to re-exec for restart; exiting")
+	}
+}
+
+// reExecSelf 重新启动当前二进制，并在子进程成功拉起后退出父进程。
+// 不使用 syscall.Exec（Windows 不支持），改为启动子进程 + os.Exit(0)。
+func reExecSelf() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(exe, os.Args[1:]...)
+	cmd.Env = os.Environ()
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// 给子进程留出一小段时间初始化（日志更清晰，也避免父进程过早退出时
+	// 子进程被 TTY 关闭信号影响）。
+	time.Sleep(200 * time.Millisecond)
+	os.Exit(0)
+	return nil
 }
 
 // runOnce 执行一次完整的启动 / 等待信号 / 关闭流程。
@@ -93,7 +118,6 @@ func runOnce(cfgPath string) bool {
 	webServer := web.New(cfg, db, nil, rendererClient, cfgPath, nil)
 	webServer.Logs = logBuffer
 	webServer.Filter = filterManager
-	webServer.SetupStaticFiles(webUI)
 
 	pluginDataDir := pluginsDataDir(cfg)
 	if err := os.MkdirAll(pluginDataDir, 0o755); err != nil {
@@ -113,6 +137,12 @@ func runOnce(cfgPath string) bool {
 		CoreConfigPath: cfgPath,
 	})
 	defer registry.Shutdown()
+
+	// 必须在所有 /api/* 路由（核心 + 插件）注册完成之后再挂 SPA fallback，
+	// 否则 SetupStaticFiles 的 NotFoundFile 会先于插件路由匹配，把 JSON 接
+	// 口请求都返回成 index.html，体现为前端 /api/masterdata/summary 等被
+	// 重定向到主页。
+	webServer.SetupStaticFiles(webUI)
 
 	go func() {
 		if err := webServer.Start(); err != nil {

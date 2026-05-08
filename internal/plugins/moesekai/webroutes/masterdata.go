@@ -11,14 +11,14 @@ import (
 
 // RegisterMasterdata registers /api/masterdata/{summary,reload}. Both endpoints
 // inspect / mutate PJSK masterdata state owned by the moesekai plugin.
-func RegisterMasterdata(api fiber.Router, d Deps) {
+func RegisterMasterdata(api fiber.Router, d *Deps) {
 	h := &masterdataHandlers{d: d}
 	api.Get("/masterdata/summary", h.summary)
 	api.Post("/masterdata/reload", h.reload)
 }
 
 type masterdataHandlers struct {
-	d Deps
+	d *Deps
 }
 
 // summaryStore is the small interface needed for the summary/reload responses.

@@ -52,13 +52,16 @@ func (s *Server) handleSetPluginEnabled(enabled bool) fiber.Handler {
 		if err := reg.SetEnabled(name, enabled); err != nil {
 			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 		}
-		// 禁用即时生效（registry 已触发 OnShutdown 钩子）；
-		// 启用仍需重启以重新挂载 webroutes/命令。
+		// 启用 / 禁用均在进程内即时生效：禁用触发 OnShutdown 钩子，启用
+		// 触发 re-Init（由 Registry.SetEnabled 内部处理）。只有当
+		// registry.baseCtx 尚未就绪（理论上不会发生）时才会 fallback 到
+		// 进程重启，此时 IsLoaded 仍为 false，requires_restart=true。
+		loaded := reg.IsLoaded(name)
 		return c.JSON(fiber.Map{
 			"name":             name,
 			"enabled":          enabled,
-			"loaded":           reg.IsLoaded(name),
-			"requires_restart": enabled,
+			"loaded":           loaded,
+			"requires_restart": enabled && !loaded,
 		})
 	}
 }

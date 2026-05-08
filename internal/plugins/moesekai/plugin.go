@@ -30,6 +30,12 @@ type pluginImpl struct {
 	mu         sync.RWMutex
 	cfg        *config.Config // shared core config (live)
 	configPath string         // data/plugins/moesekai.yml
+
+	// sharedDeps 被 Fiber 路由 handler 以指针方式捕获；每次 Init 时
+	// 原地更新其字段，禁用时清空关键字段。routesOnce 确保 Fiber 路由只
+	// 注册一次（Fiber 不支持路由注销，重复 Register 会叠加 handler）。
+	sharedDeps *webroutes.Deps
+	routesOnce sync.Once
 }
 
 // Manifest returns metadata exposed to the WebUI plugin list.
@@ -142,6 +148,16 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 	serverManager.LoadEnabled()
 	serverManager.StartPeriodicRefresh()
 	ctx.OnShutdown(serverManager.StopPeriodicRefresh)
+	// 插件禁用时同步清理 webServer 上的 moesekai 资源指针，避免 Dashboard
+	// 误报"已加载"。重新启用时 Init 会重新赋值。
+	if webServer, ok := ctx.Web.(*web.Server); ok && webServer != nil {
+		ctx.OnShutdown(func() {
+			webServer.Servers = nil
+			webServer.Store = nil
+			webServer.Loader = nil
+			webServer.B30 = nil
+		})
+	}
 
 	// 5) B30 client.
 	b30Client := b30.NewClient(cfg.B30)
@@ -167,7 +183,9 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 	// 8) Attach PJSK resources back onto the shared web server (still used by
 	// the dashboard / search / status handlers in internal/web/handlers.go).
 	// 9) Register PJSK-owned web routes via the moesekai webroutes package so
-	// they no longer pollute internal/web.
+	// they no longer pollute internal/web. Routes are registered ONLY ONCE
+	// per process — Fiber 不支持注销路由，重复 Register 会叠加 handler。
+	// 重新启用时通过更新 sharedDeps 字段让原 handler 看到最新依赖。
 	if webServer != nil {
 		webServer.Servers = serverManager
 		defaultRuntime := serverManager.Default()
@@ -177,22 +195,42 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 		}
 		webServer.B30 = b30Client
 
-		deps := webroutes.Deps{
-			Config:     cfg,
-			ConfigPath: ctx.CoreConfigPath,
-			Renderer:   rendererClient,
-			Servers:    serverManager,
-			Store:      webServer.Store,
-			Loader:     webServer.Loader,
-			B30:        b30Client,
-			SaveConfig: func() error { return config.Save(cfg, ctx.CoreConfigPath) },
+		p.mu.Lock()
+		if p.sharedDeps == nil {
+			p.sharedDeps = &webroutes.Deps{}
 		}
-		api := webServer.App.Group("/api")
-		webroutes.RegisterCommandParser(api, deps)
-		webroutes.RegisterRendererCache(api, deps)
-		webroutes.RegisterSearch(api, deps)
-		webroutes.RegisterSekaiTest(api, deps)
-		webroutes.RegisterMasterdata(api, deps)
+		p.sharedDeps.Config = cfg
+		p.sharedDeps.ConfigPath = ctx.CoreConfigPath
+		p.sharedDeps.Renderer = rendererClient
+		p.sharedDeps.Servers = serverManager
+		p.sharedDeps.Store = webServer.Store
+		p.sharedDeps.Loader = webServer.Loader
+		p.sharedDeps.B30 = b30Client
+		p.sharedDeps.SaveConfig = func() error { return config.Save(cfg, ctx.CoreConfigPath) }
+		shared := p.sharedDeps
+		p.mu.Unlock()
+
+		p.routesOnce.Do(func() {
+			api := webServer.App.Group("/api")
+			webroutes.RegisterCommandParser(api, shared)
+			webroutes.RegisterRendererCache(api, shared)
+			webroutes.RegisterSearch(api, shared)
+			webroutes.RegisterSekaiTest(api, shared)
+			webroutes.RegisterMasterdata(api, shared)
+		})
+
+		// 禁用时把 sharedDeps 中可观测字段清零，让已注册的 handler 返回
+		// "service unavailable" 而不是命中陈旧 store/Servers。
+		ctx.OnShutdown(func() {
+			p.mu.Lock()
+			if p.sharedDeps != nil {
+				p.sharedDeps.Servers = nil
+				p.sharedDeps.Store = nil
+				p.sharedDeps.Loader = nil
+				p.sharedDeps.B30 = nil
+			}
+			p.mu.Unlock()
+		})
 	}
 	return nil
 }

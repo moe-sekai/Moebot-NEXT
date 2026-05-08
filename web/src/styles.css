@@ -39,11 +39,22 @@ a { color: inherit; text-decoration: none; }
 button, input, select { font: inherit; }
 .svg-icon { display: block; flex: none; }
 
-.app-shell { min-height: 100vh; display: grid; grid-template-columns: 278px minmax(0, 1fr); background: transparent; }
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 278px minmax(0, 1fr);
+  background: transparent;
+  transition: grid-template-columns .18s ease;
+}
+.app-shell--collapsed { grid-template-columns: 76px minmax(0, 1fr); }
 .app-sidebar {
   position: sticky;
   top: 0;
   height: 100vh;
+  /* 侧栏内部独立滚动，主内容区在外层滚动，互不干扰。 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -53,6 +64,40 @@ button, input, select { font: inherit; }
   box-shadow: 12px 0 36px rgba(106, 89, 156, 0.08);
   backdrop-filter: blur(22px);
 }
+.app-sidebar::-webkit-scrollbar { width: 6px; }
+.app-sidebar::-webkit-scrollbar-thumb { background: rgba(165, 180, 252, 0.32); border-radius: 4px; }
+
+.sidebar-toggle {
+  align-self: flex-end;
+  flex: none;
+  z-index: 10;
+  width: 28px;
+  height: 28px;
+  margin: -4px -4px 0 0;
+  border-radius: 50%;
+  border: 1px solid rgba(165, 180, 252, 0.36);
+  background: #fff;
+  color: #6b7280;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 14px rgba(106, 89, 156, 0.12);
+  transition: background .15s ease, color .15s ease, transform .18s ease;
+}
+.sidebar-toggle:hover { background: #fff1f8; color: #eb5aa3; }
+.sidebar-toggle svg { transition: transform .18s ease; }
+.app-shell--collapsed .sidebar-toggle svg { transform: rotate(180deg); }
+
+/* 折叠态：仅显示图标，隐藏文字、段标题、品牌 logo 文字部分 */
+.app-shell--collapsed .console-nav__text,
+.app-shell--collapsed .console-nav__section-title { display: none; }
+.app-shell--collapsed .console-nav__item { justify-content: center; padding: 9px; }
+.app-shell--collapsed .console-nav { gap: 12px; }
+.app-shell--collapsed .console-nav__section { gap: 4px; }
+.app-shell--collapsed .app-sidebar { padding: 20px 8px; }
+.app-shell--collapsed .brand { padding: 6px; justify-content: center; }
+.app-shell--collapsed .brand .moebot-logo { max-width: 44px; overflow: hidden; }
+
 .app-main { min-width: 0; display: flex; flex-direction: column; }
 .brand { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 12px; border-radius: 22px; }
 .brand:hover { background: rgba(255, 255, 255, 0.7); }

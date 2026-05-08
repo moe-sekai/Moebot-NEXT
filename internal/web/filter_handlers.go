@@ -279,9 +279,10 @@ func (s *Server) handleUpdateFilterApp(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 	if app.Builtin {
-		// Built-in: keep name/uri/builtin flag, allow rule edits.
+		// Built-in: lock the identity (name + builtin flag) only; URI /
+		// access token / rules are editable so users can re-point the
+		// gateway when the bot listens on a different port.
 		p.Name = app.Name
-		p.URI = app.URI
 	}
 	payloadToApp(&p, app)
 	if err := s.DB.UpdateFilterApp(app); err != nil {

@@ -16,14 +16,14 @@ import (
 
 // RegisterRendererCache registers /api/renderer/cache/card-thumbnails* routes
 // onto the given group. PJSK card thumbnail preload is moesekai-specific.
-func RegisterRendererCache(api fiber.Router, d Deps) {
+func RegisterRendererCache(api fiber.Router, d *Deps) {
 	h := &rendererCacheHandlers{d: d}
 	api.Get("/renderer/cache/card-thumbnails", h.status)
 	api.Post("/renderer/cache/card-thumbnails/preload", h.preload)
 }
 
 type rendererCacheHandlers struct {
-	d Deps
+	d *Deps
 }
 
 type cardThumbnailCacheTarget struct {

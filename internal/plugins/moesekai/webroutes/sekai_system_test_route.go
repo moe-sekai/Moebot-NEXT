@@ -16,13 +16,13 @@ import (
 // SEKAI API's /system endpoint to verify reachability + auth headers; this is
 // inherently moesekai-specific and lives next to the rest of the PJSK config
 // surface.
-func RegisterSekaiTest(api fiber.Router, d Deps) {
+func RegisterSekaiTest(api fiber.Router, d *Deps) {
 	h := &sekaiTestHandlers{d: d}
 	api.Post("/config/sekai/test-system", h.testSystem)
 }
 
 type sekaiTestHandlers struct {
-	d Deps
+	d *Deps
 }
 
 type sekaiSystemTestRequest struct {

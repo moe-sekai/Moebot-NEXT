@@ -21,7 +21,7 @@ const (
 	SuiteModeMoeSekai = SuiteModeHaruki
 
 	DefaultSuiteAPIURL     = "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
-	DefaultSekaiAPIURL     = "https://seka-api.exmeaning.com"
+	DefaultSekaiAPIURL     = "https://seka-api.exmeaning.com/api/{region}"
 	DefaultRankingAPIURL   = "https://rks.exmeaning.com"
 	DefaultChartSourceURL  = "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
 	DefaultB30ConstantsURL = "https://moe.exmeaning.com/data/pjskb30/merged_chart.csv"

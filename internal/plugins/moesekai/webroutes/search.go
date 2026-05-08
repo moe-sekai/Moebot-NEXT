@@ -14,7 +14,7 @@ import (
 
 // RegisterSearch registers /api/search/* routes onto the given group. All
 // search endpoints query PJSK masterdata and are moesekai-specific.
-func RegisterSearch(api fiber.Router, d Deps) {
+func RegisterSearch(api fiber.Router, d *Deps) {
 	h := &searchHandlers{d: d}
 	api.Get("/search/cards", h.cards)
 	api.Get("/search/musics", h.musics)
@@ -24,7 +24,7 @@ func RegisterSearch(api fiber.Router, d Deps) {
 }
 
 type searchHandlers struct {
-	d Deps
+	d *Deps
 }
 
 // searchStore narrows the masterdata Store interface to the methods the

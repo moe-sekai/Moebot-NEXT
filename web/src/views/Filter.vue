@@ -128,8 +128,8 @@
                   <input type="text" v-model="a.name" :disabled="a.builtin" />
                 </label>
                 <label>
-                  <span>URI</span>
-                  <input type="text" v-model="a.uri" :disabled="a.builtin" placeholder="ws://127.0.0.1:8080/ws" />
+                  <span>URI<small v-if="a.builtin" style="opacity:0.6">（内置行：名称固定，URI 可改以匹配 Bot 监听端口）</small></span>
+                  <input type="text" v-model="a.uri" placeholder="ws://127.0.0.1:8080/ws" />
                 </label>
                 <label>
                   <span>Access Token</span>
