@@ -122,6 +122,8 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 		api := webServer.App.Group("/api")
 		webroutes.RegisterCommandParser(api, deps)
 		webroutes.RegisterRendererCache(api, deps)
+		webroutes.RegisterSearch(api, deps)
+		webroutes.RegisterSekaiTest(api, deps)
 	}
 	return nil
 }

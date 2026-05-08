@@ -54,24 +54,6 @@ func TestPublicConfigMasksSekaiAPISensitiveFields(t *testing.T) {
 	}
 }
 
-func TestSekaiSystemURLSupportsRegionPlaceholder(t *testing.T) {
-	got, err := sekaiSystemURL("https://seka-api.exmeaning.com/api/{region}", config.RegionCN)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "https://seka-api.exmeaning.com/api/cn/system" {
-		t.Fatalf("system url = %q", got)
-	}
-
-	got, err = sekaiSystemURL("https://seka-api.exmeaning.com", config.RegionJP)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "https://seka-api.exmeaning.com/api/jp/system" {
-		t.Fatalf("default system url = %q", got)
-	}
-}
-
 func TestUpdatePublicConfigSavesSekaiAPISettings(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yml")

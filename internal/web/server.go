@@ -98,7 +98,7 @@ func (s *Server) registerRoutes() {
 	// (internal/plugins/moesekai/webroutes/) at plugin Init time.
 	api.Get("/config/public", s.handlePublicConfig)
 	api.Put("/config/public", s.handleUpdatePublicConfig)
-	api.Post("/config/sekai/test-system", s.handleTestSekaiSystem)
+	// /api/config/sekai/test-system is registered by the moesekai plugin.
 	api.Post("/masterdata/reload", s.handleReloadMasterdata)
 
 	// Dashboard
@@ -139,12 +139,8 @@ func (s *Server) registerRoutes() {
 	api.Get("/filter/export-yaml", s.handleFilterExportYAML)
 	api.Post("/filter/import-yaml", s.handleFilterImportYAML)
 
-	// Masterdata search
-	api.Get("/search/cards", s.handleSearchCards)
-	api.Get("/search/musics", s.handleSearchMusics)
-	api.Get("/search/events", s.handleSearchEvents)
-	api.Get("/search/gachas", s.handleSearchGachas)
-	api.Get("/search/virtual-lives", s.handleSearchVirtualLives)
+	// /api/search/* is registered by the moesekai plugin (see
+	// internal/plugins/moesekai/webroutes/search.go).
 
 	// Plugins
 	api.Get("/plugins", s.handleListPlugins)

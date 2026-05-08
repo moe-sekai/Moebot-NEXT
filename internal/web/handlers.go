@@ -3,8 +3,6 @@ package web
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +12,6 @@ import (
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
 	"moebot-next/internal/plugins/moesekai/masterdata"
-	"moebot-next/internal/plugins/moesekai/musicsearch"
 	"moebot-next/internal/renderer"
 
 	"github.com/gofiber/fiber/v2"
@@ -315,12 +312,6 @@ type rankingAPISettingsRequest struct {
 	Timeout int `json:"timeout"`
 }
 
-type sekaiSystemTestRequest struct {
-	BaseURL string            `json:"base_url"`
-	Region  string            `json:"region"`
-	Headers map[string]string `json:"headers"`
-	Timeout int               `json:"timeout"`
-}
 
 // handleUpdatePublicConfig saves the editable non-sensitive settings.
 func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
@@ -680,85 +671,6 @@ func applyRankingAPISettings(target *config.RankingAPIConfig, req *rankingAPISet
 	if req.Timeout > 0 {
 		target.Timeout = req.Timeout
 	}
-}
-
-func (s *Server) handleTestSekaiSystem(c *fiber.Ctx) error {
-	var req sekaiSystemTestRequest
-	if err := c.BodyParser(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
-	}
-	region := config.NormalizeRegion(req.Region)
-	if region == "" {
-		region = config.NormalizeRegion(s.Config.Server.Region)
-	}
-	if region == "" {
-		region = config.RegionJP
-	}
-	systemURL, err := sekaiSystemURL(fallbackString(req.BaseURL, config.DefaultSekaiAPIURL), region)
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
-	}
-	timeout := time.Duration(req.Timeout) * time.Second
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-	httpReq, err := http.NewRequest(http.MethodGet, systemURL, nil)
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("build system request: %v", err))
-	}
-	for key, value := range req.Headers {
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		if key != "" && value != "" {
-			httpReq.Header.Set(key, value)
-		}
-	}
-	started := time.Now()
-	resp, err := (&http.Client{Timeout: timeout}).Do(httpReq)
-	duration := time.Since(started)
-	if err != nil {
-		return c.JSON(fiber.Map{
-			"ok":          false,
-			"url":         systemURL,
-			"duration_ms": duration.Milliseconds(),
-			"message":     err.Error(),
-		})
-	}
-	defer resp.Body.Close()
-	ok := resp.StatusCode >= 200 && resp.StatusCode < 300
-	message := "SEKAI API /system 连通正常"
-	if !ok {
-		message = fmt.Sprintf("SEKAI API /system 返回 HTTP %d", resp.StatusCode)
-	}
-	return c.JSON(fiber.Map{
-		"ok":          ok,
-		"url":         systemURL,
-		"status_code": resp.StatusCode,
-		"duration_ms": duration.Milliseconds(),
-		"message":     message,
-	})
-}
-
-func sekaiSystemURL(baseURL string, region string) (string, error) {
-	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if base == "" {
-		base = config.DefaultSekaiAPIURL
-	}
-	region = config.NormalizeRegion(region)
-	if region == "" {
-		region = config.RegionJP
-	}
-	base = strings.ReplaceAll(base, "{region}", region)
-	if strings.Contains(base, "{uid}") || strings.Contains(base, "{user_id}") {
-		return "", fmt.Errorf("SEKAI API Base URL 用于 /system 测试时不能包含 {uid} 或 {user_id}")
-	}
-	if _, err := url.ParseRequestURI(base); err != nil {
-		return "", fmt.Errorf("invalid sekai api base url: %w", err)
-	}
-	if strings.Contains(baseURL, "{region}") {
-		return strings.TrimRight(base, "/") + "/system", nil
-	}
-	return url.JoinPath(base, "api", region, "system")
 }
 
 // handleReloadMasterdata forces a full reload from the currently configured source.
@@ -1264,202 +1176,6 @@ func (s *Server) handleCommandStats(c *fiber.Ctx) error {
 	})
 }
 
-// handleSearchCards searches card masterdata and returns lightweight rows.
-func (s *Server) handleSearchCards(c *fiber.Ctx) error {
-	if err := s.ensureSearchReady(c); err != nil {
-		return err
-	}
-	q := strings.TrimSpace(c.Query("q"))
-	results := s.defaultStore().SearchCards(q)
-	rows := make([]fiber.Map, 0, len(results))
-	for _, card := range results {
-		rows = append(rows, fiber.Map{
-			"id":              card.ID,
-			"title":           card.Prefix,
-			"subtitle":        fmt.Sprintf("角色 #%d · %s", card.CharacterID, card.CardRarityType),
-			"type":            "card",
-			"character_id":    card.CharacterID,
-			"rarity":          card.CardRarityType,
-			"attr":            card.Attr,
-			"assetbundleName": card.AssetbundleName,
-		})
-	}
-	return searchResponse(c, q, rows)
-}
-
-// handleSearchMusics searches music masterdata and returns lightweight rows.
-func (s *Server) handleSearchMusics(c *fiber.Ctx) error {
-	if err := s.ensureSearchReady(c); err != nil {
-		return err
-	}
-	q := strings.TrimSpace(c.Query("q"))
-	store := s.Store
-	var aliases map[int]assets.MusicAlias
-	if s.Servers != nil {
-		if runtime := s.Servers.Default(); runtime != nil {
-			store = runtime.Store
-			aliases = runtime.MusicAliases
-		}
-	}
-	result := musicsearch.Search(store, aliases, q, musicsearch.Options{Limit: 25})
-	results := result.DisplayMusics()
-	rows := make([]fiber.Map, 0, len(results))
-	for _, music := range results {
-		rows = append(rows, fiber.Map{
-			"id":              music.ID,
-			"title":           music.Title,
-			"subtitle":        strings.Join(nonEmptyStrings(music.Composer, music.Lyricist, music.Arranger), " / "),
-			"type":            "music",
-			"pronunciation":   music.Pronunciation,
-			"composer":        music.Composer,
-			"lyricist":        music.Lyricist,
-			"arranger":        music.Arranger,
-			"assetbundleName": music.AssetbundleName,
-		})
-	}
-	return searchResponse(c, q, rows)
-}
-
-// handleSearchEvents searches event masterdata and returns lightweight rows.
-func (s *Server) handleSearchEvents(c *fiber.Ctx) error {
-	if err := s.ensureSearchReady(c); err != nil {
-		return err
-	}
-	q := strings.TrimSpace(c.Query("q"))
-	results := s.defaultStore().SearchEvents(q)
-	rows := make([]fiber.Map, 0, len(results))
-	for _, event := range results {
-		rows = append(rows, fiber.Map{
-			"id":              event.ID,
-			"title":           event.Name,
-			"subtitle":        fmt.Sprintf("%s · %s", event.EventType, event.Unit),
-			"type":            "event",
-			"event_type":      event.EventType,
-			"unit":            event.Unit,
-			"start_at":        event.StartAt,
-			"closed_at":       event.ClosedAt,
-			"assetbundleName": event.AssetbundleName,
-		})
-	}
-	return searchResponse(c, q, rows)
-}
-
-// handleSearchGachas searches gacha masterdata and returns lightweight rows.
-func (s *Server) handleSearchGachas(c *fiber.Ctx) error {
-	c.Locals("allow_empty_query", true)
-	if err := s.ensureSearchReady(c); err != nil {
-		return err
-	}
-	q := strings.TrimSpace(c.Query("q"))
-	results := s.defaultStore().SearchGachas(q)
-	if q == "" || strings.EqualFold(q, "当前") {
-		store := s.defaultStore()
-		if full, ok := store.(interface{ AllGachas() []masterdata.GachaInfo }); ok {
-			results = currentGachasForWeb(full.AllGachas())
-		}
-	}
-	rows := make([]fiber.Map, 0, len(results))
-	for _, gacha := range results {
-		rows = append(rows, fiber.Map{
-			"id":              gacha.ID,
-			"title":           gacha.Name,
-			"subtitle":        gacha.GachaType,
-			"type":            "gacha",
-			"gacha_type":      gacha.GachaType,
-			"start_at":        gacha.StartAt,
-			"end_at":          gacha.EndAt,
-			"assetbundleName": gacha.AssetbundleName,
-		})
-	}
-	return searchResponse(c, q, rows)
-}
-
-// handleSearchVirtualLives searches virtual live masterdata and returns lightweight rows.
-func (s *Server) handleSearchVirtualLives(c *fiber.Ctx) error {
-	c.Locals("allow_empty_query", true)
-	if err := s.ensureSearchReady(c); err != nil {
-		return err
-	}
-	q := strings.TrimSpace(c.Query("q"))
-	results := searchVirtualLivesForWeb(s.defaultStore().AllVirtualLives(), q)
-	rows := make([]fiber.Map, 0, len(results))
-	for _, live := range results {
-		start, end := virtualLiveBoundsForWeb(live)
-		rows = append(rows, fiber.Map{
-			"id":                live.ID,
-			"title":             live.Name,
-			"subtitle":          fmt.Sprintf("%s - %s", formatWebMillis(start), formatWebMillis(end)),
-			"type":              "virtual_live",
-			"virtual_live_type": live.VirtualLiveType,
-			"start_at":          start,
-			"end_at":            end,
-			"assetbundleName":   live.AssetbundleName,
-		})
-	}
-	return searchResponse(c, q, rows)
-}
-
-func currentGachasForWeb(gachas []masterdata.GachaInfo) []masterdata.GachaInfo {
-	now := time.Now().UnixMilli()
-	out := make([]masterdata.GachaInfo, 0)
-	for _, gacha := range gachas {
-		if gacha.StartAt <= now && (gacha.EndAt <= 0 || now <= gacha.EndAt) {
-			out = append(out, gacha)
-		}
-	}
-	if len(out) > 0 {
-		return out
-	}
-	for _, gacha := range gachas {
-		if gacha.StartAt <= now {
-			out = append(out, gacha)
-		}
-	}
-	if len(out) > 12 {
-		return out[len(out)-12:]
-	}
-	return out
-}
-
-func searchVirtualLivesForWeb(lives []masterdata.VirtualLive, q string) []masterdata.VirtualLive {
-	now := time.Now().UnixMilli()
-	q = strings.TrimSpace(strings.ToLower(q))
-	out := make([]masterdata.VirtualLive, 0)
-	for _, live := range lives {
-		start, end := virtualLiveBoundsForWeb(live)
-		if q == "" {
-			if end > now && start-now < int64(7*24*time.Hour/time.Millisecond) {
-				out = append(out, live)
-			}
-			continue
-		}
-		if fmt.Sprintf("%d", live.ID) == q || strings.Contains(strings.ToLower(live.Name), q) || strings.Contains(strings.ToLower(live.AssetbundleName), q) {
-			out = append(out, live)
-		}
-	}
-	return out
-}
-
-func virtualLiveBoundsForWeb(live masterdata.VirtualLive) (int64, int64) {
-	start, end := live.StartAt, live.EndAt
-	for i, schedule := range live.VirtualLiveSchedules {
-		if i == 0 || schedule.StartAt < start || start == 0 {
-			start = schedule.StartAt
-		}
-		if schedule.EndAt > end {
-			end = schedule.EndAt
-		}
-	}
-	return start, end
-}
-
-func formatWebMillis(ms int64) string {
-	if ms <= 0 {
-		return "-"
-	}
-	return time.UnixMilli(ms).Format("2006-01-02 15:04")
-}
-
 func (s *Server) masterdataSummaryMap() fiber.Map {
 	return s.masterdataSummaryMapForStore(s.defaultStore())
 }
@@ -1520,42 +1236,6 @@ func (s *Server) defaultStore() interface {
 	return s.Store
 }
 
-func (s *Server) ensureSearchReady(c *fiber.Ctx) error {
-	q := strings.TrimSpace(c.Query("q"))
-	allowEmpty := c.Locals("allow_empty_query") == true
-	if q == "" && !allowEmpty {
-		return c.JSON(fiber.Map{
-			"data":    []fiber.Map{},
-			"total":   0,
-			"query":   q,
-			"message": "请输入关键词后再搜索。",
-		})
-	}
-	store := s.defaultStore()
-	if store == nil || !store.IsLoaded() {
-		return c.JSON(fiber.Map{
-			"data":    []fiber.Map{},
-			"total":   0,
-			"query":   q,
-			"message": "Masterdata 尚未加载，暂时无法搜索。",
-		})
-	}
-	return nil
-}
-
-func searchResponse(c *fiber.Ctx, q string, rows []fiber.Map) error {
-	message := "搜索完成"
-	if len(rows) == 0 {
-		message = "没有找到匹配结果。"
-	}
-	return c.JSON(fiber.Map{
-		"data":    rows,
-		"total":   len(rows),
-		"query":   q,
-		"message": message,
-	})
-}
-
 func rendererBaseURL(client *renderer.Client) string {
 	if client == nil {
 		return ""
@@ -1598,17 +1278,6 @@ func setOptionalHeader(c *fiber.Ctx, key string, value string) {
 	if value != "" {
 		c.Set(key, value)
 	}
-}
-
-func nonEmptyStrings(values ...string) []string {
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value != "" {
-			out = append(out, value)
-		}
-	}
-	return out
 }
 
 func fallbackString(values ...string) string {

@@ -106,13 +106,17 @@ webroutes.RegisterRendererCache(api, deps)
 - `/api/commands/definitions`、`/api/commands/parse{,/image}`、
   `/api/commands/aliases*`
 - `/api/renderer/cache/card-thumbnails*`
+- `/api/search/{cards,musics,events,gachas,virtual-lives}`
+- `/api/config/sekai/test-system`
 
-仍在 `internal/web/handlers.go`（深度耦合 `Server` 私有 helpers，待后续 PR
-继续迁出）：
+仍在 `internal/web/handlers.go`（深度耦合 `Server` 私有 helpers
+`publicConfigMap` / `masterdataSummaryMap`，迁出会牵动一千多行重写，作为
+独立 PR 继续推进）：
 
-- `/api/dashboard`、`/api/status`、`/api/masterdata/*`、`/api/search/*`、
-  `/api/config/public`、`/api/config/sekai/test-system`、
-  `/api/renderer/previews*`
+- `/api/dashboard`、`/api/status`
+- `/api/masterdata/{summary,reload}`
+- `/api/config/public`（含 `publicConfigMap` 和 `publicServerProfilesMap`）
+- `/api/renderer/previews*`
 
 ## 兼容旧 config.yml
 
