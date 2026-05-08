@@ -123,17 +123,17 @@ func TestFormatCardBoxTextAppliesSortOptions(t *testing.T) {
 		3: {CardID: 3, Level: 30, MasterRank: 1, SkillLevel: 2, CreatedAt: 2000},
 	}
 
-	text := formatCardBoxText(config.RegionCN, profile, cards, owned, cardBoxQueryOptions{SortBy: "mr"})
+	text := formatCardBoxText(config.RegionCN, profile, cards, owned, cardBoxQueryOptions{SortBy: "mr"}, 1, 1)
 	if strings.Index(text, "#1") > strings.Index(text, "#2") || strings.Index(text, "#2") > strings.Index(text, "#3") {
 		t.Fatalf("mr sort should order by master rank desc, got:\n%s", text)
 	}
 
-	text = formatCardBoxText(config.RegionCN, profile, cards, owned, cardBoxQueryOptions{SortBy: "time"})
+	text = formatCardBoxText(config.RegionCN, profile, cards, owned, cardBoxQueryOptions{SortBy: "time"}, 1, 1)
 	if strings.Index(text, "#2") > strings.Index(text, "#3") || strings.Index(text, "#3") > strings.Index(text, "#1") {
 		t.Fatalf("time sort should order by created time desc, got:\n%s", text)
 	}
 
-	text = formatCardBoxText(config.RegionCN, profile, cards, owned, cardBoxQueryOptions{SortBy: "sl"})
+	text = formatCardBoxText(config.RegionCN, profile, cards, owned, cardBoxQueryOptions{SortBy: "sl"}, 1, 1)
 	if strings.Index(text, "#2") > strings.Index(text, "#3") || strings.Index(text, "#3") > strings.Index(text, "#1") {
 		t.Fatalf("sl sort should order by skill level desc, got:\n%s", text)
 	}

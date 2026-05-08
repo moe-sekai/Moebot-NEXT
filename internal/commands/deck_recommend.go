@@ -188,7 +188,7 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 			}
 			calc.Warnings = append(calc.Warnings, warnings...)
 			payload := buildDeckRecommendPayload(runtime, mode, calc)
-			png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "deck_recommend", Data: payload, Width: 980})
+			png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "deck_recommend", Data: payload})
 			if err != nil {
 				ctx.SendChain(message.Text(formatDeckRecommendText(calc)))
 			} else {

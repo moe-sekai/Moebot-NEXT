@@ -498,6 +498,10 @@ function normalizeSuiteCardBox(data: any) {
 		assetSource: data.assetSource ?? data.AssetSource,
 		total: data.total ?? data.Total,
 		ownedTotal: data.ownedTotal ?? data.OwnedTotal,
+		page: data.page ?? data.Page,
+		totalPages: data.totalPages ?? data.TotalPages,
+		pageSize: data.pageSize ?? data.PageSize,
+		totalAll: data.totalAll ?? data.TotalAll,
 	};
 }
 

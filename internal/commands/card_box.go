@@ -31,7 +31,10 @@ type cardBoxQueryOptions struct {
 	ShowCreatedAt     bool
 	SortBy            string
 	FilterText        string
+	Page              int
 }
+
+const cardBoxPageSize = 100
 
 func cardBoxFields() []string {
 	return suite.Fields()
@@ -71,21 +74,26 @@ func RegisterSuiteCardBox(deps *Deps) {
 			}
 			owned := renderer.SuiteUserCardMap(profile.UserCards)
 			deckSet := cardBoxDeckSet(profile)
+			pagedCards, page, totalPages := paginateCardBox(cards, options, owned)
 			payload := renderer.BuildSuiteCardBoxPayload(
 				suitePanelTitle(runtime, "卡牌一览"),
-				cardBoxSubtitle(options, len(cards), len(owned)),
+				cardBoxSubtitle(options, len(cards), len(owned), page, totalPages),
 				runtime.Region,
 				"",
 				profile.BaseProfile,
 				profile.UserGamedata,
-				cards,
+				pagedCards,
 				owned,
 				deckSet,
 				runtime.Store,
 				runtime.Assets,
 				renderer.SuiteCardBoxOptions{ShowID: options.ShowID, OwnedOnly: options.OwnedOnly, UseBeforeTraining: options.UseBeforeTraining, ShowCreatedAt: options.ShowCreatedAt, SortBy: options.SortBy},
 			)
-			sendSuiteCardBoxOrText(ctx, deps, payload, formatCardBoxText(runtime.Region, profile, cards, owned, options))
+			payload.Page = page
+			payload.TotalPages = totalPages
+			payload.PageSize = cardBoxPageSize
+			payload.TotalAll = len(cards)
+			sendSuiteCardBoxOrText(ctx, deps, payload, formatCardBoxText(runtime.Region, profile, cards, owned, options, page, totalPages))
 			bot.RecordCommandRegion(deps.DB, "卡牌一览", runtime.Region, ctx, start)
 		})
 	}
@@ -113,11 +121,51 @@ func parseCardBoxOptions(raw string) cardBoxQueryOptions {
 		case "sl", "skill", "skilllevel", "技能等级", "技能等级排序":
 			options.SortBy = "sl"
 		default:
+			if page, ok := parseCardBoxPageToken(lower); ok {
+				options.Page = page
+				continue
+			}
 			remaining = append(remaining, token)
 		}
 	}
 	options.FilterText = strings.TrimSpace(strings.Join(remaining, " "))
 	return options
+}
+
+func parseCardBoxPageToken(token string) (int, bool) {
+	if token == "" {
+		return 0, false
+	}
+	switch {
+	case strings.HasPrefix(token, "@"):
+		return parsePositivePage(strings.TrimPrefix(token, "@"))
+	case strings.HasPrefix(token, "p"):
+		return parsePositivePage(strings.TrimPrefix(token, "p"))
+	case strings.HasSuffix(token, "页"):
+		return parsePositivePage(strings.TrimSuffix(token, "页"))
+	}
+	return 0, false
+}
+
+func parsePositivePage(value string) (int, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	n := 0
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+		n = n*10 + int(r-'0')
+		if n > 100000 {
+			return 0, false
+		}
+	}
+	if n <= 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 func cardBoxCards(store *masterdata.Store, options cardBoxQueryOptions) ([]masterdata.CardInfo, string) {
@@ -161,7 +209,7 @@ func cardBoxDeckSet(profile cardBoxProfile) map[int]struct{} {
 	return out
 }
 
-func cardBoxSubtitle(options cardBoxQueryOptions, total int, owned int) string {
+func cardBoxSubtitle(options cardBoxQueryOptions, total int, owned int, page int, totalPages int) string {
 	parts := []string{fmt.Sprintf("筛选 %d 张", total), fmt.Sprintf("已持有 %d 张", owned)}
 	if options.FilterText != "" {
 		parts = append(parts, "条件: "+options.FilterText)
@@ -172,10 +220,60 @@ func cardBoxSubtitle(options cardBoxQueryOptions, total int, owned int) string {
 	if options.SortBy != "" {
 		parts = append(parts, "排序: "+options.SortBy)
 	}
+	if totalPages > 1 {
+		parts = append(parts, fmt.Sprintf("第 %d/%d 页", page, totalPages))
+	}
 	return strings.Join(parts, " · ")
 }
 
-func formatCardBoxText(region string, profile cardBoxProfile, cards []masterdata.CardInfo, owned map[int]suite.UserCard, options cardBoxQueryOptions) string {
+func paginateCardBox(cards []masterdata.CardInfo, options cardBoxQueryOptions, owned map[int]suite.UserCard) ([]masterdata.CardInfo, int, int) {
+	filtered := cards
+	if options.OwnedOnly {
+		filtered = make([]masterdata.CardInfo, 0, len(cards))
+		for _, card := range cards {
+			if _, ok := owned[card.ID]; ok {
+				filtered = append(filtered, card)
+			}
+		}
+	}
+	total := len(filtered)
+	totalPages := 1
+	if total > 0 {
+		totalPages = (total + cardBoxPageSize - 1) / cardBoxPageSize
+	}
+	page := options.Page
+	if page <= 0 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	start := (page - 1) * cardBoxPageSize
+	if start < 0 {
+		start = 0
+	}
+	if start > total {
+		start = total
+	}
+	end := start + cardBoxPageSize
+	if end > total {
+		end = total
+	}
+	if options.OwnedOnly {
+		return filtered[start:end], page, totalPages
+	}
+	// When OwnedOnly is false we paginate the unfiltered list directly to keep
+	// rendering predictable; the renderer will hide untyped cards via OwnedOnly elsewhere.
+	if start > len(cards) {
+		start = len(cards)
+	}
+	if end > len(cards) {
+		end = len(cards)
+	}
+	return cards[start:end], page, totalPages
+}
+
+func formatCardBoxText(region string, profile cardBoxProfile, cards []masterdata.CardInfo, owned map[int]suite.UserCard, options cardBoxQueryOptions, page int, totalPages int) string {
 	cards = sortedCardBoxTextCards(cards, owned, options)
 	name := profile.UserGamedata.Name
 	if name == "" {
@@ -196,6 +294,9 @@ func formatCardBoxText(region string, profile cardBoxProfile, cards []masterdata
 		fmt.Sprintf("已持有: %d", len(owned)),
 		fmt.Sprintf("更新时间: %s", suiteUpdateText(profile.UploadTime)),
 		fmt.Sprintf("数据来源: %s", suiteSourceText(profile.BaseProfile)),
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("第 %d/%d 页（输入 @页码 切换，例如 @2）", page, totalPages))
 	}
 	limit := 30
 	count := 0

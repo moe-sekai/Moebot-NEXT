@@ -49,12 +49,13 @@ func NewManager(cfg *config.Config) *Manager {
 }
 
 // ApplyConfig rebuilds runtime settings from config while preserving loaded stores
-// for still-enabled regions where possible.
+// for still-enabled regions where possible. Regions that transition from disabled
+// to enabled have their masterdata loaded asynchronously so command handlers
+// (e.g. /cn查卡) become functional without requiring a manual reload.
 func (m *Manager) ApplyConfig(cfg *config.Config) {
 	config.NormalizeConfig(cfg)
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	old := m.runtimes
 	m.defaultRegion = config.NormalizeRegion(cfg.Server.Region)
@@ -63,6 +64,11 @@ func (m *Manager) ApplyConfig(cfg *config.Config) {
 	}
 	m.runtimes = make(map[string]*Runtime, len(config.RegionKeys()))
 
+	// Skip auto-bootstrap on the initial setup call (NewManager): the caller
+	// follows up with LoadEnabled + StartPeriodicRefresh, so kicking off the
+	// same work here would race / spawn duplicate refresh loops.
+	isInitial := old == nil
+	var newlyEnabled []*Runtime
 	for _, region := range config.RegionKeys() {
 		profile := config.ResolveGameServerProfile(cfg, region)
 		enabled := config.IsEnabled(profile.Enabled)
@@ -75,7 +81,8 @@ func (m *Manager) ApplyConfig(cfg *config.Config) {
 			Enabled: enabled,
 			Profile: profile,
 		}
-		if previous := old[region]; previous != nil && previous.Store != nil {
+		previous := old[region]
+		if previous != nil && previous.Store != nil {
 			runtime.Store = previous.Store
 		}
 		if runtime.Store == nil {
@@ -84,7 +91,7 @@ func (m *Manager) ApplyConfig(cfg *config.Config) {
 		if runtime.Enabled {
 			runtime.Loader = masterdata.NewLoader(profile.Masterdata, runtime.Store, region)
 			runtime.Assets, runtime.LoadError = assets.NewResolver(profile.Assets, region)
-			if previous := old[region]; previous != nil && previous.MusicAliases != nil {
+			if previous != nil && previous.MusicAliases != nil {
 				runtime.MusicAliases = previous.MusicAliases
 			}
 			runtime.Sekai = sekai.NewClient(profile.SekaiAPI)
@@ -94,8 +101,40 @@ func (m *Manager) ApplyConfig(cfg *config.Config) {
 				Region:  profile.RankingAPI.Region,
 				Timeout: profile.RankingAPI.Timeout,
 			})
+			// Detect a region that just came online: either it had no previous
+			// runtime, was previously disabled, or its store was never populated.
+			justEnabled := previous == nil || !previous.Enabled || (previous.Store != nil && previous.Store.LoadedAt().IsZero())
+			if !isInitial && justEnabled {
+				newlyEnabled = append(newlyEnabled, runtime)
+			}
 		}
 		m.runtimes[region] = runtime
+	}
+
+	m.mu.Unlock()
+
+	for _, runtime := range newlyEnabled {
+		go m.bootstrapRuntime(runtime)
+	}
+}
+
+// bootstrapRuntime performs the first masterdata load for a freshly-enabled
+// region and starts its periodic refresh, mirroring what LoadEnabled +
+// StartPeriodicRefresh do during initial startup.
+func (m *Manager) bootstrapRuntime(runtime *Runtime) {
+	if runtime == nil || runtime.Loader == nil {
+		return
+	}
+	log.Info().Str("region", runtime.Region).Msg("Bootstrapping newly-enabled region masterdata")
+	if err := runtime.Loader.LoadAll(); err != nil {
+		runtime.LoadError = err
+		log.Warn().Err(err).Str("region", runtime.Region).Msg("Newly-enabled region masterdata load failed")
+	} else {
+		runtime.LoadError = nil
+	}
+	m.loadMusicAliases(runtime)
+	if interval := runtime.Profile.Masterdata.RefreshInterval; interval > 0 {
+		runtime.Loader.StartPeriodicRefresh(time.Duration(interval) * time.Second)
 	}
 }
 

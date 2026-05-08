@@ -61,6 +61,19 @@ export function CardList({
 					<span>{pageText(page, totalPages, total)}</span>
 					<span>{cards.length} shown</span>
 				</div>
+				{(totalPages ?? 1) > 1 && (
+					<div
+						style={{
+							display: "flex",
+							justifyContent: "center",
+							color: theme.colors.textMuted,
+							fontSize: theme.fontSize.xs,
+							fontWeight: 700,
+						}}
+					>
+						<span>翻页：在命令后追加 @页码（例如 @2、@{Math.min((page ?? 1) + 1, totalPages ?? 1)}）</span>
+					</div>
+				)}
 				<div
 					style={{ display: "flex", flexWrap: "wrap", gap: theme.spacing.sm }}
 				>

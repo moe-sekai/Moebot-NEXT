@@ -18,6 +18,10 @@ export interface SuiteCardBoxProps {
 	assetSource?: AssetSourceType | string;
 	total?: number;
 	ownedTotal?: number;
+	page?: number;
+	totalPages?: number;
+	pageSize?: number;
+	totalAll?: number;
 }
 
 interface SuiteCardGroup {
@@ -68,11 +72,17 @@ export function SuiteCardBox({
 	assetSource = "main-jp",
 	total,
 	ownedTotal,
+	page,
+	totalPages,
+	totalAll,
 }: SuiteCardBoxProps) {
 	const normalizedGroups = normalizeGroups(groups, cards, options.groupByCharacter);
 	const allCards = normalizedGroups.flatMap((group) => group.cards ?? []);
 	const owned = ownedTotal ?? allCards.filter((card) => isOwned(card)).length;
 	const count = total ?? allCards.length;
+	const totalAllCount = totalAll ?? count;
+	const pageCount = totalPages ?? 1;
+	const currentPage = page ?? 1;
 	const compact = allCards.length >= 80;
 	const tileLayout = compact ? { tileWidth: 108, tilePadding: 6, thumbSize: 88, infoGap: 2 } : { tileWidth: 132, tilePadding: 8, thumbSize: 112, infoGap: 3 };
 	const profileText = profile ? `${profile.displayName ?? profile.name ?? "未知玩家"}${profile.rank !== undefined ? ` · Rank ${profile.rank}` : ""}` : undefined;
@@ -85,6 +95,12 @@ export function SuiteCardBox({
 					<span style={{ display: "flex" }}>{summary}</span>
 					{profile?.userId || profile?.uid ? <span style={{ display: "flex" }}>UID: {profile.userId ?? profile.uid}</span> : <span style={{ display: "flex" }}>{allCards.length} shown</span>}
 				</div>
+				{pageCount > 1 && (
+					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: theme.colors.textMuted, fontSize: theme.fontSize.xs, fontWeight: 700 }}>
+						<span style={{ display: "flex" }}>第 {currentPage}/{pageCount} 页 · 共 {totalAllCount} 张</span>
+						<span style={{ display: "flex" }}>翻页：在命令后追加 @页码（例如 @2、@{Math.min(currentPage + 1, pageCount)}）</span>
+					</div>
+				)}
 
 				{normalizedGroups.map((group, index) => (
 					<div key={`${group.title ?? group.name ?? index}`} style={{ display: "flex", flexDirection: "column", gap: theme.spacing.md }}>

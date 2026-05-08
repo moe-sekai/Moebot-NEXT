@@ -318,20 +318,25 @@ func (s *Service) buildSuiteDebugPayloadForDefinition(def Definition, runtime *s
 			return nil, nil, nil, fmt.Errorf("%s", msg)
 		}
 		owned := renderer.SuiteUserCardMap(profile.UserCards)
+		pagedCards, page, totalPages := suiteDebugPaginateCardBox(cards, options, owned)
 		payload := renderer.BuildSuiteCardBoxPayload(
 			suiteDebugPanelTitle(runtime, "卡牌一览"),
-			suiteDebugCardBoxSubtitle(options, len(cards), len(owned)),
+			suiteDebugCardBoxSubtitle(options, len(cards), len(owned), page, totalPages),
 			runtime.Region,
 			"",
 			profile.BaseProfile,
 			profile.UserGamedata,
-			cards,
+			pagedCards,
 			owned,
 			suiteDebugCardBoxDeckSet(profile),
 			runtime.Store,
 			runtime.Assets,
 			renderer.SuiteCardBoxOptions{ShowID: options.ShowID, OwnedOnly: options.OwnedOnly, UseBeforeTraining: options.UseBeforeTraining, ShowCreatedAt: options.ShowCreatedAt, SortBy: options.SortBy},
 		)
+		payload.Page = page
+		payload.TotalPages = totalPages
+		payload.PageSize = suiteDebugCardBoxPageSize
+		payload.TotalAll = len(cards)
 		selected := suiteDebugSelected(def, runtime, profile.UserGamedata, "suite_card_box")
 		rows := []EntityResult{{ID: payload.OwnedTotal, Title: "卡牌一览", Subtitle: payload.Subtitle, Type: "suite_card_box"}}
 		return payload, selected, rows, nil
@@ -534,6 +539,8 @@ type suiteDebugCardBoxProfile struct {
 	UserCards    []suite.UserCard   `json:"userCards"`
 }
 
+const suiteDebugCardBoxPageSize = 100
+
 type suiteDebugCardBoxOptions struct {
 	ShowID            bool
 	OwnedOnly         bool
@@ -541,6 +548,7 @@ type suiteDebugCardBoxOptions struct {
 	ShowCreatedAt     bool
 	SortBy            string
 	FilterText        string
+	Page              int
 }
 
 func (p suiteDebugCommonProfile) commonSuiteProfile() renderer.SuiteCommonProfile {
@@ -3095,11 +3103,96 @@ func suiteDebugParseCardBoxOptions(raw string) suiteDebugCardBoxOptions {
 		case "sl", "skill", "skilllevel", "技能等级", "技能等级排序":
 			options.SortBy = "sl"
 		default:
+			if page, ok := suiteDebugParseCardBoxPageToken(lower); ok {
+				options.Page = page
+				continue
+			}
 			remaining = append(remaining, token)
 		}
 	}
 	options.FilterText = strings.TrimSpace(strings.Join(remaining, " "))
 	return options
+}
+
+func suiteDebugParseCardBoxPageToken(token string) (int, bool) {
+	if token == "" {
+		return 0, false
+	}
+	switch {
+	case strings.HasPrefix(token, "@"):
+		return suiteDebugParsePositivePage(strings.TrimPrefix(token, "@"))
+	case strings.HasPrefix(token, "p"):
+		return suiteDebugParsePositivePage(strings.TrimPrefix(token, "p"))
+	case strings.HasSuffix(token, "页"):
+		return suiteDebugParsePositivePage(strings.TrimSuffix(token, "页"))
+	}
+	return 0, false
+}
+
+func suiteDebugParsePositivePage(value string) (int, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	n := 0
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+		n = n*10 + int(r-'0')
+		if n > 100000 {
+			return 0, false
+		}
+	}
+	if n <= 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+func suiteDebugPaginateCardBox(cards []masterdata.CardInfo, options suiteDebugCardBoxOptions, owned map[int]suite.UserCard) ([]masterdata.CardInfo, int, int) {
+	filtered := cards
+	if options.OwnedOnly {
+		filtered = make([]masterdata.CardInfo, 0, len(cards))
+		for _, card := range cards {
+			if _, ok := owned[card.ID]; ok {
+				filtered = append(filtered, card)
+			}
+		}
+	}
+	total := len(filtered)
+	totalPages := 1
+	if total > 0 {
+		totalPages = (total + suiteDebugCardBoxPageSize - 1) / suiteDebugCardBoxPageSize
+	}
+	page := options.Page
+	if page <= 0 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	start := (page - 1) * suiteDebugCardBoxPageSize
+	if start < 0 {
+		start = 0
+	}
+	if start > total {
+		start = total
+	}
+	end := start + suiteDebugCardBoxPageSize
+	if end > total {
+		end = total
+	}
+	if options.OwnedOnly {
+		return filtered[start:end], page, totalPages
+	}
+	if start > len(cards) {
+		start = len(cards)
+	}
+	if end > len(cards) {
+		end = len(cards)
+	}
+	return cards[start:end], page, totalPages
 }
 
 func suiteDebugCardBoxCards(store *masterdata.Store, options suiteDebugCardBoxOptions) ([]masterdata.CardInfo, string) {
@@ -3142,7 +3235,7 @@ func suiteDebugCardBoxDeckSet(profile suiteDebugCardBoxProfile) map[int]struct{}
 	return out
 }
 
-func suiteDebugCardBoxSubtitle(options suiteDebugCardBoxOptions, total int, owned int) string {
+func suiteDebugCardBoxSubtitle(options suiteDebugCardBoxOptions, total int, owned int, page int, totalPages int) string {
 	parts := []string{fmt.Sprintf("筛选 %d 张", total), fmt.Sprintf("已持有 %d 张", owned)}
 	if options.FilterText != "" {
 		parts = append(parts, "条件: "+options.FilterText)
@@ -3152,6 +3245,9 @@ func suiteDebugCardBoxSubtitle(options suiteDebugCardBoxOptions, total int, owne
 	}
 	if options.SortBy != "" {
 		parts = append(parts, "排序: "+options.SortBy)
+	}
+	if totalPages > 1 {
+		parts = append(parts, fmt.Sprintf("第 %d/%d 页", page, totalPages))
 	}
 	return strings.Join(parts, " · ")
 }

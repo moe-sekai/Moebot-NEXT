@@ -375,7 +375,9 @@ func extractCardPage(text string, query *Query) string {
 	for _, field := range strings.Fields(text) {
 		lower := normalizeCardText(field)
 		page := 0
-		if strings.HasPrefix(lower, "p") {
+		if strings.HasPrefix(lower, "@") {
+			page = parsePositiveInt(strings.TrimPrefix(lower, "@"))
+		} else if strings.HasPrefix(lower, "p") {
 			page = parsePositiveInt(strings.TrimPrefix(lower, "p"))
 		} else if strings.HasSuffix(lower, "页") {
 			page = parsePositiveInt(strings.TrimSuffix(lower, "页"))
@@ -759,7 +761,7 @@ func normalizeCardRune(r rune) (rune, bool) {
 	return unicode.ToLower(r), true
 }
 
-const listPageSize = 12
+const listPageSize = 100
 
 func parsePositiveInt(value string) int {
 	id, err := strconv.Atoi(strings.TrimSpace(value))

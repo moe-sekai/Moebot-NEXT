@@ -66,6 +66,11 @@ export function SekaiCardThumbnail({
   const supplyBadge = supplyType ? getSupplyBadgeStyle(supplyType) : undefined
   const baseImageUrl = compositeImageUrl ?? imageUrl ?? placeholderCardImage(characterName ?? 'CARD', attrColor)
   const useComposite = Boolean(compositeImageUrl || compositeLayers?.length)
+  // Composite layers are pre-rendered at a fixed size (encoded in the rect's width).
+  // When the requested render size differs from that, scale every layer dimension
+  // accordingly so the canvas always fills the container without leaving blank space.
+  const layerBaseSize = compositeLayers?.find((l) => l.type === 'rect')?.width
+  const layerScale = layerBaseSize && layerBaseSize > 0 ? size / layerBaseSize : 1
 
   return (
     <div
@@ -89,9 +94,9 @@ export function SekaiCardThumbnail({
                 position: 'absolute',
                 left: 0,
                 top: 0,
-                width: layer.width,
-                height: layer.height,
-                borderRadius: layer.rx,
+                width: layer.width * layerScale,
+                height: layer.height * layerScale,
+                borderRadius: (layer.rx ?? 0) * layerScale,
                 backgroundColor: layer.fill ?? 'transparent',
               }}
             />
@@ -99,14 +104,14 @@ export function SekaiCardThumbnail({
             <img
               key={index}
               src={layer.href}
-              width={layer.width}
-              height={layer.height}
+              width={layer.width * layerScale}
+              height={layer.height * layerScale}
               style={{
                 position: 'absolute',
-                left: layer.x,
-                top: layer.y,
-                width: layer.width,
-                height: layer.height,
+                left: layer.x * layerScale,
+                top: layer.y * layerScale,
+                width: layer.width * layerScale,
+                height: layer.height * layerScale,
                 objectFit: preserveAspectRatioToObjectFit(layer.preserveAspectRatio),
               }}
             />

@@ -259,6 +259,10 @@ type SuiteCardBoxPayload struct {
 	Options     SuiteCardBoxOptions     `json:"options"`
 	Total       int                     `json:"total,omitempty"`
 	OwnedTotal  int                     `json:"ownedTotal,omitempty"`
+	Page        int                     `json:"page,omitempty"`
+	TotalPages  int                     `json:"totalPages,omitempty"`
+	PageSize    int                     `json:"pageSize,omitempty"`
+	TotalAll    int                     `json:"totalAll,omitempty"`
 	AssetSource string                  `json:"assetSource,omitempty"`
 }
 
