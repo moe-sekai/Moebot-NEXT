@@ -12,11 +12,8 @@ services:
     environment:
       TZ: Asia/Shanghai
     volumes:
-      # 持久化数据库 / 缓存 / 下载的 master 数据
+      # 持久化数据库 / 缓存 / 下载的 master 数据 / 配置文件
       - ./data:/app/data
-      # 用户自定义配置:首次使用前请先 `make docker-init`(或手动 `cp config.example.yml config.yml`)
-      # 否则 Docker 会把不存在的 config.yml 当作目录创建,导致启动失败
-      - ./config.yml:/app/config.yml
       # 静态资源(可选,需要替换/扩展时再挂载)
       # - ./assets:/app/assets
     healthcheck:

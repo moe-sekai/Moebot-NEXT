@@ -35,7 +35,7 @@ var webUI embed.FS
 func main() {
 	cfgPath := os.Getenv("MOEBOT_CONFIG")
 	if cfgPath == "" {
-		cfgPath = "config.yml"
+		cfgPath = "data/config.yml"
 	}
 
 	cfg, err := config.Load(cfgPath)

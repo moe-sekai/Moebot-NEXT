@@ -65,7 +65,7 @@ ENV TZ=Asia/Shanghai
 # Go 二进制
 COPY --from=go-builder /out/moebot /app/moebot
 
-# 默认配置(entrypoint 会在首次运行时复制为 config.yml)
+# 默认配置(entrypoint 会在首次运行时复制为 data/config.yml)
 COPY config.example.yml /app/config.example.yml
 
 # 渲染器(包含 node_modules + 源码 + 字体等资源)

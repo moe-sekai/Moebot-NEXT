@@ -1,0 +1,52 @@
+# Docker 部署说明
+
+## 需要持久化的目录
+
+在 Docker 环境运行 Moebot-NEXT 时，只需要持久化一个目录：
+
+### 必须持久化
+
+1. **`/app/data`** - 数据目录
+   - 包含配置文件（`data/config.yml`）
+   - 包含数据库文件（如 `moebot.db`、`moebot-validation.db`）
+   - 包含 master 数据（`data/master`）
+   - 包含缓存数据（`data/cache`）
+   - 挂载方式：`./data:/app/data`
+
+### 可选持久化
+
+3. **`/app/assets`** - 静态资源
+   - 角色立绘、卡框、图标、字体等
+   - 仅在需要替换或扩展资源时挂载
+   - 挂载方式：`./assets:/app/assets`
+
+## 使用 docker-compose
+
+项目已提供 `docker-compose.yml`，直接运行即可：
+
+```bash
+# 启动服务（首次启动会自动从 config.example.yml 创建配置）
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+```
+
+## 目录结构
+
+```
+Moebot-NEXT-Go/
+└── data/              # 持久化数据目录（必须）
+    ├── config.yml     # 配置文件
+    ├── moebot.db
+    ├── moebot-validation.db
+    ├── master/
+    └── cache/
+```
+
+## 注意事项
+
+- 首次启动时，entrypoint 脚本会自动从 `config.example.yml` 复制配置到 `data/config.yml`
+- 如需修改配置，直接编辑 `data/config.yml` 文件
+- 数据目录 `/app/data` 已在 Dockerfile 中通过 `VOLUME` 声明
+- 建议定期备份 `data` 目录
