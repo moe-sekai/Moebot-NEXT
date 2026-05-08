@@ -22,6 +22,7 @@ type Deps struct {
 	Renderer   *renderer.Client
 	Servers    *servers.Manager
 	Store      *masterdata.Store
+	Loader     *masterdata.Loader
 	B30        *b30.Client
 	// SaveConfig persists s.Config back to disk after a mutation. Provided by
 	// the caller so we don't reinvent a `config.Save` wrapper here.

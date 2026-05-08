@@ -108,15 +108,22 @@ webroutes.RegisterRendererCache(api, deps)
 - `/api/renderer/cache/card-thumbnails*`
 - `/api/search/{cards,musics,events,gachas,virtual-lives}`
 - `/api/config/sekai/test-system`
-
-仍在 `internal/web/handlers.go`（深度耦合 `Server` 私有 helpers
-`publicConfigMap` / `masterdataSummaryMap`，迁出会牵动一千多行重写，作为
-独立 PR 继续推进）：
-
-- `/api/dashboard`、`/api/status`
 - `/api/masterdata/{summary,reload}`
-- `/api/config/public`（含 `publicConfigMap` 和 `publicServerProfilesMap`）
-- `/api/renderer/previews*`
+
+仍留在 `internal/web/handlers.go` 的路由（含设计动机，**不应**机械搬迁）：
+
+- `/api/dashboard`、`/api/status`、`/api/renderer/health`、
+  `/api/renderer/previews*` —— 核心运维 / 渲染服务关注点，不属于 PJSK 业务
+- `/api/config/public`（GET + PUT）—— **混合**核心字段（`server.region`、
+  `bot.*`、`renderer.*`）与 PJSK 字段（`masterdata` / `assets` /
+  `sekai_api` / `suite_api` / `ranking_api` / `b30` / `game_servers`）；
+  整体搬迁会让 moesekai 路由越权修改核心配置。后续应改为"插件向核心注册
+  配置 schema 片段 + apply 钩子"，让核心 `publicConfig` 自动聚合每个插件
+  贡献的字段（设计待定）
+
+`internal/web.Server` 仍持有 `Servers / Store / Loader / B30` 字段，是
+为了让上述未迁的 status / publicConfig handlers 能直接读取 PJSK 状态。
+当 publicConfig 完成 schema 注入式重构后，这些字段可一并撤掉。
 
 ## 兼容旧 config.yml
 

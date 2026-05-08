@@ -116,6 +116,7 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 			Renderer:   rendererClient,
 			Servers:    serverManager,
 			Store:      webServer.Store,
+			Loader:     webServer.Loader,
 			B30:        b30Client,
 			SaveConfig: func() error { return config.Save(cfg, ctx.CoreConfigPath) },
 		}
@@ -124,6 +125,7 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 		webroutes.RegisterRendererCache(api, deps)
 		webroutes.RegisterSearch(api, deps)
 		webroutes.RegisterSekaiTest(api, deps)
+		webroutes.RegisterMasterdata(api, deps)
 	}
 	return nil
 }

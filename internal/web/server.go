@@ -88,7 +88,7 @@ func (s *Server) registerRoutes() {
 	// Health and runtime status
 	api.Get("/health", s.handleHealth)
 	api.Get("/status", s.handleStatus)
-	api.Get("/masterdata/summary", s.handleMasterdataSummary)
+	// /api/masterdata/summary is registered by the moesekai plugin.
 	api.Get("/renderer/health", s.handleRendererHealth)
 	api.Get("/renderer/previews", s.handleRendererPreviews)
 	api.Get("/renderer/previews/:id/image", s.handleRendererPreviewImage)
@@ -98,8 +98,8 @@ func (s *Server) registerRoutes() {
 	// (internal/plugins/moesekai/webroutes/) at plugin Init time.
 	api.Get("/config/public", s.handlePublicConfig)
 	api.Put("/config/public", s.handleUpdatePublicConfig)
-	// /api/config/sekai/test-system is registered by the moesekai plugin.
-	api.Post("/masterdata/reload", s.handleReloadMasterdata)
+	// /api/config/sekai/test-system and /api/masterdata/reload are registered
+	// by the moesekai plugin.
 
 	// Dashboard
 	api.Get("/dashboard", s.handleDashboard)

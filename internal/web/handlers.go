@@ -111,22 +111,6 @@ func (s *Server) handleStatus(c *fiber.Ctx) error {
 	})
 }
 
-// handleMasterdataSummary returns loaded masterdata counts.
-func (s *Server) handleMasterdataSummary(c *fiber.Ctx) error {
-	store := s.defaultStore()
-	loaded := store != nil && store.IsLoaded()
-	loadedAt := time.Time{}
-	if store != nil {
-		loadedAt = store.LoadedAt()
-	}
-
-	return c.JSON(fiber.Map{
-		"loaded":    loaded,
-		"loaded_at": nullableTime(loadedAt),
-		"counts":    s.masterdataSummaryMap(),
-	})
-}
-
 // handleRendererHealth returns renderer reachability and public renderer info.
 func (s *Server) handleRendererHealth(c *fiber.Ctx) error {
 	ok, statusCode, err, latency := s.checkRenderer()
@@ -311,7 +295,6 @@ type suiteAPISettingsRequest struct {
 type rankingAPISettingsRequest struct {
 	Timeout int `json:"timeout"`
 }
-
 
 // handleUpdatePublicConfig saves the editable non-sensitive settings.
 func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
@@ -671,39 +654,6 @@ func applyRankingAPISettings(target *config.RankingAPIConfig, req *rankingAPISet
 	if req.Timeout > 0 {
 		target.Timeout = req.Timeout
 	}
-}
-
-// handleReloadMasterdata forces a full reload from the currently configured source.
-func (s *Server) handleReloadMasterdata(c *fiber.Ctx) error {
-	region := config.NormalizeRegion(c.Query("region"))
-	started := time.Now()
-	if s.Servers != nil {
-		runtime, err := s.Servers.Reload(region)
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadGateway, err.Error())
-		}
-		return c.JSON(fiber.Map{
-			"ok":          true,
-			"message":     fmt.Sprintf("%s Masterdata 已重新加载", runtime.Label),
-			"region":      runtime.Region,
-			"duration_ms": time.Since(started).Milliseconds(),
-			"loaded_at":   nullableTime(runtime.Store.LoadedAt()),
-			"counts":      s.masterdataSummaryMapForStore(runtime.Store),
-		})
-	}
-	if s.Loader == nil {
-		return fiber.NewError(fiber.StatusServiceUnavailable, "Masterdata loader is not configured")
-	}
-	if err := s.Loader.LoadAll(); err != nil {
-		return fiber.NewError(fiber.StatusBadGateway, err.Error())
-	}
-	return c.JSON(fiber.Map{
-		"ok":          true,
-		"message":     "Masterdata 已重新加载",
-		"duration_ms": time.Since(started).Milliseconds(),
-		"loaded_at":   nullableTime(s.defaultStore().LoadedAt()),
-		"counts":      s.masterdataSummaryMap(),
-	})
 }
 
 func (s *Server) publicConfigMap() fiber.Map {
