@@ -15,6 +15,7 @@ import (
 	"moebot-next/internal/commands"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
+	"moebot-next/internal/logbuffer"
 	"moebot-next/internal/renderer"
 	"moebot-next/internal/servers"
 	"moebot-next/internal/web"
@@ -36,7 +37,7 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load config")
 	}
-	setupLogger(cfg.Log)
+	logBuffer := setupLogger(cfg.Log)
 
 	if err := ensureRuntimeDirs(cfg); err != nil {
 		log.Fatal().Err(err).Msg("Failed to create runtime directories")
@@ -76,6 +77,7 @@ func main() {
 
 	webServer := web.New(cfg, db, serverManager.Default().Store, rendererClient, cfgPath, serverManager.Default().Loader)
 	webServer.Servers = serverManager
+	webServer.Logs = logBuffer
 	webServer.SetupStaticFiles(webUI)
 	go func() {
 		if err := webServer.Start(); err != nil {
@@ -91,16 +93,25 @@ func main() {
 	log.Info().Msg("Moebot NEXT shutting down")
 }
 
-func setupLogger(cfg config.LogConfig) {
+func setupLogger(cfg config.LogConfig) *logbuffer.Buffer {
 	level, err := zerolog.ParseLevel(cfg.Level)
 	if err != nil {
 		level = zerolog.InfoLevel
 	}
 	zerolog.SetGlobalLevel(level)
 
-	if cfg.Format != "json" {
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime})
+	buf := logbuffer.New(cfg.Buffer)
+
+	var stdoutWriter zerolog.LevelWriter
+	if cfg.Format == "json" {
+		stdoutWriter = zerolog.MultiLevelWriter(os.Stdout)
+	} else {
+		stdoutWriter = zerolog.MultiLevelWriter(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime})
 	}
+
+	multi := zerolog.MultiLevelWriter(stdoutWriter, buf)
+	log.Logger = zerolog.New(multi).With().Timestamp().Logger()
+	return buf
 }
 
 func ensureRuntimeDirs(cfg *config.Config) error {

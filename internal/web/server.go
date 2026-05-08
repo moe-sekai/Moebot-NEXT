@@ -9,6 +9,7 @@ import (
 	"moebot-next/internal/b30"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
+	"moebot-next/internal/logbuffer"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/renderer"
 	"moebot-next/internal/servers"
@@ -31,6 +32,7 @@ type Server struct {
 	Servers    *servers.Manager
 	Renderer   *renderer.Client
 	B30        *b30.Client
+	Logs       *logbuffer.Buffer
 	startedAt  time.Time
 }
 
@@ -117,6 +119,9 @@ func (s *Server) registerRoutes() {
 
 	// Stats
 	api.Get("/stats/commands", s.handleCommandStats)
+
+	// Logs
+	api.Get("/logs", s.handleListLogs)
 
 	// Masterdata search
 	api.Get("/search/cards", s.handleSearchCards)

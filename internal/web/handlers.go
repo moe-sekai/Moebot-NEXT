@@ -1059,7 +1059,7 @@ func (s *Server) handleDeleteUser(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "deleted"})
 }
 
-// handleCommandStats returns command usage statistics.
+// handleCommandStats returns command usage statistics for a sliding window.
 func (s *Server) handleCommandStats(c *fiber.Ctx) error {
 	days, _ := strconv.Atoi(c.Query("days", "7"))
 	if days <= 0 {
@@ -1074,10 +1074,26 @@ func (s *Server) handleCommandStats(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats")
 	}
+	totals, err := s.DB.GetCommandStatsTotals(since)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats totals")
+	}
+	trend, err := s.DB.GetCommandStatsTrend(since)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats trend")
+	}
+	byPlatform, err := s.DB.GetCommandStatsByPlatform(since)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats by platform")
+	}
 
 	return c.JSON(fiber.Map{
-		"data":  stats,
-		"since": since,
+		"data":        stats,
+		"since":       since,
+		"days":        days,
+		"totals":      totals,
+		"trend":       trend,
+		"by_platform": byPlatform,
 	})
 }
 

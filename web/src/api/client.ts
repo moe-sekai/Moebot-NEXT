@@ -10,6 +10,8 @@ import type {
 	DashboardData,
 	GroupRow,
 	HealthResponse,
+	LogsQuery,
+	LogsResponse,
 	ConfigUpdateResponse,
 	MasterdataReloadResponse,
 	MasterdataSummary,
@@ -249,6 +251,18 @@ export async function getCommandStats(days = 7) {
 	const { data } = await api.get<CommandStatsResponse>("/stats/commands", {
 		params: { days },
 	});
+	return data;
+}
+
+export async function getLogs(query: LogsQuery = {}) {
+	const params: Record<string, string | number> = {};
+	if (query.levels && query.levels.length > 0) {
+		params.level = query.levels.join(",");
+	}
+	if (query.q) params.q = query.q;
+	if (query.limit) params.limit = query.limit;
+	if (query.sinceSeq && query.sinceSeq > 0) params.since_seq = query.sinceSeq;
+	const { data } = await api.get<LogsResponse>("/logs", { params });
 	return data;
 }
 

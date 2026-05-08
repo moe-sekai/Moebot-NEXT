@@ -571,7 +571,56 @@ export interface CommandStatRow {
 	avg_ms: number;
 }
 
+export interface CommandStatsTotals {
+	calls: number;
+	users: number;
+	groups: number;
+	avg_ms: number;
+}
+
+export interface CommandStatsTrendPoint {
+	date: string;
+	count: number;
+	avg_ms: number;
+}
+
+export interface CommandStatsPlatformPoint {
+	platform: string;
+	count: number;
+}
+
 export interface CommandStatsResponse {
 	data: CommandStatRow[];
 	since: string;
+	days: number;
+	totals: CommandStatsTotals;
+	trend: CommandStatsTrendPoint[];
+	by_platform: CommandStatsPlatformPoint[];
+}
+
+export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+export interface LogEntry {
+	seq: number;
+	time: string;
+	level: string;
+	message: string;
+	fields?: Record<string, unknown>;
+}
+
+export interface LogsResponse {
+	data: LogEntry[];
+	total: number;
+	dropped: number;
+	next_seq: number;
+	capacity: number;
+	available: boolean;
+	message?: string;
+}
+
+export interface LogsQuery {
+	levels?: string[];
+	q?: string;
+	limit?: number;
+	sinceSeq?: number;
 }

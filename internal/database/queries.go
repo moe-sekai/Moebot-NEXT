@@ -132,6 +132,61 @@ func (d *DB) GetCommandStats(since time.Time) ([]CommandStatsSummary, error) {
 	return results, err
 }
 
+// CommandStatsTrendPoint is one data point in the daily trend.
+type CommandStatsTrendPoint struct {
+	Date  string  `json:"date"`
+	Count int64   `json:"count"`
+	AvgMs float64 `json:"avg_ms"`
+}
+
+// GetCommandStatsTrend returns daily call counts since a cutoff time.
+func (d *DB) GetCommandStatsTrend(since time.Time) ([]CommandStatsTrendPoint, error) {
+	var results []CommandStatsTrendPoint
+	err := d.Model(&models.CommandStat{}).
+		Select("strftime('%Y-%m-%d', created_at) as date, COUNT(*) as count, AVG(response_ms) as avg_ms").
+		Where("created_at > ?", since).
+		Group("date").
+		Order("date ASC").
+		Find(&results).Error
+	return results, err
+}
+
+// CommandStatsTotals summarises usage during a window.
+type CommandStatsTotals struct {
+	Calls          int64   `json:"calls"`
+	DistinctUsers  int64   `json:"users"`
+	DistinctGroups int64   `json:"groups"`
+	AvgMs          float64 `json:"avg_ms"`
+}
+
+// GetCommandStatsTotals returns aggregate counters for the time window.
+func (d *DB) GetCommandStatsTotals(since time.Time) (CommandStatsTotals, error) {
+	var totals CommandStatsTotals
+	err := d.Model(&models.CommandStat{}).
+		Select("COUNT(*) as calls, COUNT(DISTINCT user_id) as distinct_users, COUNT(DISTINCT group_id) as distinct_groups, COALESCE(AVG(response_ms), 0) as avg_ms").
+		Where("created_at > ?", since).
+		Scan(&totals).Error
+	return totals, err
+}
+
+// CommandStatsPlatformPoint counts calls per platform.
+type CommandStatsPlatformPoint struct {
+	Platform string `json:"platform"`
+	Count    int64  `json:"count"`
+}
+
+// GetCommandStatsByPlatform returns per-platform call counts since a cutoff.
+func (d *DB) GetCommandStatsByPlatform(since time.Time) ([]CommandStatsPlatformPoint, error) {
+	var results []CommandStatsPlatformPoint
+	err := d.Model(&models.CommandStat{}).
+		Select("COALESCE(NULLIF(platform, ''), 'unknown') as platform, COUNT(*) as count").
+		Where("created_at > ?", since).
+		Group("platform").
+		Order("count DESC").
+		Find(&results).Error
+	return results, err
+}
+
 // ListRecentCommands returns the latest command invocation records.
 func (d *DB) ListRecentCommands(limit int) ([]models.CommandStat, error) {
 	if limit <= 0 {

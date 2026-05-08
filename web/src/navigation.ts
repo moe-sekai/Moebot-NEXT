@@ -79,7 +79,7 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
   },
   logs: {
     title: '日志',
-    subtitle: '当前以最近命令记录作为轻量日志视图。',
+    subtitle: '查看运行时日志缓冲并按等级或关键字过滤。',
     eyebrow: 'Logs',
   },
   about: {

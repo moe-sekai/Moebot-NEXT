@@ -173,6 +173,7 @@ type AssetsConfig struct {
 type LogConfig struct {
 	Level  string `yaml:"level"`  // "debug", "info", "warn", "error"
 	Format string `yaml:"format"` // "console" or "json"
+	Buffer int    `yaml:"buffer"` // in-memory ring buffer capacity (entries)
 }
 
 // DefaultConfig returns a Config with sensible defaults.
