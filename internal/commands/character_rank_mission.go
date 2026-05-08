@@ -14,7 +14,6 @@ import (
 
 	zero "github.com/wdvxdr1123/ZeroBot"
 	"github.com/wdvxdr1123/ZeroBot/message"
-	"gorm.io/gorm"
 )
 
 type characterRankMissionProfile struct {
@@ -79,30 +78,18 @@ func RegisterCharacterRankMission(deps *Deps) {
 		forcedRegion := cmd.Region
 		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
-			runtime, user := runtimeForCommand(deps, ctx, forcedRegion)
-			if runtime == nil || !runtime.Enabled || runtime.Store == nil {
-				ctx.SendChain(message.Text(runtimeUnavailableText(runtime)))
+			runtime, inferredUser, ok := requireRuntimeWithStore(deps, ctx, forcedRegion)
+			if !ok {
 				return
 			}
-			if forcedRegion != "" {
-				var err error
-				user, err = deps.DB.GetUserByPlatformRegion("onebot", userIDFromCtx(ctx), runtime.Region)
-				if err != nil && err != gorm.ErrRecordNotFound {
-					ctx.SendChain(message.Text("数据库错误，请稍后重试"))
-					return
-				}
-			}
-			if user == nil || user.GameID == "" {
-				ctx.SendChain(message.Text(fmt.Sprintf("你还没有绑定%s游戏账号~\n使用 /%s绑定 [游戏ID] 来绑定", runtime.Label, runtime.Region)))
+			user, ok := requireBoundUser(deps, ctx, runtime, forcedRegion, inferredUser)
+			if !ok {
 				return
 			}
-			if runtime.Suite == nil || !runtime.Suite.Enabled() {
-				ctx.SendChain(message.Text(fmt.Sprintf("暂不支持查询%s的抓包数据", runtime.Label)))
+			if !requireSuite(ctx, runtime, "CR任务") {
 				return
 			}
-			setting := suiteSettingOrDefault(deps, userIDFromCtx(ctx), runtime.Region)
-			if setting.Hidden {
-				ctx.SendChain(message.Text(fmt.Sprintf("你已隐藏%s抓包信息，发送 /%s展示抓包 可重新展示", runtime.Label, runtime.Region)))
+			if _, ok := requireSuiteVisible(deps, ctx, runtime); !ok {
 				return
 			}
 			options, err := parseCharacterRankMissionArgs(commandArgs(ctx))
@@ -111,8 +98,7 @@ func RegisterCharacterRankMission(deps *Deps) {
 				return
 			}
 			var profile characterRankMissionProfile
-			if err := runtime.Suite.GetUserData(user.GameID, "", characterRankMissionFields(), &profile); err != nil {
-				ctx.SendChain(message.Text(fmt.Sprintf("获取你的%s Haruki Suite 公开数据失败\n%s", runtime.Label, err.Error())))
+			if !fetchSuiteUserData(ctx, runtime, user.GameID, "CR任务", characterRankMissionFields(), &profile) {
 				return
 			}
 			payload, fallback, err := buildCharacterRankMissionPayload(runtime.Region, profile, runtime.Store, runtime.Assets, options)

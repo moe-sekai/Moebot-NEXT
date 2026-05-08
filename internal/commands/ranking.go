@@ -197,7 +197,7 @@ func registerForecastCommands(deps *Deps) {
 			}
 			event, board, err := fetchForecast(runtime.Ranking, commandArgs(ctx))
 			if err != nil {
-				ctx.SendChain(message.Text("榜线预测获取失败：" + err.Error()))
+				ctx.SendChain(message.Text(rankingErrorText(err, false, "榜线预测")))
 				return
 			}
 			payload := renderer.BuildForecastRankingPayload(*board, event.Name, runtime.Region, regionLabel(runtime.Region))

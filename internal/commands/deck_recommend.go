@@ -24,7 +24,6 @@ import (
 
 	zero "github.com/wdvxdr1123/ZeroBot"
 	"github.com/wdvxdr1123/ZeroBot/message"
-	"gorm.io/gorm"
 )
 
 const musicMetaURL = "https://moe.exmeaning.com/data/music_meta/music_metas.json"
@@ -138,29 +137,19 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 		}
 		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
-			runtime, user := runtimeForCommand(deps, ctx, forcedRegion)
-			if runtime == nil || !runtime.Enabled {
-				ctx.SendChain(message.Text(runtimeUnavailableText(runtime)))
+			runtime, inferredUser, ok := requireRuntime(deps, ctx, forcedRegion)
+			if !ok {
 				return
 			}
-			if forcedRegion != "" {
-				var err error
-				user, err = deps.DB.GetUserByPlatformRegion("onebot", userIDFromCtx(ctx), runtime.Region)
-				if err != nil && err != gorm.ErrRecordNotFound {
-					ctx.SendChain(message.Text("数据库错误，请稍后重试"))
-					return
-				}
-			}
-			if user == nil || user.GameID == "" {
-				ctx.SendChain(message.Text(fmt.Sprintf("你还没有绑定%s游戏账号~\n使用 /%s绑定 [游戏ID] 来绑定", runtime.Label, runtime.Region)))
+			user, ok := requireBoundUser(deps, ctx, runtime, forcedRegion, inferredUser)
+			if !ok {
 				return
 			}
-			if runtime.Suite == nil || !runtime.Suite.Enabled() {
-				ctx.SendChain(message.Text("Suite API 未启用，无法读取卡牌数据进行组卡"))
+			if !requireSuite(ctx, runtime, "组卡") {
 				return
 			}
 			if deps.Renderer == nil || !deps.Renderer.Health() {
-				ctx.SendChain(message.Text("渲染/计算服务暂不可用，请稍后再试"))
+				ctx.SendChain(message.Text("组卡/渲染服务暂不可用，请稍后再试"))
 				return
 			}
 
@@ -173,7 +162,7 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 
 			var userData map[string]any
 			if err := loadDeckRecommendUserData(runtime.Suite, user.GameID, &userData); err != nil {
-				ctx.SendChain(message.Text(fmt.Sprintf("读取 Suite 数据失败：%v", err)))
+				ctx.SendChain(message.Text(friendlySuiteError(runtime, "组卡", err)))
 				return
 			}
 			masterMap, warnings := buildDeckRecommendMasterData(runtime)
