@@ -144,6 +144,7 @@ func (s *Server) registerRoutes() {
 
 	// Plugins
 	api.Get("/plugins", s.handleListPlugins)
+	api.Get("/plugins/market", s.handleListMarketPlugins)
 	api.Post("/plugins/:name/enable", s.handleSetPluginEnabled(true))
 	api.Post("/plugins/:name/disable", s.handleSetPluginEnabled(false))
 	api.Get("/plugins/:name/config", s.handleGetPluginConfig)

@@ -468,6 +468,31 @@ export interface PluginSettingsResponse {
 	configurable: boolean;
 }
 
+export interface MarketPluginEntry {
+	name: string;
+	path: string;
+	html_url: string;
+	import_path: string;
+	loaded: boolean;
+	enabled: boolean;
+}
+
+export interface MarketPluginListResponse {
+	source: string;
+	repo: string;
+	branch: string;
+	fetched_at: string;
+	items: MarketPluginEntry[];
+}
+
+export async function listMarketPlugins(refresh = false): Promise<MarketPluginListResponse> {
+	const { data } = await api.get<MarketPluginListResponse>("/plugins/market", {
+		params: refresh ? { refresh: 1 } : undefined,
+		timeout: 30_000,
+	});
+	return data;
+}
+
 export async function listPlugins(): Promise<PluginListItem[]> {
 	const { data } = await api.get<{ plugins: PluginListItem[] }>("/plugins");
 	return data.plugins ?? [];
