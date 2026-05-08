@@ -294,7 +294,7 @@ const CATEGORY_TABS: CategoryTab[] = [
   { key: 'suite', label: 'Suite 数据', icon: 'database', hint: '需绑定账号且 Suite 公开，使用 Haruki Suite 公开 API 拉取真实数据。' },
   { key: 'deck', label: '组卡推荐', icon: 'resources', hint: '基于 Suite 卡组数据，由内置 sekai-calculator 推荐配队。' },
   { key: 'query', label: '查询 / 榜线', icon: 'search', hint: '查卡 / 查曲 / 活动 / 卡池 / 演唱会以及实时榜线、预测、查房、水表。' },
-  { key: 'misc', label: '其它', icon: 'sparkle', hint: '抽卡模拟、帮助菜单等娱乐与系统类指令。' },
+  { key: 'misc', label: '其它', icon: 'sparkle', hint: '帮助菜单等系统类指令。' },
 ]
 
 const route = useRoute()

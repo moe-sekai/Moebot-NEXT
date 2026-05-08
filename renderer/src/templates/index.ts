@@ -18,7 +18,6 @@ export { HelpCard } from "./HelpCard";
 export { GachaInfo } from "./GachaInfo";
 export type { GachaInfoProps } from "./GachaInfo";
 export { GachaList } from "./GachaList";
-export { GachaResult } from "./GachaResult";
 export { VirtualLiveList } from "./VirtualLiveList";
 export { SuitePanel } from "./SuitePanel";
 export type { SuitePanelProps } from "./SuitePanel";

@@ -22,7 +22,6 @@ import { getBondsHonorCharacterUrl, getHonorBgUrl, getHonorFrameUrl, getHonorLev
 import { HelpCard } from "./templates/HelpCard";
 import { GachaInfo } from "./templates/GachaInfo";
 import { GachaList } from "./templates/GachaList";
-import { GachaResult } from "./templates/GachaResult";
 import { VirtualLiveList } from "./templates/VirtualLiveList";
 import { SuitePanel } from "./templates/SuitePanel";
 import { SuiteCardBox } from "./templates/SuiteCardBox";
@@ -190,19 +189,6 @@ const PREVIEW_META: RenderPreviewMeta[] = [
 		status: "ready",
 		width: 800,
 		height: 760,
-	},
-	{
-		id: "gacha-result",
-		name: "抽卡结果图",
-		description:
-			"用于 /抽卡模拟 的十连结果图片，复用 Snowy 卡牌缩略图层级展示属性、稀有度、花后与 NEW 标记。",
-		command: "/抽卡模拟",
-		templatePath: "packages/renderer/src/templates/GachaResult.tsx",
-		viewerSource:
-			"Snowy Viewer: components/cards/CardItem.tsx + SekaiCardThumbnail.tsx",
-		status: "ready",
-		width: 800,
-		height: 650,
 	},
 	{
 		id: "suite-panel",
@@ -722,14 +708,6 @@ function createPreviewElement(id: string) {
 					}}
 				/>
 			);
-		case "gacha-result":
-			return (
-				<GachaResult
-					pullType="multi"
-					assetSource="main-jp"
-					results={createGachaPreviewResults()}
-				/>
-			);
 		case "suite-panel":
 			return (
 				<SuitePanel
@@ -868,7 +846,6 @@ function createPreviewElement(id: string) {
 						{
 							label: "其它",
 							commands: [
-								{ name: "抽卡模拟" },
 								{ name: "帮助" },
 							],
 						},
@@ -1010,76 +987,46 @@ function createDeckPreviewCards() {
 }
 
 function createSuiteCardBoxPreviewCards() {
-	return createGachaPreviewResults().slice(0, 12).map((card, index) => ({
-		...card,
-		id: card.cardId,
-		prefix: index % 2 === 0 ? "闪耀的舞台" : "与你相连的歌声",
-		owned: index % 4 !== 1,
-		level: index % 4 !== 1 ? (card.rarity === "rarity_4" ? 60 : 50) : undefined,
-		mastery: index % 4 !== 1 ? index % 6 : undefined,
-		skillLevel: index % 4 !== 1 ? 1 + (index % 4) : undefined,
-		createdAt: `2026-05-${String(5 - (index % 5)).padStart(2, "0")}`,
-		supplyType: index === 2 ? "CFES限定" : index === 6 ? "期间限定" : undefined,
-		isBirthday: index === 8,
-		characterName: ["初音未来", "初音未来", "镜音铃", "镜音铃", "镜音连", "巡音流歌", "MEIKO", "KAITO", "星乃一歌", "天马咲希", "望月穗波", "日野森志步"][index],
-	}));
-}
-
-function createGachaPreviewResults() {
 	const bundles = [
-		"res001_no003",
-		"res002_no003",
-		"res003_no003",
-		"res004_no003",
-		"res005_no003",
+		"res001_no003", "res001_no003", "res002_no003", "res002_no003",
+		"res003_no003", "res004_no003", "res005_no003", "res005_no003",
+		"res001_no003", "res002_no003", "res003_no003", "res004_no003",
 	];
 	const names = [
-		"一歌",
-		"咲希",
-		"穗波",
-		"志步",
-		"实乃理",
-		"遥",
-		"爱莉",
-		"雫",
-		"心羽",
-		"杏",
+		"初音未来", "初音未来", "镜音铃", "镜音铃", "镜音连", "巡音流歌",
+		"MEIKO", "KAITO", "星乃一歌", "天马咲希", "望月穗波", "日野森志步",
 	];
-	const attrs = ["cute", "cool", "pure", "happy", "mysterious"];
+	const attrs = ["cute", "cute", "happy", "happy", "cool", "pure", "mysterious", "cool", "cute", "happy", "cool", "pure"];
+	const rarities = [
+		"rarity_4", "rarity_4", "rarity_4", "rarity_4", "rarity_4", "rarity_3",
+		"rarity_3", "rarity_3", "rarity_4", "rarity_3", "rarity_4", "rarity_3",
+	];
 
-	return Array.from({ length: 10 }, (_, index) => {
-		const assetbundleName = bundles[index % bundles.length];
-		const rarity =
-			index === 2 || index === 8
-				? "rarity_4"
-				: index % 3 === 0
-					? "rarity_3"
-					: "rarity_2";
+	return Array.from({ length: 12 }, (_, index) => {
+		const rarity = rarities[index];
 		const isTrained = rarity === "rarity_3" || rarity === "rarity_4";
-
 		return {
+			id: 3000 + index,
 			cardId: 3000 + index,
 			characterName: names[index],
 			rarity,
-			attr: attrs[index % attrs.length],
-			isNew: index === 2 || index === 8,
-			assetbundleName,
-			thumbnailUrl: getCardThumbnailUrl(
-				assetbundleName,
-				false,
-				"main-jp",
-				"png",
-			),
-			trainedThumbnailUrl: getCardThumbnailUrl(
-				assetbundleName,
-				true,
-				"main-jp",
-				"png",
-			),
+			attr: attrs[index],
 			isTrained,
+			assetbundleName: bundles[index],
+			thumbnailUrl: getCardThumbnailUrl(bundles[index], false, "main-jp", "png"),
+			trainedThumbnailUrl: getCardThumbnailUrl(bundles[index], true, "main-jp", "png"),
+			prefix: index % 2 === 0 ? "闪耀的舞台" : "与你相连的歌声",
+			owned: index % 4 !== 1,
+			level: index % 4 !== 1 ? (rarity === "rarity_4" ? 60 : 50) : undefined,
+			mastery: index % 4 !== 1 ? index % 6 : undefined,
+			skillLevel: index % 4 !== 1 ? 1 + (index % 4) : undefined,
+			createdAt: `2026-05-${String(5 - (index % 5)).padStart(2, "0")}`,
+			supplyType: index === 2 ? "CFES限定" : index === 6 ? "期间限定" : undefined,
+			isBirthday: index === 8,
 		};
 	});
 }
+
 
 function previewLeaderCard(
 	assetbundleName: string,

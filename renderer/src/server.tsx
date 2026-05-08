@@ -20,7 +20,6 @@ import {
 	EventList,
 	GachaInfo,
 	GachaList,
-	GachaResult,
 	HelpCard,
 	MusicDetail,
 	MusicList,
@@ -657,16 +656,6 @@ async function prepareGachaInfo(data: ReturnType<typeof normalizeGacha>) {
 	return data;
 }
 
-async function prepareGachaResult(data: any) {
-	const payload = data ?? { pullType: "multi", results: [] };
-	await hydrateCardCompositeLayersForCards(payload.results ?? payload.Results ?? [], {
-		assetSource: payload.assetSource ?? payload.AssetSource,
-		sizes: [112],
-		allowDownload: true,
-	});
-	return payload;
-}
-
 async function prepareRankingList(data: ReturnType<typeof normalizeRankingList>) {
 	await hydrateCardCompositeLayersForCards((data.rankings ?? []).map((entry: any) => entry.leaderCard), {
 		assetSource: data.assetSource,
@@ -876,9 +865,6 @@ async function createElement(req: RenderRequest) {
 		case "virtual-lives":
 		case "vlive":
 			return <VirtualLiveList {...normalizeVirtualLiveList(data)} />;
-		case "gacha_result":
-		case "gacha-result":
-			return <GachaResult {...(await prepareGachaResult(data))} />;
 		case "profile_card":
 		case "profile":
 			return <ProfileCard profile={await prepareProfileCard(normalizeProfile(data))} />;

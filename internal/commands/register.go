@@ -32,7 +32,6 @@ func RegisterAll(deps *Deps) {
 	RegisterEvent(deps)
 	RegisterGacha(deps)
 	RegisterVirtualLive(deps)
-	RegisterGachaSimulation(deps)
 	RegisterProfile(deps)
 	RegisterSuite(deps)
 	RegisterBond(deps)
