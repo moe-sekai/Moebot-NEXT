@@ -1,13 +1,13 @@
 <template>
   <main class="page-stack">
-    <PageHeader eyebrow="About" title="关于 Moebot NEXT-Go" subtitle="Project SEKAI 查询与渲染机器人控制台。" />
+    <PageHeader eyebrow="About" title="关于 Moebot NEXT" subtitle="Project SEKAI 查询与渲染机器人控制台。" />
 
     <section class="about-hero ui-card">
       <div class="about-hero__logo">
         <MoebotLogo color="var(--accent-pink)" :height="70" />
       </div>
       <div>
-        <UiBadge variant="secondary">Moebot NEXT-Go</UiBadge>
+        <UiBadge variant="secondary">Moebot NEXT</UiBadge>
         <h2>面向可维护运营的轻量控制台</h2>
         <p>本控制台沿用 Vue / Vite / TypeScript，后端由 Go Fiber 提供 API，Renderer 使用 Bun + Satori + resvg 生成图片。</p>
       </div>

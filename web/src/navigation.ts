@@ -17,8 +17,7 @@ export const consoleNavItems: ConsoleNavItem[] = [
   // 控制台核心
   { path: '/', name: 'dashboard', label: '概览', subtitle: 'Dashboard', icon: 'dashboard', section: 'main' },
   { path: '/status', name: 'status', label: '状态', subtitle: 'Runtime', icon: 'status', section: 'main' },
-  { path: '/settings', name: 'settings', label: '核心设置', subtitle: 'Core Config', icon: 'settings', section: 'main' },
-  { path: '/bot', name: 'bot', label: 'Bot', subtitle: 'OneBot', icon: 'bot', section: 'main' },
+  { path: '/settings', name: 'settings', label: '核心设置', subtitle: 'Core & Bot', icon: 'settings', section: 'main' },
   { path: '/filter', name: 'filter', label: 'Filter', subtitle: 'Gateway', icon: 'filter', section: 'main' },
 
   // 插件框架
@@ -29,8 +28,6 @@ export const consoleNavItems: ConsoleNavItem[] = [
   { path: '/plugins/moesekai', name: 'plugins-moesekai', label: '概览', subtitle: 'Overview', icon: 'sparkle', section: 'moesekai', requiresPlugin: 'moesekai' },
   { path: '/plugins/moesekai/advanced', name: 'plugins-moesekai-advanced', label: '高级配置', subtitle: 'Region/API/Assets', icon: 'settings', section: 'moesekai', requiresPlugin: 'moesekai' },
   { path: '/plugins/moesekai/commands', name: 'plugins-moesekai-commands', label: '指令解析', subtitle: 'Parser', icon: 'command', section: 'moesekai', requiresPlugin: 'moesekai' },
-  { path: '/plugins/moesekai/masterdata', name: 'plugins-moesekai-masterdata', label: 'Masterdata', subtitle: 'Search', icon: 'masterdata', section: 'moesekai', requiresPlugin: 'moesekai' },
-  { path: '/plugins/moesekai/stats', name: 'plugins-moesekai-stats', label: '指令统计', subtitle: 'Stats', icon: 'stats', section: 'moesekai', requiresPlugin: 'moesekai' },
 
   // 通用管理
   { path: '/groups', name: 'groups', label: '群组', subtitle: 'Groups', icon: 'groups', section: 'manage' },
@@ -57,7 +54,7 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
   },
   status: {
     title: '运行状态',
-    subtitle: '检查 Bot、Web、Renderer、Masterdata 与数据库链路。',
+    subtitle: '检查 Bot、Web、Renderer 与数据库链路。',
     eyebrow: 'Runtime Status',
   },
   commands: {
@@ -65,20 +62,10 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     subtitle: '测试聊天指令解析、别名触发与 Satori 渲染预览。',
     eyebrow: 'Command Parser',
   },
-  masterdata: {
-    title: 'Masterdata',
-    subtitle: '确认基础数据加载情况，并执行只读搜索测试。',
-    eyebrow: 'Data Console',
-  },
   settings: {
-    title: '设置',
-    subtitle: '按区服、数据源、资源源与接口功能管理配置。',
-    eyebrow: 'Settings',
-  },
-  bot: {
-    title: 'Bot',
-    subtitle: '查看 OneBot 驱动、命令前缀、昵称与连接说明。',
-    eyebrow: 'OneBot',
+    title: '核心设置',
+    subtitle: '框架核心运行时配置（含 Bot 连接状态）与已加载插件管理。',
+    eyebrow: 'Core & Bot',
   },
   filter: {
     title: 'Filter 网关',
@@ -110,16 +97,6 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     subtitle: '测试 Project Sekai 业务指令的解析、别名触发与渲染预览。',
     eyebrow: 'Plugin · MoeSekai',
   },
-  'plugins-moesekai-masterdata': {
-    title: 'MoeSekai · Masterdata',
-    subtitle: '查看 PJSK Masterdata 加载情况并执行只读搜索测试。',
-    eyebrow: 'Plugin · MoeSekai',
-  },
-  'plugins-moesekai-stats': {
-    title: 'MoeSekai · 指令统计',
-    subtitle: '查看 PJSK 指令调用数量与平均响应时间。',
-    eyebrow: 'Plugin · MoeSekai',
-  },
   groups: {
     title: '群组',
     subtitle: '查看 BOT 群配置与启用状态。',
@@ -130,11 +107,6 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     subtitle: '查看平台用户与 PJSK 游戏账号绑定关系。',
     eyebrow: 'Users',
   },
-  stats: {
-    title: '指令统计',
-    subtitle: '查看最近指令调用数量与平均响应时间。',
-    eyebrow: 'Command Stats',
-  },
   logs: {
     title: '日志',
     subtitle: '查看运行时日志缓冲并按等级或关键字过滤。',
@@ -142,7 +114,7 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
   },
   about: {
     title: '关于',
-    subtitle: '了解 Moebot NEXT-Go、运行时与控制台依赖。',
+    subtitle: '了解 Moebot NEXT、运行时与控制台依赖。',
     eyebrow: 'About',
   },
 }

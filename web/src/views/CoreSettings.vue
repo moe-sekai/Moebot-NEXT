@@ -1,13 +1,36 @@
 <template>
   <main class="page-stack">
     <PageHeader
-      eyebrow="Core Settings"
+      eyebrow="Core & Bot"
       title="核心设置"
-      subtitle="只覆盖框架自身的运行时配置；业务设置由各插件提供其专属设置页。"
-    />
+      subtitle="框架核心运行时配置（含 Bot 连接）与已加载插件管理；业务设置由各插件提供其专属设置页。">
+      <template #actions>
+        <UiButton variant="outline" size="sm" :loading="loadingBot" @click="loadBot">刷新 Bot 状态</UiButton>
+      </template>
+    </PageHeader>
+
+    <UiAlert v-if="botError" variant="destructive" title="Bot 状态加载失败">{{ botError }}</UiAlert>
+
+    <UiCard>
+      <div class="card-heading">
+        <div>
+          <h2>Bot 连接状态</h2>
+          <p>ZeroBot / OneBot v11 反向 WebSocket 配置概览。</p>
+        </div>
+        <UiBadge :variant="status?.bot.ok ? 'success' : 'destructive'">{{ status?.bot.status ?? 'unknown' }}</UiBadge>
+      </div>
+      <dl class="info-list">
+        <div><dt>状态说明</dt><dd>{{ status?.bot.message ?? '-' }}</dd></div>
+        <div><dt>驱动类型</dt><dd>{{ status?.bot.driver_type ?? '-' }}</dd></div>
+        <div><dt>监听地址</dt><dd>{{ status?.bot.listen ?? '-' }}</dd></div>
+        <div><dt>URL 已配置</dt><dd>{{ status?.bot.url_configured ? '是' : '否' }}</dd></div>
+        <div><dt>命令前缀</dt><dd>{{ status?.bot.command_prefix ?? '-' }}</dd></div>
+        <div><dt>昵称</dt><dd>{{ status?.bot.nicknames?.join(' / ') || '-' }}</dd></div>
+      </dl>
+    </UiCard>
 
     <UiAlert variant="info" title="业务配置已下沉到插件">
-      原"区服 / Masterdata / Assets / Sekai API"等设置属于
+      原“区服 / Masterdata / Assets / Sekai API”等设置属于
       <strong>MoeSekai</strong> 插件，已迁移至
       <RouterLink to="/plugins/moesekai">/plugins/moesekai</RouterLink>。
       本页仅保留对所有插件通用的核心运行时配置。
@@ -77,9 +100,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { listPlugins, type PluginListItem } from '../api/client'
+import { getStatus, listPlugins, type PluginListItem } from '../api/client'
+import type { RuntimeStatus } from '../api/types'
 import PageHeader from '../components/PageHeader.vue'
 import UiAlert from '../components/ui/UiAlert.vue'
+import UiBadge from '../components/ui/UiBadge.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import UiCard from '../components/ui/UiCard.vue'
 
@@ -87,7 +112,26 @@ const plugins = ref<PluginListItem[]>([])
 const loading = ref(false)
 const error = ref('')
 
-onMounted(load)
+const status = ref<RuntimeStatus | null>(null)
+const loadingBot = ref(false)
+const botError = ref('')
+
+onMounted(() => {
+  load()
+  loadBot()
+})
+
+async function loadBot() {
+  loadingBot.value = true
+  botError.value = ''
+  try {
+    status.value = await getStatus()
+  } catch (err) {
+    botError.value = err instanceof Error ? err.message : '加载 Bot 状态失败。'
+  } finally {
+    loadingBot.value = false
+  }
+}
 
 async function load() {
   loading.value = true

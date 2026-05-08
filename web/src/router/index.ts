@@ -2,13 +2,10 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard from '../views/Dashboard.vue'
 import Groups from '../views/Groups.vue'
 import Users from '../views/Users.vue'
-import Stats from '../views/Stats.vue'
 import Settings from '../views/Settings.vue'
 import CommandParser from '../views/CommandParser.vue'
 import About from '../views/About.vue'
 import Status from '../views/Status.vue'
-import Masterdata from '../views/Masterdata.vue'
-import Bot from '../views/Bot.vue'
 import Filter from '../views/Filter.vue'
 import Logs from '../views/Logs.vue'
 import Plugins from '../views/Plugins.vue'
@@ -29,7 +26,6 @@ export default createRouter({
     { path: '/', name: 'dashboard', component: Dashboard },
     { path: '/status', name: 'status', component: Status },
     { path: '/settings', name: 'settings', component: () => import('../views/CoreSettings.vue') },
-    { path: '/bot', name: 'bot', component: Bot },
     { path: '/filter', name: 'filter', component: Filter },
     { path: '/groups', name: 'groups', component: Groups },
     { path: '/users', name: 'users', component: Users },
@@ -44,13 +40,14 @@ export default createRouter({
     { path: '/plugins/moesekai', name: 'plugins-moesekai', component: MoesekaiSettings },
     { path: '/plugins/moesekai/advanced', name: 'plugins-moesekai-advanced', component: Settings },
     { path: '/plugins/moesekai/commands', name: 'plugins-moesekai-commands', component: CommandParser },
-    { path: '/plugins/moesekai/masterdata', name: 'plugins-moesekai-masterdata', component: Masterdata },
-    { path: '/plugins/moesekai/stats', name: 'plugins-moesekai-stats', component: Stats },
 
     // 旧路径重定向（保持外链兼容）
+    { path: '/bot', redirect: '/settings' },
     { path: '/commands', redirect: '/plugins/moesekai/commands' },
-    { path: '/masterdata', redirect: '/plugins/moesekai/masterdata' },
-    { path: '/stats', redirect: '/plugins/moesekai/stats' },
+    { path: '/masterdata', redirect: '/plugins/moesekai' },
+    { path: '/stats', redirect: '/plugins/moesekai' },
+    { path: '/plugins/moesekai/masterdata', redirect: '/plugins/moesekai' },
+    { path: '/plugins/moesekai/stats', redirect: '/plugins/moesekai' },
 
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],

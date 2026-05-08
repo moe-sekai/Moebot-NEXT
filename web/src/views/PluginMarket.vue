@@ -20,12 +20,18 @@
         v-model="query"
         type="search"
         class="market-search"
-        placeholder="按插件名搜索（如 fortune / chouxianghua）"
+        placeholder="按中文名 / 英文名 / 指令搜索（如 签到 / fortune / 运势）"
       />
       <div class="market-filters">
         <label><input type="radio" value="all" v-model="filter" /> 全部 ({{ rows.length }})</label>
         <label><input type="radio" value="loaded" v-model="filter" /> 已编译加载 ({{ loadedCount }})</label>
         <label><input type="radio" value="missing" v-model="filter" /> 未编译 ({{ rows.length - loadedCount }})</label>
+      </div>
+      <div class="market-filters">
+        <label><input type="checkbox" v-model="priorityFilters.high" /> 高优先级 ({{ counts.high }})</label>
+        <label><input type="checkbox" v-model="priorityFilters.medium" /> 中 ({{ counts.medium }})</label>
+        <label><input type="checkbox" v-model="priorityFilters.low" /> 低 ({{ counts.low }})</label>
+        <label><input type="checkbox" v-model="priorityFilters.none" /> 未分级 ({{ counts.none }})</label>
       </div>
       <span v-if="fetchedAt" class="market-meta">
         缓存于 {{ fetchedAtLabel }}（TTL 1h）
@@ -44,16 +50,27 @@
       <div v-for="row in filtered" :key="`${row.kind}:${row.name}`" class="market-row">
         <div class="market-row__main">
           <div class="market-row__title">
-            <span class="market-row__name">{{ row.name }}</span>
+            <span class="market-row__name">{{ row.displayTitle }}</span>
+            <span v-if="row.displayTitle !== row.name" class="market-row__slug">{{ row.name }}</span>
             <UiBadge :variant="row.kind === 'official' ? 'success' : 'secondary'">
-              {{ row.kind === 'official' ? '官方' : '市场' }}
+              {{ row.kind === 'official' ? '官方' : row.source === 'zbputils' ? 'zbputils' : '市场' }}
             </UiBadge>
+            <UiBadge
+              v-if="row.priority"
+              :variant="row.priority === 'high' ? 'destructive' : row.priority === 'medium' ? 'secondary' : 'outline'"
+            >{{ priorityLabel(row.priority) }}</UiBadge>
             <UiBadge v-if="row.loaded" :variant="row.enabled ? 'success' : 'outline'">
               {{ row.enabled ? '已启用' : '已加载' }}
             </UiBadge>
             <UiBadge v-else-if="row.kind === 'market'" variant="outline">未编译</UiBadge>
           </div>
           <p v-if="row.description" class="market-row__desc">{{ row.description }}</p>
+          <details v-if="row.commands && row.commands.length" class="market-row__cmds">
+            <summary>{{ row.commands.length }} 条指令</summary>
+            <ul>
+              <li v-for="(cmd, idx) in row.commands" :key="idx"><code>{{ cmd }}</code></li>
+            </ul>
+          </details>
         </div>
         <div class="market-row__actions">
           <RouterLink
@@ -93,7 +110,11 @@ import UiSkeleton from '../components/ui/UiSkeleton.vue'
 interface Row {
   kind: 'official' | 'market'
   name: string
+  displayTitle: string
   description?: string
+  priority?: 'high' | 'medium' | 'low' | ''
+  source?: string
+  commands?: string[]
   loaded: boolean
   enabled: boolean
   route?: string
@@ -107,6 +128,16 @@ const error = ref('')
 const fetchedAt = ref<string>('')
 const query = ref('')
 const filter = ref<'all' | 'loaded' | 'missing'>('all')
+const priorityFilters = ref({ high: true, medium: true, low: true, none: true })
+
+function priorityLabel(p?: string) {
+  switch (p) {
+    case 'high': return '高优先级'
+    case 'medium': return '中优先级'
+    case 'low': return '低优先级'
+    default: return ''
+  }
+}
 
 const fetchedAtLabel = computed(() => {
   if (!fetchedAt.value) return ''
@@ -121,6 +152,7 @@ const rows = computed<Row[]>(() => {
     .map((p) => ({
       kind: 'official' as const,
       name: p.title || p.name,
+      displayTitle: p.title || p.name,
       description: p.description,
       loaded: p.loaded,
       enabled: p.enabled,
@@ -133,6 +165,11 @@ const rows = computed<Row[]>(() => {
     .map((m) => ({
       kind: 'market' as const,
       name: m.name,
+      displayTitle: m.title?.trim() || m.name,
+      description: m.description,
+      priority: m.priority,
+      source: m.source,
+      commands: m.commands,
       loaded: m.loaded,
       enabled: m.enabled,
       href: m.html_url,
@@ -143,12 +180,37 @@ const rows = computed<Row[]>(() => {
 
 const loadedCount = computed(() => rows.value.filter((r) => r.loaded).length)
 
+const counts = computed(() => {
+  const c = { high: 0, medium: 0, low: 0, none: 0 }
+  for (const r of rows.value) {
+    if (r.kind !== 'market') continue
+    if (r.priority === 'high') c.high++
+    else if (r.priority === 'medium') c.medium++
+    else if (r.priority === 'low') c.low++
+    else c.none++
+  }
+  return c
+})
+
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
   return rows.value.filter((r) => {
     if (filter.value === 'loaded' && !r.loaded) return false
     if (filter.value === 'missing' && r.loaded) return false
-    if (q && !r.name.toLowerCase().includes(q)) return false
+    // 优先级过滤只作用于市场条目，避免把官方插件一并过滤掉。
+    if (r.kind === 'market') {
+      const key = (r.priority || 'none') as 'high' | 'medium' | 'low' | 'none'
+      if (!priorityFilters.value[key]) return false
+    }
+    if (q) {
+      const hay = [
+        r.name,
+        r.displayTitle,
+        r.description || '',
+        ...(r.commands || []),
+      ].join(' ').toLowerCase()
+      if (!hay.includes(q)) return false
+    }
     return true
   })
 })
@@ -251,10 +313,32 @@ code {
   font-weight: 600;
   font-size: 1rem;
 }
+.market-row__slug {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8em;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
 .market-row__desc {
   margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 0.9em;
+}
+.market-row__cmds {
+  margin-top: 6px;
+  font-size: 0.85em;
+}
+.market-row__cmds summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  user-select: none;
+}
+.market-row__cmds ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 2px 12px;
 }
 .market-row__actions {
   flex: 0 0 auto;

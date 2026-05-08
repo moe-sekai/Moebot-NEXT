@@ -470,9 +470,14 @@ export interface PluginSettingsResponse {
 
 export interface MarketPluginEntry {
 	name: string;
+	title?: string;
 	path: string;
 	html_url: string;
 	import_path: string;
+	priority?: "high" | "medium" | "low" | "";
+	description?: string;
+	commands?: string[];
+	source?: "zerobot-plugin" | "zbputils" | string;
 	loaded: boolean;
 	enabled: boolean;
 }
