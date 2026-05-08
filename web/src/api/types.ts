@@ -224,6 +224,7 @@ export interface PublicConfig {
 		command_aliases?: Record<string, string[]>;
 		driver_type: string;
 		listen: string;
+		url?: string;
 		url_configured: boolean;
 		token_set?: boolean;
 	};
@@ -315,6 +316,19 @@ export interface UpdateRendererPayload {
 	chart_precision: number;
 }
 
+export interface UpdateBotDriverPayload {
+	type?: string;
+	listen?: string;
+	url?: string;
+	token?: string;
+}
+
+export interface UpdateBotPayload {
+	nickname?: string[];
+	command_prefix?: string;
+	driver?: UpdateBotDriverPayload;
+}
+
 export interface UpdatePublicConfigPayload {
 	server: {
 		region: string;
@@ -322,6 +336,7 @@ export interface UpdatePublicConfigPayload {
 	servers?: Record<string, UpdateServerProfilePayload>;
 	masterdata?: UpdateMasterdataPayload;
 	assets?: UpdateAssetsPayload;
+	bot?: UpdateBotPayload;
 	renderer?: UpdateRendererPayload;
 	reload_masterdata?: boolean;
 	sync_client_regions?: boolean;

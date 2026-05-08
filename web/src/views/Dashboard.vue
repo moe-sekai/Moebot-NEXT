@@ -25,6 +25,15 @@
 
     <UiAlert v-if="pageError" variant="destructive" title="状态加载失败">{{ pageError }}</UiAlert>
 
+    <UiAlert
+      v-if="thumbnailPreloadIncomplete"
+      variant="warning"
+      title="渲染服务预载未完成"
+    >
+      当前 {{ thumbnailCache?.region_label ?? '默认区服' }} 卡牌缩略图覆盖率仅 {{ thumbnailCacheProgress }}%（{{ thumbnailCache?.cached ?? 0 }}/{{ thumbnailCache?.total ?? 0 }}），可能导致部分渲染缺图。建议前往「设置 → Renderer → 卡牌缩略图预载」点击「预载卡牌缩略图」补齐。
+      <span style="display: block; margin-top: 4px; opacity: 0.75;">超过 99% 后此提醒会自动消失（少量素材无法加载属正常情况）。</span>
+    </UiAlert>
+
     <div v-if="loading" class="status-grid">
       <UiSkeleton v-for="item in 5" :key="item" height="148px" />
     </div>
@@ -77,6 +86,7 @@ import {
 	getMasterdataSummary,
 	getPublicConfig,
 	getRecentCommands,
+	getRendererCardThumbnailCacheStatus,
 	getRendererHealth,
 	getStatus,
 } from "../api/client";
@@ -85,6 +95,7 @@ import type {
 	MasterdataSummary as MasterdataSummaryData,
 	PublicConfig,
 	RecentCommand,
+	RendererCardThumbnailCacheStatus,
 	RendererHealth,
 	RuntimeStatus,
 } from "../api/types";
@@ -107,6 +118,7 @@ const rendererHealth = ref<RendererHealth | null>(null);
 const publicConfig = ref<PublicConfig | null>(null);
 const recentCommands = ref<RecentCommand[]>([]);
 const recentMessage = ref("");
+const thumbnailCache = ref<RendererCardThumbnailCacheStatus | null>(null);
 
 const loading = ref(false);
 const recentLoading = ref(false);
@@ -151,6 +163,26 @@ const rendererMeta = computed(() => {
 
 const masterdataMeta = computed(() => masterdataCountLabel.value);
 
+const thumbnailCacheProgress = computed(() => {
+	const status = thumbnailCache.value;
+	if (!status) return 0;
+	const sourceTotal = status.total ?? 0;
+	const compositeTotal = status.composite_total ?? 0;
+	const total = sourceTotal + compositeTotal;
+	if (total <= 0) return 0;
+	const cached = (status.cached ?? 0) + (status.composite_cached ?? 0);
+	return Math.round((cached / total) * 100);
+});
+
+const thumbnailPreloadIncomplete = computed(() => {
+	const status = thumbnailCache.value;
+	if (!status) return false;
+	if (!status.enabled) return false;
+	if (status.running) return false;
+	if ((status.total ?? 0) <= 0 && (status.composite_total ?? 0) <= 0) return false;
+	return thumbnailCacheProgress.value < 99;
+});
+
 const masterdataCountLabel = computed(() => {
 	const counts = status.value?.masterdata.counts ?? summary.value?.counts;
 	if (!counts) return "等待数据加载";
@@ -180,6 +212,7 @@ async function loadOverview() {
 		publicConfig.value = configData;
 		summary.value = summaryData;
 		rendererHealth.value = rendererData;
+		void loadThumbnailCacheStatus();
 	} catch (err) {
 		pageError.value = normalizeError(err, "加载运行状态失败");
 	} finally {
@@ -198,6 +231,14 @@ async function loadRecentCommands() {
 		recentError.value = normalizeError(err, "加载最近命令失败");
 	} finally {
 		recentLoading.value = false;
+	}
+}
+
+async function loadThumbnailCacheStatus() {
+	try {
+		thumbnailCache.value = await getRendererCardThumbnailCacheStatus();
+	} catch {
+		thumbnailCache.value = null;
 	}
 }
 

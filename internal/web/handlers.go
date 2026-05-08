@@ -236,9 +236,23 @@ type updatePublicConfigRequest struct {
 	Servers           map[string]gameServerSettingsRequest `json:"servers"`
 	Masterdata        *masterdataSettingsRequest           `json:"masterdata"`
 	Assets            *assetsSettingsRequest               `json:"assets"`
+	Bot               *botSettingsRequest                  `json:"bot"`
 	Renderer          *rendererSettingsRequest             `json:"renderer"`
 	ReloadMasterdata  bool                                 `json:"reload_masterdata"`
 	SyncClientRegions bool                                 `json:"sync_client_regions"`
+}
+
+type botSettingsRequest struct {
+	Nickname      *[]string                 `json:"nickname"`
+	CommandPrefix *string                   `json:"command_prefix"`
+	Driver        *botDriverSettingsRequest `json:"driver"`
+}
+
+type botDriverSettingsRequest struct {
+	Type   *string `json:"type"`
+	Listen *string `json:"listen"`
+	URL    *string `json:"url"`
+	Token  *string `json:"token"`
 }
 
 type serverSettingsRequest struct {
@@ -453,6 +467,45 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 	next.Assets.CDNSource = assetResolved.CDNSource
 	next.Assets.BaseURL = assetResolved.BaseURL
 	next.Assets.CustomBaseURL = assetResolved.CustomBaseURL
+
+	if req.Bot != nil {
+		if req.Bot.Nickname != nil {
+			cleaned := make([]string, 0, len(*req.Bot.Nickname))
+			for _, name := range *req.Bot.Nickname {
+				if v := strings.TrimSpace(name); v != "" {
+					cleaned = append(cleaned, v)
+				}
+			}
+			next.Bot.Nickname = cleaned
+		}
+		if req.Bot.CommandPrefix != nil {
+			prefix := strings.TrimSpace(*req.Bot.CommandPrefix)
+			if prefix == "" {
+				return fiber.NewError(fiber.StatusBadRequest, "Command prefix must not be empty")
+			}
+			next.Bot.CommandPrefix = prefix
+		}
+		if req.Bot.Driver != nil {
+			if req.Bot.Driver.Type != nil {
+				driverType := strings.TrimSpace(*req.Bot.Driver.Type)
+				switch driverType {
+				case "ws", "ws-reverse":
+					next.Bot.Driver.Type = driverType
+				default:
+					return fiber.NewError(fiber.StatusBadRequest, "Driver type must be ws or ws-reverse")
+				}
+			}
+			if req.Bot.Driver.Listen != nil {
+				next.Bot.Driver.Listen = strings.TrimSpace(*req.Bot.Driver.Listen)
+			}
+			if req.Bot.Driver.URL != nil {
+				next.Bot.Driver.URL = strings.TrimSpace(*req.Bot.Driver.URL)
+			}
+			if req.Bot.Driver.Token != nil {
+				next.Bot.Driver.Token = strings.TrimSpace(*req.Bot.Driver.Token)
+			}
+		}
+	}
 
 	if req.Renderer != nil {
 		if req.Renderer.Precision != nil {
@@ -811,6 +864,7 @@ func (s *Server) publicConfigMap() fiber.Map {
 			"command_aliases": s.Config.Bot.CommandAliases,
 			"driver_type":     s.Config.Bot.Driver.Type,
 			"listen":          s.Config.Bot.Driver.Listen,
+			"url":             s.Config.Bot.Driver.URL,
 			"url_configured":  s.Config.Bot.Driver.URL != "",
 			"token_set":       s.Config.Bot.Driver.Token != "",
 		},

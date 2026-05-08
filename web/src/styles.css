@@ -265,7 +265,7 @@ button, input, select { font: inherit; }
 .settings-field--readonly { min-height: 62px; padding: 10px 12px; border: 1px solid rgba(165, 180, 252, 0.22); border-radius: 16px; background: rgba(255,255,255,.62); align-content: center; }
 .settings-field--readonly strong { color: #52617e; font-size: 13px; line-height: 1.4; word-break: break-word; }
 .settings-field .ui-input, .settings-field .ui-select { width: 100%; color: var(--foreground); font-weight: 650; }
-.settings-field .ui-textarea { min-height: 86px; resize: vertical; line-height: 1.45; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.settings-field .ui-textarea { min-height: 86px; resize: vertical; line-height: 1.45; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; border-radius: 16px; padding: 10px 13px; }
 .settings-preview { display: grid; gap: 9px; padding: 12px; border: 1px solid rgba(165, 180, 252, 0.24); border-radius: 16px; background: rgba(255,255,255,.68); }
 .settings-preview div { display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 10px; align-items: start; }
 .settings-preview span, .settings-hint { color: var(--muted-foreground); font-size: 12px; line-height: 1.45; }
