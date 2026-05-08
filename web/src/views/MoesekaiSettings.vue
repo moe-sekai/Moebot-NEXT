@@ -25,6 +25,21 @@
     <UiCard>
       <div class="card-heading">
         <div>
+          <h2>MoeSekai 子功能</h2>
+          <p>所有 PJSK 业务（指令解析、Masterdata、统计、高级配置）均收纳于本插件命名空间。</p>
+        </div>
+      </div>
+      <div class="moesekai-links">
+        <RouterLink to="/plugins/moesekai/advanced" class="ui-button ui-button--outline ui-button--sm">高级配置（区服 / API / Assets）</RouterLink>
+        <RouterLink to="/plugins/moesekai/commands" class="ui-button ui-button--outline ui-button--sm">指令解析</RouterLink>
+        <RouterLink to="/plugins/moesekai/masterdata" class="ui-button ui-button--outline ui-button--sm">Masterdata 浏览</RouterLink>
+        <RouterLink to="/plugins/moesekai/stats" class="ui-button ui-button--outline ui-button--sm">指令统计</RouterLink>
+      </div>
+    </UiCard>
+
+    <UiCard>
+      <div class="card-heading">
+        <div>
           <h2>moesekai.yml</h2>
           <p>路径：<code>{{ path || '(尚未生成)' }}</code></p>
         </div>
@@ -101,4 +116,11 @@ code {
   padding: 0 4px;
   border-radius: 4px;
 }
+.moesekai-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+.moesekai-links .ui-button { text-decoration: none; }
 </style>

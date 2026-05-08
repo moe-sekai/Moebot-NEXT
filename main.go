@@ -41,7 +41,21 @@ func main() {
 	if cfgPath == "" {
 		cfgPath = "data/config.yml"
 	}
+	for {
+		restart := runOnce(cfgPath)
+		if !restart {
+			return
+		}
+		log.Info().Msg("Moebot NEXT restarting (in-process)…")
+		// 短暂 sleep 让操作系统回收监听端口，避免 bind error。
+		time.Sleep(500 * time.Millisecond)
+	}
+}
 
+// runOnce 执行一次完整的启动 / 等待信号 / 关闭流程。
+// 返回 true 表示因 plugin.Registry 触发"启用插件"而需要进程内重启；
+// 返回 false 表示收到 SIGINT/SIGTERM，应退出。
+func runOnce(cfgPath string) bool {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load config")
@@ -58,7 +72,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// 通用渲染服务始终启动（裸项目核心能力之一）。
 	rendererClient := renderer.New(cfg.Renderer)
 	if err := rendererClient.StartProcess("renderer", cfg.Renderer.Port); err != nil {
 		log.Warn().Err(err).Msg("Renderer process failed to start; commands will fallback to text")
@@ -68,7 +81,6 @@ func main() {
 
 	bot.RegisterMiddleware(db)
 
-	// Filter 网关：始终启动，作为所有插件共享的消息过滤层。
 	if err := seedBuiltinFilterApp(db, cfg.Bot.Driver); err != nil {
 		log.Warn().Err(err).Msg("Failed to seed builtin filter app")
 	}
@@ -78,14 +90,11 @@ func main() {
 	}
 	defer filterManager.Stop()
 
-	// 构造 web.Server。Servers/Store/Loader/B30 等 PJSK 资源会在 moesekai
-	// 插件 Init 内挂回；插件未启用时这些字段保持 nil，对应路由会返回空数据。
 	webServer := web.New(cfg, db, nil, rendererClient, cfgPath, nil)
 	webServer.Logs = logBuffer
 	webServer.Filter = filterManager
 	webServer.SetupStaticFiles(webUI)
 
-	// 插件子系统：按数据库中的启用状态加载所有已注册插件。
 	pluginDataDir := pluginsDataDir(cfg)
 	if err := os.MkdirAll(pluginDataDir, 0o755); err != nil {
 		log.Warn().Err(err).Str("dir", pluginDataDir).Msg("Failed to create plugins data dir")
@@ -115,8 +124,13 @@ func main() {
 	b := bot.New(cfg.Bot)
 	go b.Run()
 
-	waitForSignal()
-	log.Info().Msg("Moebot NEXT shutting down")
+	restart := waitForSignalOrRestart(registry.RestartChan())
+	if restart {
+		log.Info().Msg("Plugin enabled → in-process restart requested")
+	} else {
+		log.Info().Msg("Moebot NEXT shutting down")
+	}
+	return restart
 }
 
 func setupLogger(cfg config.LogConfig) *logbuffer.Buffer {
@@ -199,8 +213,16 @@ func seedBuiltinFilterApp(db *database.DB, drv config.DriverConfig) error {
 	return db.CreateFilterApp(app)
 }
 
-func waitForSignal() {
+// waitForSignalOrRestart 阻塞直到收到 SIGINT/SIGTERM（返回 false）或
+// plugin.Registry 通过 RequestRestart 触发的重启请求（返回 true）。
+func waitForSignalOrRestart(restartCh <-chan struct{}) bool {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	<-ch
+	defer signal.Stop(ch)
+	select {
+	case <-ch:
+		return false
+	case <-restartCh:
+		return true
+	}
 }

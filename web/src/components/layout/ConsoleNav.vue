@@ -20,18 +20,33 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { consoleNavItems, navSectionLabels } from '../../navigation'
+import { consoleNavItems, navSectionLabels, type ConsoleNavItem } from '../../navigation'
+import { usePluginsStore } from '../../stores/plugins'
 import SvgIcon from '../icons/SvgIcon.vue'
 
 const route = useRoute()
+const plugins = usePluginsStore()
+
+onMounted(() => plugins.fetch())
+
+function isVisible(item: ConsoleNavItem) {
+  // 在 plugins store 完成首次加载前默认显示，避免侧栏闪烁；
+  // 加载完成后按 enabled 状态过滤（即使尚未重启 loaded=false，
+  // 用户也应能进入子页查看 / 配置该插件）。
+  if (!item.requiresPlugin) return true
+  if (!plugins.loaded) return true
+  return plugins.isEnabled(item.requiresPlugin)
+}
 
 const sections = computed(() => {
-  return (['main', 'manage', 'system'] as const).map(section => ({
-    key: section,
-    label: navSectionLabels[section],
-    items: consoleNavItems.filter(item => item.section === section),
-  }))
+  return (['main', 'plugins', 'moesekai', 'manage', 'system'] as const)
+    .map(section => ({
+      key: section,
+      label: navSectionLabels[section],
+      items: consoleNavItems.filter(item => item.section === section && isVisible(item)),
+    }))
+    .filter(s => s.items.length > 0)
 })
 </script>

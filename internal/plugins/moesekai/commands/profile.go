@@ -69,7 +69,7 @@ func registerBindCommands(deps *Deps) {
 		if bindRegion == "" {
 			bindRegion = config.RegionJP
 		}
-		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			gameID, ok := requireArgument(ctx, commandArgs(ctx), fmt.Sprintf("%s PJSK 游戏 ID（例：/%s 123456789012345678）", regionLabel(bindRegion), commandName))
 			if !ok {
@@ -129,7 +129,7 @@ func registerBindCommands(deps *Deps) {
 func registerUnbindCommands(deps *Deps) {
 	for _, cmd := range regionalCommands("解绑") {
 		forcedRegion := cmd.Region
-		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			region := normalizeRequestedRegion(forcedRegion)
 			if region == "" {
@@ -168,7 +168,7 @@ func registerProfileInfoCommands(deps *Deps) {
 		if recordCommand == "" {
 			recordCommand = "个人信息"
 		}
-		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, inferredUser, ok := requireRuntime(deps, ctx, forcedRegion)
 			if !ok {

@@ -77,7 +77,7 @@ func RegisterCharacterRankMission(deps *Deps) {
 	for _, cmd := range parserCommands(deps, "CR任务") {
 		commandName := cmd.Name
 		forcedRegion := cmd.Region
-		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, inferredUser, ok := requireRuntimeWithStore(deps, ctx, forcedRegion)
 			if !ok {

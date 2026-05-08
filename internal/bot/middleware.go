@@ -11,10 +11,19 @@ import (
 	zero "github.com/wdvxdr1123/ZeroBot"
 )
 
+// middlewareEngine 是 bot 中间件（如日志）注册到的 ZeroBot 引擎；
+// 每次 RegisterMiddleware 会先 Delete 旧 engine，避免进程内重启
+// 后中间件被重复注册（导致每条消息日志打多次）。
+var middlewareEngine *zero.Engine
+
 // RegisterMiddleware sets up global middleware for the bot.
 func RegisterMiddleware(db *database.DB) {
+	if middlewareEngine != nil {
+		middlewareEngine.Delete()
+	}
+	middlewareEngine = zero.New()
 	// Logging middleware: log every message received
-	zero.On("message").SetBlock(false).SetPriority(0).Handle(func(ctx *zero.Ctx) {
+	middlewareEngine.On("message").SetBlock(false).SetPriority(0).Handle(func(ctx *zero.Ctx) {
 		log.Debug().
 			Str("user_id", fmt.Sprintf("%d", ctx.Event.UserID)).
 			Str("group_id", fmt.Sprintf("%d", ctx.Event.GroupID)).

@@ -8,34 +8,44 @@ export interface ConsoleNavItem {
   label: string
   subtitle: string
   icon: ConsoleIconName
-  section: 'main' | 'plugins' | 'manage' | 'system'
+  section: 'main' | 'plugins' | 'moesekai' | 'manage' | 'system'
+  // 若设置，则仅当对应插件 loaded=true 时该项才显示。
+  requiresPlugin?: string
 }
 
 export const consoleNavItems: ConsoleNavItem[] = [
+  // 控制台核心
   { path: '/', name: 'dashboard', label: '概览', subtitle: 'Dashboard', icon: 'dashboard', section: 'main' },
   { path: '/status', name: 'status', label: '状态', subtitle: 'Runtime', icon: 'status', section: 'main' },
-  { path: '/settings', name: 'settings', label: '设置', subtitle: 'Config', icon: 'settings', section: 'main' },
+  { path: '/settings', name: 'settings', label: '核心设置', subtitle: 'Core Config', icon: 'settings', section: 'main' },
   { path: '/bot', name: 'bot', label: 'Bot', subtitle: 'OneBot', icon: 'bot', section: 'main' },
   { path: '/filter', name: 'filter', label: 'Filter', subtitle: 'Gateway', icon: 'filter', section: 'main' },
 
-  { path: '/plugins', name: 'plugins', label: '插件', subtitle: 'Plugins', icon: 'plugin', section: 'plugins' },
+  // 插件框架
+  { path: '/plugins', name: 'plugins', label: '插件管理', subtitle: 'Plugins', icon: 'plugin', section: 'plugins' },
   { path: '/plugins/market', name: 'plugins-market', label: '插件市场', subtitle: 'Marketplace', icon: 'market', section: 'plugins' },
-  { path: '/plugins/moesekai', name: 'plugins-moesekai', label: 'MoeSekai', subtitle: 'PJSK', icon: 'sparkle', section: 'plugins' },
 
-  { path: '/commands', name: 'commands', label: '指令解析', subtitle: 'Parser', icon: 'command', section: 'manage' },
-  { path: '/masterdata', name: 'masterdata', label: 'Masterdata', subtitle: 'Search', icon: 'masterdata', section: 'manage' },
+  // MoeSekai 插件命名空间（仅当 moesekai 启用时显示；段标题已表明归属，无需重复前缀）
+  { path: '/plugins/moesekai', name: 'plugins-moesekai', label: '概览', subtitle: 'Overview', icon: 'sparkle', section: 'moesekai', requiresPlugin: 'moesekai' },
+  { path: '/plugins/moesekai/advanced', name: 'plugins-moesekai-advanced', label: '高级配置', subtitle: 'Region/API/Assets', icon: 'settings', section: 'moesekai', requiresPlugin: 'moesekai' },
+  { path: '/plugins/moesekai/commands', name: 'plugins-moesekai-commands', label: '指令解析', subtitle: 'Parser', icon: 'command', section: 'moesekai', requiresPlugin: 'moesekai' },
+  { path: '/plugins/moesekai/masterdata', name: 'plugins-moesekai-masterdata', label: 'Masterdata', subtitle: 'Search', icon: 'masterdata', section: 'moesekai', requiresPlugin: 'moesekai' },
+  { path: '/plugins/moesekai/stats', name: 'plugins-moesekai-stats', label: '指令统计', subtitle: 'Stats', icon: 'stats', section: 'moesekai', requiresPlugin: 'moesekai' },
+
+  // 通用管理
   { path: '/groups', name: 'groups', label: '群组', subtitle: 'Groups', icon: 'groups', section: 'manage' },
   { path: '/users', name: 'users', label: '用户', subtitle: 'Users', icon: 'users', section: 'manage' },
-  { path: '/stats', name: 'stats', label: '统计', subtitle: 'Stats', icon: 'stats', section: 'manage' },
 
+  // 系统
   { path: '/logs', name: 'logs', label: '日志', subtitle: 'Logs', icon: 'logs', section: 'system' },
   { path: '/about', name: 'about', label: '关于', subtitle: 'About', icon: 'about', section: 'system' },
 ]
 
 export const navSectionLabels: Record<ConsoleNavItem['section'], string> = {
   main: '控制台',
-  plugins: '插件',
-  manage: '管理',
+  plugins: '插件框架',
+  moesekai: 'MoeSekai 插件',
+  manage: '通用管理',
   system: '系统',
 }
 
@@ -86,8 +96,28 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     eyebrow: 'Marketplace',
   },
   'plugins-moesekai': {
-    title: 'MoeSekai 插件',
+    title: 'MoeSekai · 概览',
     subtitle: '管理 Project Sekai 业务相关的 masterdata、资源、API 与多区服配置。',
+    eyebrow: 'Plugin · MoeSekai',
+  },
+  'plugins-moesekai-advanced': {
+    title: 'MoeSekai · 高级配置',
+    subtitle: '区服 / Masterdata / Assets / Sekai-Suite-Ranking API 详细参数。',
+    eyebrow: 'Plugin · MoeSekai',
+  },
+  'plugins-moesekai-commands': {
+    title: 'MoeSekai · 指令解析',
+    subtitle: '测试 Project Sekai 业务指令的解析、别名触发与渲染预览。',
+    eyebrow: 'Plugin · MoeSekai',
+  },
+  'plugins-moesekai-masterdata': {
+    title: 'MoeSekai · Masterdata',
+    subtitle: '查看 PJSK Masterdata 加载情况并执行只读搜索测试。',
+    eyebrow: 'Plugin · MoeSekai',
+  },
+  'plugins-moesekai-stats': {
+    title: 'MoeSekai · 指令统计',
+    subtitle: '查看 PJSK 指令调用数量与平均响应时间。',
     eyebrow: 'Plugin · MoeSekai',
   },
   groups: {

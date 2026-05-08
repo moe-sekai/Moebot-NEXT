@@ -41,7 +41,7 @@ var helpCategoryOrder = []string{
 // RegisterHelp registers the /帮助 command.
 func RegisterHelp(deps *Deps) {
 	for _, cmd := range parserCommands(deps, "帮助") {
-		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			payload := buildHelpCardPayload(deps)
 			if deps != nil && deps.Renderer != nil && deps.Renderer.Health() {
 				if png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "help_card", Data: payload}); err == nil {

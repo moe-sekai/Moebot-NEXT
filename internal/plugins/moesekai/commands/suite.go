@@ -25,7 +25,7 @@ func registerSuiteStatusCommands(deps *Deps) {
 	for _, cmd := range parserCommands(deps, "抓包状态") {
 		commandName := cmd.Name
 		forcedRegion := cmd.Region
-		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, inferredUser, ok := requireRuntime(deps, ctx, forcedRegion)
 			if !ok {
@@ -80,7 +80,7 @@ func registerSuiteVisibilityCommands(deps *Deps) {
 		action := action
 		for _, cmd := range parserCommands(deps, action.Command) {
 			forcedRegion := cmd.Region
-			zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+			Engine.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 				runtime, _, ok := requireRuntime(deps, ctx, forcedRegion)
 				if !ok {
 					return

@@ -32,7 +32,7 @@ func registerMusicDetailCommand(deps *Deps, command string) {
 		if recordCommand == "" {
 			recordCommand = command
 		}
-		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			keyword := commandArgs(ctx)
 			runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)
@@ -106,7 +106,7 @@ func registerChartCommand(deps *Deps) {
 		if recordCommand == "" {
 			recordCommand = "查谱"
 		}
-		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			keyword := commandArgs(ctx)
 			runtime, _ := runtimeForCommand(deps, ctx, forcedRegion)

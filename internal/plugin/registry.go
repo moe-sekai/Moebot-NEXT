@@ -24,9 +24,10 @@ type Registry struct {
 	mu      sync.RWMutex
 	plugins []Plugin
 
-	db       *gorm.DB
-	dataDir  string // data/plugins/
-	contexts map[string]*Context
+	db        *gorm.DB
+	dataDir   string // data/plugins/
+	contexts  map[string]*Context
+	restartCh chan struct{}
 }
 
 var (
@@ -77,9 +78,10 @@ func AllRegistered() []Plugin {
 // NewRegistry 构造运行期 Registry。
 func NewRegistry(db *gorm.DB, dataDir string) *Registry {
 	r := &Registry{
-		db:       db,
-		dataDir:  dataDir,
-		contexts: map[string]*Context{},
+		db:        db,
+		dataDir:   dataDir,
+		contexts:  map[string]*Context{},
+		restartCh: make(chan struct{}, 1),
 	}
 	r.plugins = AllRegistered()
 	globalMu.Lock()
@@ -155,8 +157,35 @@ func (r *Registry) SetEnabled(name string, enabled bool) error {
 			log.Info().Str("plugin", name).Msg("plugin disabled, running shutdown hooks")
 			ctx.RunShutdownHooks()
 		}
+	} else {
+		// 启用 = 需要重新 Init（命令 / Web 路由等无法运行时安全热加），
+		// 触发一次进程内 supervisor 重启，让该插件随重启一起加载。
+		// 若该插件其实已经处于 loaded 状态（例如重复点击），则不重启。
+		if !r.IsLoaded(name) {
+			log.Info().Str("plugin", name).Msg("plugin enabled, requesting in-process restart")
+			r.RequestRestart()
+		}
 	}
 	return nil
+}
+
+// RequestRestart 向 supervisor 发出"重启进程"信号；非阻塞，重复请求会被合并。
+func (r *Registry) RequestRestart() {
+	if r == nil || r.restartCh == nil {
+		return
+	}
+	select {
+	case r.restartCh <- struct{}{}:
+	default:
+	}
+}
+
+// RestartChan 返回 supervisor 用来等待重启请求的只读通道。
+func (r *Registry) RestartChan() <-chan struct{} {
+	if r == nil {
+		return nil
+	}
+	return r.restartCh
 }
 
 // IsLoaded 返回插件当前是否已 Init 且未 Shutdown。与 IsEnabled 不同，

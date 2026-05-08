@@ -33,7 +33,7 @@ func RegisterRanking(deps *Deps) {
 func registerRankingBoardCommands(deps *Deps) {
 	for _, cmd := range withWorldLinkCommands(parserCommands(deps, "榜线")) {
 		cmd := cmd
-		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, _ := runtimeForCommand(deps, ctx, cmd.Region)
 			if !rankingRuntimeOK(ctx, runtime, "榜线") {
@@ -65,7 +65,7 @@ func registerRankingBoardCommands(deps *Deps) {
 func registerRankingTargetCommands(deps *Deps) {
 	for _, cmd := range withWorldLinkCommands(parserCommands(deps, "sk")) {
 		cmd := cmd
-		zero.On("message", rankingCommandRule(cmd.Name, true)).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.On("message", rankingCommandRule(cmd.Name, true)).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, inferredUser := runtimeForCommand(deps, ctx, cmd.Region)
 			if !rankingRuntimeOK(ctx, runtime, "sk") {
@@ -104,7 +104,7 @@ func registerRankingTargetCommands(deps *Deps) {
 func registerRankingChurnCommands(deps *Deps) {
 	for _, cmd := range withWorldLinkCommands(parserCommands(deps, "查房")) {
 		cmd := cmd
-		zero.On("message", rankingCommandRule(cmd.Name, true)).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.On("message", rankingCommandRule(cmd.Name, true)).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, inferredUser := runtimeForCommand(deps, ctx, cmd.Region)
 			if !rankingRuntimeOK(ctx, runtime, "查房") {
@@ -148,7 +148,7 @@ func registerRankingChurnCommands(deps *Deps) {
 func registerWaterTableCommands(deps *Deps) {
 	for _, cmd := range withWorldLinkCommands(parserCommands(deps, "查水表")) {
 		cmd := cmd
-		zero.On("message", rankingCommandRule(cmd.Name, true)).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.On("message", rankingCommandRule(cmd.Name, true)).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, inferredUser := runtimeForCommand(deps, ctx, cmd.Region)
 			if !rankingRuntimeOK(ctx, runtime, "查水表") {
@@ -186,7 +186,7 @@ func registerWaterTableCommands(deps *Deps) {
 func registerForecastCommands(deps *Deps) {
 	for _, cmd := range parserCommands(deps, "榜线预测") {
 		cmd := cmd
-		zero.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, _ := runtimeForCommand(deps, ctx, cmd.Region)
 			if !rankingRuntimeOK(ctx, runtime, "榜线预测") {

@@ -7,8 +7,8 @@
     </PageHeader>
 
     <UiAlert v-if="error" variant="destructive" title="加载失败">{{ error }}</UiAlert>
-    <UiAlert v-if="restartNotice" variant="info" title="需要重启">
-      已启用插件，重启 moebot 进程后才会真正加载（注册命令 / WebUI 路由）。
+    <UiAlert v-if="restartNotice" variant="info" title="已启用 · 进程已自动重启">
+      插件已启用，moebot 进程已在内部完成重启，命令 / WebUI 路由已重新注册。
     </UiAlert>
     <UiAlert v-if="disabledNotice" variant="info" title="已即时禁用">
       插件后台任务已停止；持久化偏好已保存。
@@ -56,6 +56,7 @@
 import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { listPlugins, setPluginEnabled, type PluginListItem } from '../api/client'
+import { usePluginsStore } from '../stores/plugins'
 import PageHeader from '../components/PageHeader.vue'
 import UiAlert from '../components/ui/UiAlert.vue'
 import UiBadge from '../components/ui/UiBadge.vue'
@@ -63,6 +64,7 @@ import UiButton from '../components/ui/UiButton.vue'
 import UiCard from '../components/ui/UiCard.vue'
 import UiSkeleton from '../components/ui/UiSkeleton.vue'
 
+const pluginsStore = usePluginsStore()
 const plugins = ref<PluginListItem[]>([])
 const loading = ref(false)
 const error = ref('')
@@ -91,16 +93,35 @@ async function toggle(p: PluginListItem) {
     p.enabled = result.enabled
     p.loaded = result.loaded
     if (result.requires_restart) {
+      // 后端会触发进程内重启；等 Web 服务回来再刷新插件状态。
       restartNotice.value = true
       disabledNotice.value = false
+      await waitUntilBackendBack()
     } else {
       disabledNotice.value = true
       restartNotice.value = false
     }
+    // 通知全局 store 刷新，让侧栏立即反映 loaded 变化。
+    await pluginsStore.refresh()
+    await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '操作失败。'
   } finally {
     busy.value = null
+  }
+}
+
+// waitUntilBackendBack 在后端进程内重启期间，每隔 500ms 试探一次
+// /api/plugins，最多 20 次（10s）。期间请求失败属预期，无需上报错误。
+async function waitUntilBackendBack(maxTries = 20, intervalMs = 500) {
+  for (let i = 0; i < maxTries; i++) {
+    await new Promise(r => setTimeout(r, intervalMs))
+    try {
+      await listPlugins()
+      return
+    } catch {
+      // ignore — 后端可能正在重启
+    }
   }
 }
 

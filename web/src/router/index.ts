@@ -25,21 +25,33 @@ export default createRouter({
     return { left: 0, top: 0 }
   },
   routes: [
+    // 核心控制台
     { path: '/', name: 'dashboard', component: Dashboard },
     { path: '/status', name: 'status', component: Status },
-    { path: '/commands', name: 'commands', component: CommandParser },
-    { path: '/masterdata', name: 'masterdata', component: Masterdata },
-    { path: '/settings', name: 'settings', component: Settings },
+    { path: '/settings', name: 'settings', component: () => import('../views/CoreSettings.vue') },
     { path: '/bot', name: 'bot', component: Bot },
     { path: '/filter', name: 'filter', component: Filter },
     { path: '/groups', name: 'groups', component: Groups },
     { path: '/users', name: 'users', component: Users },
-    { path: '/stats', name: 'stats', component: Stats },
     { path: '/logs', name: 'logs', component: Logs },
+    { path: '/about', name: 'about', component: About },
+
+    // 插件框架
     { path: '/plugins', name: 'plugins', component: Plugins },
     { path: '/plugins/market', name: 'plugins-market', component: PluginMarket },
+
+    // MoeSekai 插件命名空间
     { path: '/plugins/moesekai', name: 'plugins-moesekai', component: MoesekaiSettings },
-    { path: '/about', name: 'about', component: About },
+    { path: '/plugins/moesekai/advanced', name: 'plugins-moesekai-advanced', component: Settings },
+    { path: '/plugins/moesekai/commands', name: 'plugins-moesekai-commands', component: CommandParser },
+    { path: '/plugins/moesekai/masterdata', name: 'plugins-moesekai-masterdata', component: Masterdata },
+    { path: '/plugins/moesekai/stats', name: 'plugins-moesekai-stats', component: Stats },
+
+    // 旧路径重定向（保持外链兼容）
+    { path: '/commands', redirect: '/plugins/moesekai/commands' },
+    { path: '/masterdata', redirect: '/plugins/moesekai/masterdata' },
+    { path: '/stats', redirect: '/plugins/moesekai/stats' },
+
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

@@ -13,7 +13,7 @@ import (
 
 // RegisterBirthday registers the /生日 command.
 func RegisterBirthday() {
-	zero.OnCommand("生日").SetBlock(true).Handle(func(ctx *zero.Ctx) {
+	Engine.OnCommand("生日").SetBlock(true).Handle(func(ctx *zero.Ctx) {
 		now := time.Now()
 
 		// Today's birthdays

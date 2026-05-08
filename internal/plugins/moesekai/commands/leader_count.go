@@ -53,7 +53,7 @@ func RegisterLeaderCount(deps *Deps) {
 	for _, cmd := range parserCommands(deps, "队长次数") {
 		commandName := cmd.Name
 		forcedRegion := cmd.Region
-		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, inferredUser, ok := requireRuntime(deps, ctx, forcedRegion)
 			if !ok {

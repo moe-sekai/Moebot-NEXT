@@ -158,6 +158,8 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 			B30:         b30Client,
 			Definitions: defs,
 		})
+		// 插件禁用时清理已注册的 ZeroBot matcher，避免重启后重复触发。
+		ctx.OnShutdown(commands.ResetEngine)
 	} else {
 		log.Warn().Msg("moesekai: db/renderer not ready, commands not registered")
 	}

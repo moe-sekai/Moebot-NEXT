@@ -136,7 +136,7 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 		if recordCommand == "" {
 			recordCommand = primary
 		}
-		zero.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
+		Engine.OnCommand(commandName).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			start := time.Now()
 			runtime, inferredUser, ok := requireRuntime(deps, ctx, forcedRegion)
 			if !ok {
