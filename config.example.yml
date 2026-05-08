@@ -43,7 +43,7 @@ sekai_api:
   enabled: false
   # SEKAI API 需要配置端点和请求头；Base URL 支持 {region}，完整端点模板也支持 {region}/{uid}。
   # 如需 token，请写入 headers，例如 x-moe-sekai-token / Authorization。
-  base_url: "https://seka-api.exmeaning.com"
+  base_url: "https://seka-api.exmeaning.com/api/{region}"
   region: "cn"
   headers: {}
   timeout: 10

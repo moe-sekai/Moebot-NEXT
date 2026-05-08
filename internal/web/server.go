@@ -114,6 +114,8 @@ func (s *Server) registerRoutes() {
 	// Groups
 	api.Get("/groups", s.handleListGroups)
 	api.Put("/groups/:id", s.handleUpdateGroup)
+	api.Delete("/groups/:id", s.handleDeleteGroup)
+	api.Get("/groups/:id/commands", s.handleGroupRecentCommands)
 
 	// Users
 	api.Get("/users", s.handleListUsers)

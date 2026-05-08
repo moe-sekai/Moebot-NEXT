@@ -15,6 +15,45 @@ import (
 	"gorm.io/gorm"
 )
 
+// isPlausibleGameID checks that the input looks like a PJSK numeric long ID.
+// Strips spaces and ensures only ASCII digits remain. Real long IDs are 16-19
+// digits, but we accept anything 6+ digits to remain forgiving.
+func isPlausibleGameID(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return len(s) >= 6
+}
+
+// summarizeBindError trims SEKAI API error messages so end users get a short
+// reason instead of a stack of wrapped %w errors.
+func summarizeBindError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "404"):
+		return "游戏服务器未找到该 ID"
+	case strings.Contains(msg, "403"):
+		return "SEKAI API 拒绝访问（请检查 token / 请求头）"
+	case strings.Contains(msg, "timeout") || strings.Contains(msg, "deadline"):
+		return "请求超时，请稍后重试"
+	case strings.Contains(msg, "disabled"):
+		return "SEKAI API 未启用"
+	}
+	if i := strings.LastIndex(msg, ": "); i >= 0 && i+2 < len(msg) {
+		return msg[i+2:]
+	}
+	return msg
+}
+
 // RegisterProfile registers the /绑定, /cn绑定, /解绑, /个人信息 commands.
 func RegisterProfile(deps *Deps) {
 	registerBindCommands(deps)
@@ -35,6 +74,26 @@ func registerBindCommands(deps *Deps) {
 			if !ok {
 				return
 			}
+			if !isPlausibleGameID(gameID) {
+				ctx.SendChain(message.Text("游戏 ID 格式不正确：应为纯数字，请检查后重试"))
+				return
+			}
+
+			// 若该区服已配置 sekai-api，则额外请求一次 profile 以校验 ID 合法性。
+			var verifiedName string
+			if runtime := runtimeForRegion(deps, bindRegion); runtime != nil && runtime.Sekai != nil && runtime.Sekai.Enabled() {
+				profile, err := runtime.Sekai.GetProfile(gameID)
+				if err != nil {
+					ctx.SendChain(message.Text(fmt.Sprintf(
+						"❌ %s ID %s 校验失败：%s\n请确认 ID 正确（不是 6/8 位短 ID，应为长 ID）后重试",
+						regionLabel(bindRegion), gameID, summarizeBindError(err),
+					)))
+					return
+				}
+				if profile != nil {
+					verifiedName = strings.TrimSpace(profile.Name)
+				}
+			}
 
 			userID := userIDFromCtx(ctx)
 			user, err := deps.DB.GetUserByPlatformRegion("onebot", userID, bindRegion)
@@ -47,12 +106,20 @@ func registerBindCommands(deps *Deps) {
 			}
 			user.GameID = gameID
 			user.ServerRegion = bindRegion
+			if verifiedName != "" {
+				user.Nickname = verifiedName
+			}
 			if err := deps.DB.UpsertUser(user); err != nil {
 				ctx.SendChain(message.Text("绑定失败，请稍后重试"))
 				return
 			}
 
-			ctx.SendChain(message.Text(fmt.Sprintf("✅ %s绑定成功！\n游戏 ID: %s", regionLabel(bindRegion), gameID)))
+			lines := []string{fmt.Sprintf("✅ %s绑定成功！", regionLabel(bindRegion)), fmt.Sprintf("游戏 ID: %s", gameID)}
+			if verifiedName != "" {
+				lines = append(lines, fmt.Sprintf("游戏昵称: %s", verifiedName))
+				lines = append(lines, "（已通过 SEKAI API 校验）")
+			}
+			ctx.SendChain(message.Text(strings.Join(lines, "\n")))
 			bot.RecordCommandRegion(deps.DB, "绑定", bindRegion, ctx, start)
 		})
 	}

@@ -106,6 +106,56 @@ func (d *DB) ListGroups(offset, limit int) ([]models.Group, int64, error) {
 	return groups, total, err
 }
 
+// GetGroupByID finds a group by primary key.
+func (d *DB) GetGroupByID(id uint) (*models.Group, error) {
+	var group models.Group
+	if err := d.First(&group, id).Error; err != nil {
+		return nil, err
+	}
+	return &group, nil
+}
+
+// DeleteGroup removes a group by primary key.
+func (d *DB) DeleteGroup(id uint) error {
+	return d.Delete(&models.Group{}, id).Error
+}
+
+// GroupCommandStat aggregates command usage for a single group within a window.
+type GroupCommandStat struct {
+	Platform string    `json:"platform"`
+	GroupID  string    `json:"group_id"`
+	Count    int64     `json:"count"`
+	LastUsed time.Time `json:"last_used"`
+	AvgMs    float64   `json:"avg_ms"`
+}
+
+// GetGroupCommandStats returns per-group aggregates within the time window.
+func (d *DB) GetGroupCommandStats(since time.Time) ([]GroupCommandStat, error) {
+	var results []GroupCommandStat
+	err := d.Model(&models.CommandStat{}).
+		Select("platform, group_id, COUNT(*) as count, MAX(created_at) as last_used, COALESCE(AVG(response_ms), 0) as avg_ms").
+		Where("created_at > ? AND group_id <> ''", since).
+		Group("platform, group_id").
+		Find(&results).Error
+	return results, err
+}
+
+// ListGroupRecentCommands returns recent command invocations from one group.
+func (d *DB) ListGroupRecentCommands(platform, groupID string, limit int) ([]models.CommandStat, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	var rows []models.CommandStat
+	err := d.Where("platform = ? AND group_id = ?", platform, groupID).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}
+
 // --- Command Stats Queries ---
 
 // RecordCommandStat inserts a new command usage record.

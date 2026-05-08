@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"moebot-next/internal/assets"
 	"moebot-next/internal/b30"
 	"moebot-next/internal/config"
+	"moebot-next/internal/database"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/musicsearch"
 	"moebot-next/internal/renderer"
@@ -1037,7 +1039,8 @@ func copyHeadersMap(headers map[string]string) map[string]string {
 	return out
 }
 
-// handleListGroups returns paginated group list.
+// handleListGroups returns paginated group list, optionally including
+// command statistics for a sliding window (default: 7 days).
 func (s *Server) handleListGroups(c *fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
@@ -1057,18 +1060,128 @@ func (s *Server) handleListGroups(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to list groups")
 	}
 
+	statsDays, _ := strconv.Atoi(c.Query("stats_days", "7"))
+	if statsDays <= 0 {
+		statsDays = 7
+	}
+	if statsDays > 90 {
+		statsDays = 90
+	}
+	since := time.Now().AddDate(0, 0, -statsDays)
+	statsRows, _ := s.DB.GetGroupCommandStats(since)
+	statsMap := make(map[string]database.GroupCommandStat, len(statsRows))
+	for _, row := range statsRows {
+		statsMap[row.Platform+"|"+row.GroupID] = row
+	}
+
+	data := make([]fiber.Map, 0, len(groups))
+	for _, g := range groups {
+		row := fiber.Map{
+			"id":         g.ID,
+			"platform":   g.Platform,
+			"group_id":   g.GroupID,
+			"name":       g.Name,
+			"enabled":    g.Enabled,
+			"config":     g.Config,
+			"created_at": g.CreatedAt,
+		}
+		if stat, ok := statsMap[g.Platform+"|"+g.GroupID]; ok {
+			row["stats"] = fiber.Map{
+				"count":     stat.Count,
+				"last_used": nullableTime(stat.LastUsed),
+				"avg_ms":    stat.AvgMs,
+				"days":      statsDays,
+			}
+		} else {
+			row["stats"] = fiber.Map{"count": 0, "last_used": nil, "avg_ms": 0, "days": statsDays}
+		}
+		data = append(data, row)
+	}
+
 	return c.JSON(fiber.Map{
-		"data":  groups,
+		"data":  data,
 		"total": total,
 		"page":  page,
 		"limit": limit,
 	})
 }
 
+type updateGroupPayload struct {
+	Enabled *bool   `json:"enabled"`
+	Name    *string `json:"name"`
+	Config  *string `json:"config"`
+}
+
 // handleUpdateGroup updates a group's configuration.
 func (s *Server) handleUpdateGroup(c *fiber.Ctx) error {
-	// TODO: implement group update
-	return c.JSON(fiber.Map{"message": "not implemented"})
+	id, err := strconv.ParseUint(c.Params("id"), 10, 32)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid group ID")
+	}
+
+	var payload updateGroupPayload
+	if err := c.BodyParser(&payload); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	group, err := s.DB.GetGroupByID(uint(id))
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "Group not found")
+	}
+
+	if payload.Enabled != nil {
+		group.Enabled = *payload.Enabled
+	}
+	if payload.Name != nil {
+		group.Name = strings.TrimSpace(*payload.Name)
+	}
+	if payload.Config != nil {
+		cfg := strings.TrimSpace(*payload.Config)
+		if cfg == "" {
+			cfg = "{}"
+		}
+		// Validate JSON to prevent storing garbage.
+		if !json.Valid([]byte(cfg)) {
+			return fiber.NewError(fiber.StatusBadRequest, "Config must be valid JSON")
+		}
+		group.Config = cfg
+	}
+
+	if err := s.DB.UpsertGroup(group); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update group")
+	}
+
+	return c.JSON(fiber.Map{"data": group, "message": "updated"})
+}
+
+// handleDeleteGroup removes a group by primary key.
+func (s *Server) handleDeleteGroup(c *fiber.Ctx) error {
+	id, err := strconv.ParseUint(c.Params("id"), 10, 32)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid group ID")
+	}
+	if err := s.DB.DeleteGroup(uint(id)); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete group")
+	}
+	return c.JSON(fiber.Map{"message": "deleted"})
+}
+
+// handleGroupRecentCommands returns recent command invocations for one group.
+func (s *Server) handleGroupRecentCommands(c *fiber.Ctx) error {
+	id, err := strconv.ParseUint(c.Params("id"), 10, 32)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid group ID")
+	}
+	group, err := s.DB.GetGroupByID(uint(id))
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "Group not found")
+	}
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	rows, err := s.DB.ListGroupRecentCommands(group.Platform, group.GroupID, limit)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to load commands")
+	}
+	return c.JSON(fiber.Map{"data": rows, "group": group})
 }
 
 // handleListUsers returns paginated user list.

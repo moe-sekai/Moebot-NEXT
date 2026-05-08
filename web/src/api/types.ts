@@ -569,6 +569,39 @@ export interface GroupRow {
 	group_id: string;
 	name: string;
 	enabled: boolean;
+	config?: string;
+	created_at?: string;
+	stats?: GroupStats;
+}
+
+export interface GroupStats {
+	count: number;
+	last_used: string | null;
+	avg_ms: number;
+	days: number;
+}
+
+export interface UpdateGroupPayload {
+	enabled?: boolean;
+	name?: string;
+	config?: string;
+}
+
+export interface GroupRecentCommand {
+	id: number;
+	command: string;
+	platform: string;
+	user_id: string;
+	group_id: string;
+	region: string;
+	args: string;
+	response_ms: number;
+	created_at: string;
+}
+
+export interface GroupRecentCommandsResponse {
+	data: GroupRecentCommand[];
+	group: GroupRow;
 }
 
 export interface UserRow {

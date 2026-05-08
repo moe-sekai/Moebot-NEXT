@@ -18,8 +18,10 @@ import type {
 	FilterRegexTestPayload,
 	FilterRegexTestResponse,
 	FilterStatus,
+	GroupRecentCommandsResponse,
 	GroupRow,
 	HealthResponse,
+	UpdateGroupPayload,
 	LogsQuery,
 	LogsResponse,
 	ConfigUpdateResponse,
@@ -243,10 +245,31 @@ export async function searchMasterdata(type: SearchType, q: string) {
 	return data;
 }
 
-export async function getGroups(page = 1, limit = 20) {
+export async function getGroups(page = 1, limit = 20, statsDays = 7) {
 	const { data } = await api.get<PaginatedResponse<GroupRow>>("/groups", {
-		params: { page, limit },
+		params: { page, limit, stats_days: statsDays },
 	});
+	return data;
+}
+
+export async function updateGroup(id: number, payload: UpdateGroupPayload) {
+	const { data } = await api.put<{ data: GroupRow; message: string }>(
+		`/groups/${id}`,
+		payload,
+	);
+	return data;
+}
+
+export async function deleteGroup(id: number) {
+	const { data } = await api.delete<{ message: string }>(`/groups/${id}`);
+	return data;
+}
+
+export async function getGroupRecentCommands(id: number, limit = 20) {
+	const { data } = await api.get<GroupRecentCommandsResponse>(
+		`/groups/${id}/commands`,
+		{ params: { limit } },
+	);
 	return data;
 }
 

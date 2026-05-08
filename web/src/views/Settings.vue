@@ -286,55 +286,6 @@
       <div class="settings-grid">
         <UiCard className="settings-card">
           <div class="settings-card__heading">
-            <div class="settings-card__icon"><SvgIcon name="bot" :size="22" /></div>
-            <div>
-              <h2>Bot</h2>
-              <p>OneBot 驱动连接、命令前缀与昵称（用于唤起与 @）；修改驱动需重启 Moebot 才会生效。</p>
-            </div>
-          </div>
-          <div class="settings-form">
-            <label class="settings-field settings-field--full">
-              <span>Bot 昵称（每行一个，命令需在唤起后才识别）</span>
-              <textarea v-model="form.bot.nickname_text" class="ui-input ui-textarea" placeholder="moebot&#10;萌萌"></textarea>
-            </label>
-            <label class="settings-field">
-              <span>命令前缀</span>
-              <input v-model.trim="form.bot.command_prefix" class="ui-input" placeholder="/" />
-            </label>
-            <label class="settings-field">
-              <span>驱动类型</span>
-              <select v-model="form.bot.driver.type" class="ui-select">
-                <option value="ws-reverse">反向 WebSocket（OneBot 主动连接）</option>
-                <option value="ws">正向 WebSocket（Moebot 主动连接）</option>
-              </select>
-            </label>
-            <label v-if="form.bot.driver.type === 'ws-reverse'" class="settings-field">
-              <span>监听地址</span>
-              <input v-model.trim="form.bot.driver.listen" class="ui-input" placeholder="0.0.0.0:6700" />
-            </label>
-            <label v-else class="settings-field">
-              <span>WebSocket URL</span>
-              <input v-model.trim="form.bot.driver.url" class="ui-input" placeholder="ws://127.0.0.1:6700" />
-            </label>
-            <label class="settings-field settings-field--full">
-              <span>Access Token<span style="opacity: 0.6; font-weight: normal; margin-left: 6px;">（留空保持现有；填写 "-" 清除）</span></span>
-              <input v-model="form.bot.driver.token" class="ui-input" type="password" :placeholder="config?.bot.token_set ? '已设置（留空保持不变）' : '可选；与 OneBot 实现保持一致'" autocomplete="off" />
-            </label>
-            <div class="settings-field settings-field--readonly">
-              <span>当前 Token</span>
-              <strong>{{ config?.bot.token_set ? '已设置' : '未设置' }}</strong>
-            </div>
-            <div class="settings-field settings-field--readonly">
-              <span>命令别名</span>
-              <strong>{{ aliasCount(config?.bot.command_aliases) ? '已配置' : '未配置自定义关键词' }}</strong>
-            </div>
-          </div>
-          <UiAlert variant="info" title="生效说明">
-            修改驱动地址 / Token / 类型 后需要重启 Moebot NEXT 才会重新连接 OneBot 实现；昵称与命令前缀变更立即写入配置文件。
-          </UiAlert>
-        </UiCard>
-        <UiCard className="settings-card">
-          <div class="settings-card__heading">
             <div class="settings-card__icon"><SvgIcon name="renderer" :size="22" /></div>
             <div>
               <h2>Renderer</h2>
@@ -477,21 +428,9 @@ interface ServerProfileForm {
 	};
 }
 
-interface BotForm {
-	nickname_text: string;
-	command_prefix: string;
-	driver: {
-		type: string;
-		listen: string;
-		url: string;
-		token: string;
-	};
-}
-
 interface SettingsForm {
 	server: { region: string };
 	renderer: { precision: number; chart_precision: number };
-	bot: BotForm;
 	servers: Record<string, ServerProfileForm>;
 }
 
@@ -644,28 +583,6 @@ const webItems = computed<ConfigItem[]>(() => [
 	{ label: "Port", value: config.value?.web.port ?? "-" },
 ]);
 
-const botItems = computed<ConfigItem[]>(() => [
-	{ label: "驱动类型", value: config.value?.bot.driver_type ?? "-" },
-	{ label: "监听地址", value: config.value?.bot.listen ?? "-" },
-	{ label: "命令前缀", value: config.value?.bot.command_prefix ?? "-" },
-	{
-		label: "自定义关键词",
-		value: aliasCount(config.value?.bot.command_aliases),
-		badge: true,
-	},
-	{ label: "昵称", value: config.value?.bot.nickname?.join(" / ") || "-" },
-	{
-		label: "URL 已配置",
-		value: Boolean(config.value?.bot.url_configured),
-		badge: true,
-	},
-	{
-		label: "Token 已设置",
-		value: Boolean(config.value?.bot.token_set),
-		badge: true,
-	},
-]);
-
 const rendererItems = computed<ConfigItem[]>(() => [
 	{ label: "Base URL", value: config.value?.renderer.base_url ?? "-" },
 	{ label: "Host", value: config.value?.renderer.host ?? "-" },
@@ -749,16 +666,6 @@ const sekaiApiItems = computed<ConfigItem[]>(() => [
 	{ label: "Ranking 来源", value: "MoeSekai 公开榜线" },
 	{ label: "Ranking 自动区服", value: config.value?.ranking_api?.region ?? "-" },
 ]);
-
-function aliasCount(aliases?: Record<string, string[]>) {
-	if (!aliases) return false;
-	return (
-		Object.values(aliases).reduce(
-			(total, list) => total + (Array.isArray(list) ? list.length : 0),
-			0,
-		) > 0
-	);
-}
 
 const assetItems = computed<ConfigItem[]>(() => [
 	{
@@ -976,11 +883,6 @@ function createEmptyForm(): SettingsForm {
 	return {
 		server: { region: "jp" },
 		renderer: { precision: 1.5, chart_precision: 4 },
-		bot: {
-			nickname_text: "moebot",
-			command_prefix: "/",
-			driver: { type: "ws-reverse", listen: "0.0.0.0:6700", url: "", token: "" },
-		},
 		servers: {},
 	};
 }
@@ -990,16 +892,6 @@ function applyConfigToForm(data: PublicConfig) {
 	form.value = {
 		server: { region: defaultRegion },
 		renderer: { precision: data.renderer.precision || 1.5, chart_precision: data.renderer.chart_precision || 4 },
-		bot: {
-			nickname_text: (data.bot.nickname ?? []).join("\n"),
-			command_prefix: data.bot.command_prefix || "/",
-			driver: {
-				type: data.bot.driver_type === "ws" ? "ws" : "ws-reverse",
-				listen: data.bot.listen || "",
-				url: data.bot.url || "",
-				token: "",
-			},
-		},
 		servers: {},
 	};
 	for (const option of regionOptions.value) {
@@ -1029,7 +921,6 @@ function buildPayload(): UpdatePublicConfigPayload {
 			precision: Number(form.value.renderer.precision) || 1.5,
 			chart_precision: Number(form.value.renderer.chart_precision) || 4,
 		},
-		bot: buildBotPayload(),
 		masterdata: buildMasterdataPayload(defaultProfile.masterdata),
 		assets: buildAssetsPayload(defaultProfile.assets),
 		servers: Object.fromEntries(
@@ -1038,28 +929,6 @@ function buildPayload(): UpdatePublicConfigPayload {
 				buildServerPayload(option.key),
 			]),
 		),
-	};
-}
-
-function buildBotPayload() {
-	const bot = form.value.bot;
-	const nickname = bot.nickname_text
-		.split(/\r?\n/)
-		.map((line) => line.trim())
-		.filter(Boolean);
-	const driver: { type: string; listen: string; url: string; token?: string } = {
-		type: bot.driver.type,
-		listen: bot.driver.type === "ws-reverse" ? bot.driver.listen : "",
-		url: bot.driver.type === "ws" ? bot.driver.url : "",
-	};
-	const tokenInput = bot.driver.token;
-	if (tokenInput !== "") {
-		driver.token = tokenInput === "-" ? "" : tokenInput;
-	}
-	return {
-		nickname,
-		command_prefix: bot.command_prefix || "/",
-		driver,
 	};
 }
 

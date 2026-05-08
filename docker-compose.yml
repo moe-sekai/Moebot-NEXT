@@ -14,8 +14,6 @@ services:
     volumes:
       # 持久化数据库 / 缓存 / 下载的 master 数据 / 配置文件
       - ./data:/app/data
-      # 静态资源(可选,需要替换/扩展时再挂载)
-      # - ./assets:/app/assets
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
       interval: 30s

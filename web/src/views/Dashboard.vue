@@ -53,7 +53,7 @@
     </div>
 
     <div class="dashboard-grid dashboard-grid--main">
-      <MasterdataSummary :summary="summary" :loading="loading" :error="summaryError" />
+      <MasterdataSummary :summary="summary" :servers="masterdataServerProfiles" :loading="loading" :error="summaryError" />
 
       <UiCard class-name="renderer-info">
         <div class="card-heading">
@@ -197,7 +197,22 @@ const thumbnailPreloadIncomplete = computed(() => {
 	return thumbnailCacheProgress.value < 99;
 });
 
+const masterdataServerProfiles = computed(() => {
+	const servers = publicConfig.value?.servers;
+	if (!servers) return null;
+	const regions = publicConfig.value?.presets.regions ?? [];
+	const order = new Map(regions.map((r, i) => [r.key, i] as const));
+	return Object.values(servers)
+		.filter((entry) => entry?.enabled !== false)
+		.sort((a, b) => (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99));
+});
+
 const masterdataCountLabel = computed(() => {
+	const profiles = masterdataServerProfiles.value;
+	if (profiles && profiles.length > 0) {
+		const loaded = profiles.filter((p) => p.loaded).length;
+		return `${loaded}/${profiles.length} 区服已加载·点击刷新查看详情`;
+	}
 	const counts = status.value?.masterdata.counts ?? summary.value?.counts;
 	if (!counts) return "等待数据加载";
 	return `卡牌 ${counts.cards} / 曲目 ${counts.musics} / 活动 ${counts.events} / 卡池 ${counts.gachas} / 演唱会 ${counts.virtual_lives ?? 0}`;

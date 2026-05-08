@@ -10,16 +10,8 @@
    - 包含配置文件（`data/config.yml`）
    - 包含数据库文件（如 `moebot.db`、`moebot-validation.db`）
    - 包含 master 数据（`data/master`）
-   - 包含缓存数据（`data/cache`）
+   - 包含缓存数据（`data/cache`）- 预缓存卡图缩略图等（无限期缓存，需持久化）
    - 挂载方式：`./data:/app/data`
-
-### 可选持久化
-
-3. **`/app/assets`** - 静态资源
-   - 角色立绘、卡框、图标、字体等
-   - 仅在需要替换或扩展资源时挂载
-   - 挂载方式：`./assets:/app/assets`
-
 ## 使用 docker-compose
 
 项目已提供 `docker-compose.yml`，直接运行即可：

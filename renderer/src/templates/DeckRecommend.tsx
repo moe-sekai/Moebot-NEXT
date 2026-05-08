@@ -119,7 +119,7 @@ function ResultTable({ decks, source }: { decks: DeckRecommendDeck[]; source: st
 	return (
 		<div style={tableStyle}>
 			<div style={headerRowStyle}>
-				<div style={ptvHeaderCellStyle}>PTV</div>
+				<div style={ptvHeaderCellStyle}>PT</div>
 				<div style={cardsHeaderCellStyle}>卡组</div>
 				<div style={metricHeaderCellStyle}>加成</div>
 				<div style={metricHeaderCellStyle}>实效</div>
