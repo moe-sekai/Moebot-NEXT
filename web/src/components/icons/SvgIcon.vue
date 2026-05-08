@@ -140,6 +140,14 @@ const icons = {
     viewBox: '0 0 24 24',
     paths: ['M4 5h16l-6 8v6l-4-2v-4Z'],
   },
+  plugin: {
+    viewBox: '0 0 24 24',
+    paths: ['M9 3v3', 'M15 3v3', 'M5 7h14a1 1 0 0 1 1 1v3a3 3 0 0 1-3 3v3a3 3 0 0 1-3 3h-4a3 3 0 0 1-3-3v-3a3 3 0 0 1-3-3V8a1 1 0 0 1 1-1Z'],
+  },
+  market: {
+    viewBox: '0 0 24 24',
+    paths: ['M3 7h18l-1.5 4H4.5z', 'M5 11v9h14v-9', 'M9 16h6'],
+  },
 } as const satisfies Record<string, IconDef>
 
 export type IconName = keyof typeof icons

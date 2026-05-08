@@ -1,15 +1,16 @@
-server:
-  # 目标服务器：cn / jp / tw / kr / en
-  region: "jp"
+# Moebot NEXT 核心配置（破坏性精简版）
+#
+# 仅保留与"裸项目核心"相关的字段：bot driver / web 控制台 / 数据库 /
+# renderer / 日志 / 插件子系统。任何 PJSK / Project Sekai 相关配置都
+# 移到了 data/plugins/moesekai.yml；启用 moesekai 插件后才会被加载。
+#
+# 老版 config.yml（包含 masterdata / sekai_api / suite_api / ranking_api /
+# b30 / assets / game_servers 段）已不再被解析为业务配置。请把这些段落
+# 整体迁移到 data/plugins/moesekai.yml（结构完全一致）。
 
 bot:
   nickname: ["moebot", "萌萌"]
   command_prefix: "/"
-  # 自定义指令关键词会影响聊天端触发；WebUI 保存后立即用于指令解析，聊天端通常需重启后生效。
-  # 只填写不带 / 的关键词；留空或 {} 即恢复默认预设关键词。
-  command_aliases:
-    查卡: []      # 例: ["查卡牌", "mycard"]
-    查曲: []      # 例: ["查歌曲", "mysong"]；song/songinfo/music/musicinfo 已内置
   super_users: []
   driver:
     type: "ws-reverse"        # ws-reverse or ws
@@ -28,211 +29,27 @@ web:
 database:
   path: "./data/moebot.db"
 
-masterdata:
-  # source: moesekai(jp/cn) / haruki(全服) / 8823(jp/cn/tw) / custom
-  region: "jp"
-  source: "moesekai"
-  url: "https://sk.exmeaning.com/master"
-  fallback_url: "https://sekaimaster.exmeaning.com/master"
-  custom_url: ""
-  custom_fallback_url: ""
-  local_path: "./data/master"
-  refresh_interval: 3600
-
-sekai_api:
-  enabled: false
-  # SEKAI API 需要配置端点和请求头；Base URL 支持 {region}，完整端点模板也支持 {region}/{uid}。
-  # 如需 token，请写入 headers，例如 x-moe-sekai-token / Authorization。
-  base_url: "https://seka-api.exmeaning.com/api/{region}"
-  region: "cn"
-  headers: {}
-  timeout: 10
-  rate_limit: 30
-
-suite_api:
-  enabled: true
-  # Suite 使用 Haruki 公开数据接口；{uid} 会替换为绑定的游戏 ID，{region} 会替换为区服。
-  # 默认通过 key 参数请求公开字段；如需自定义鉴权，也写入 headers。
-  url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
-  headers: {}
-  timeout: 10
-
-ranking_api:
-  # MoeSekai 公开实时榜 API；普通榜/查房/WL 支持 cn / jp / tw / kr / en。
-  # 区服默认自动跟随对应 game server；预测 API 固定使用 https://rk.exmeaning.com/public，当前仅支持 cn / jp。
-  base_url: "https://rks.exmeaning.com"
-  region: "cn"
-  timeout: 10
-
-b30:
-  # Best30 使用社区定数表；AP=定数，FC=定数-1(≥33) / 定数-1.5(<33)。
-  constants_url: "https://moe.exmeaning.com/data/pjskb30/merged_chart.csv"
-  timeout: 10
-  refresh_interval: 21600
-
 renderer:
   host: "127.0.0.1"
   port: 3001
-  # SVG 转 PNG 的渲染精度倍率；越高越清晰但耗时和体积越大。
   precision: 1.5
-  # 谱面 SVG 单独使用更高倍率，默认 4 倍；不够清晰可以继续调高。
   chart_precision: 4
   cache:
     enabled: true
     path: "./data/cache"
-    # 0 表示不限制容量；卡牌缩略图等静态资源可以长期保存。
     max_size_mb: 0
-    # 0 表示永久有效，不按时间过期。
     ttl_hours: 0
-
-assets:
-  # source: moesekai(jp/cn) / sekai_best(全服) / custom
-  region: "jp"
-  source: "moesekai"
-  mirror: "main" # main / backup / overseas / overseas_backup，仅 MoeSekai 使用
-  cdn_source: "cn_main" # 兼容旧配置：cn_main / cn_backup / overseas / overseas_backup
-  base_url: "https://storage.exmeaning.com/sekai-jp-assets"
-  custom_base_url: ""
-  music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
-  chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg" # 例: /739/master.svg
-  sticker_path: "./assets/stickers"
-
-# 多服务器配置。默认只启用日服；用户可用 /cn绑定、/tw绑定、/kr绑定、/en绑定
-# 绑定多个服务器账号，并用 /cn查卡、/en查曲 等前缀临时指定服务器。
-game_servers:
-  jp:
-    enabled: true
-    masterdata:
-      region: "jp"
-      source: "moesekai"
-      local_path: "./data/master/jp"
-      refresh_interval: 3600
-    assets:
-      region: "jp"
-      source: "moesekai"
-      mirror: "main"
-      music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
-      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
-      sticker_path: "./assets/stickers"
-    sekai_api:
-      enabled: false
-      base_url: "https://seka-api.exmeaning.com"
-      region: "jp"
-      headers: {}
-      timeout: 10
-      rate_limit: 30
-    suite_api:
-      enabled: true
-      url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
-      headers: {}
-      timeout: 10
-    ranking_api:
-      base_url: "https://rks.exmeaning.com"
-      region: "jp"
-      timeout: 10
-  cn:
-    enabled: false
-    masterdata:
-      region: "cn"
-      source: "moesekai"
-      local_path: "./data/master/cn"
-      refresh_interval: 3600
-    assets:
-      region: "cn"
-      source: "moesekai"
-      mirror: "main"
-      music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
-      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
-      sticker_path: "./assets/stickers"
-    sekai_api:
-      enabled: false
-      base_url: "https://seka-api.exmeaning.com"
-      region: "cn"
-      headers: {}
-      timeout: 10
-      rate_limit: 30
-    suite_api:
-      enabled: true
-      url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
-      headers: {}
-      timeout: 10
-    ranking_api:
-      base_url: "https://rks.exmeaning.com"
-      region: "cn"
-      timeout: 10
-  tw:
-    enabled: false
-    masterdata:
-      region: "tw"
-      source: "haruki"
-      local_path: "./data/master/tw"
-      refresh_interval: 3600
-    assets:
-      region: "tw"
-      source: "sekai_best"
-      music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
-      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
-      sticker_path: "./assets/stickers"
-    sekai_api:
-      enabled: false
-      base_url: "https://seka-api.exmeaning.com"
-      region: "tw"
-      headers: {}
-      timeout: 10
-      rate_limit: 30
-    ranking_api:
-      base_url: "https://rks.exmeaning.com"
-      region: "tw"
-      timeout: 10
-  kr:
-    enabled: false
-    masterdata:
-      region: "kr"
-      source: "haruki"
-      local_path: "./data/master/kr"
-      refresh_interval: 3600
-    assets:
-      region: "kr"
-      source: "sekai_best"
-      music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
-      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
-      sticker_path: "./assets/stickers"
-    sekai_api:
-      enabled: false
-      base_url: "https://seka-api.exmeaning.com"
-      region: "kr"
-      headers: {}
-      timeout: 10
-      rate_limit: 30
-    ranking_api:
-      base_url: "https://rks.exmeaning.com"
-      region: "kr"
-      timeout: 10
-  en:
-    enabled: false
-    masterdata:
-      region: "en"
-      source: "haruki"
-      local_path: "./data/master/en"
-      refresh_interval: 3600
-    assets:
-      region: "en"
-      source: "sekai_best"
-      music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
-      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
-      sticker_path: "./assets/stickers"
-    sekai_api:
-      enabled: false
-      base_url: "https://seka-api.exmeaning.com"
-      region: "en"
-      headers: {}
-      timeout: 10
-      rate_limit: 30
-    ranking_api:
-      base_url: "https://rks.exmeaning.com"
-      region: "en"
-      timeout: 10
 
 log:
   level: "info"
   format: "console"
+
+# 插件子系统
+#
+#   data_dir：插件子配置文件目录（每个插件读 <data_dir>/<name>.yml）
+#   enabled：首次启动时默认启用的插件名列表（仅在数据库中尚无该插件
+#           记录时生效；之后控制台的开关状态成为唯一真值）
+plugins:
+  data_dir: ./data/plugins
+  enabled:
+    - moesekai

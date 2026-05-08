@@ -423,6 +423,59 @@ function debugBindingParams(binding?: CommandDebugBindingPayload) {
 	};
 }
 
+// ---------------------------------------------------------------------------
+// Plugins
+// ---------------------------------------------------------------------------
+
+export interface PluginManifest {
+	name: string;
+	title: string;
+	version: string;
+	author?: string;
+	category: "official" | "market" | "third";
+	description?: string;
+	repo?: string;
+	homepage?: string;
+	tags?: string[];
+	settings_route?: string;
+}
+
+export interface PluginListItem extends PluginManifest {
+	enabled: boolean;
+	loaded: boolean;
+}
+
+export async function listPlugins(): Promise<PluginListItem[]> {
+	const { data } = await api.get<{ plugins: PluginListItem[] }>("/plugins");
+	return data.plugins ?? [];
+}
+
+export async function setPluginEnabled(name: string, enabled: boolean) {
+	const action = enabled ? "enable" : "disable";
+	const { data } = await api.post<{
+		name: string;
+		enabled: boolean;
+		requires_restart: boolean;
+	}>(`/plugins/${encodeURIComponent(name)}/${action}`);
+	return data;
+}
+
+export async function getPluginConfig(name: string) {
+	const { data } = await api.get<{ name: string; path: string; yaml: string }>(
+		`/plugins/${encodeURIComponent(name)}/config`,
+	);
+	return data;
+}
+
+export async function updatePluginConfig(name: string, yaml: string) {
+	const { data } = await api.put<{
+		name: string;
+		path: string;
+		requires_restart: boolean;
+	}>(`/plugins/${encodeURIComponent(name)}/config`, { yaml });
+	return data;
+}
+
 function parseHeaderNumber(value: unknown) {
 	const raw = Array.isArray(value) ? value[0] : value;
 	if (raw === undefined || raw === null || raw === "") return null;

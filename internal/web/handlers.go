@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"moebot-next/internal/assets"
-	"moebot-next/internal/b30"
+	"moebot-next/internal/plugins/moesekai/assets"
+	"moebot-next/internal/plugins/moesekai/b30"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
-	"moebot-next/internal/masterdata"
-	"moebot-next/internal/musicsearch"
+	"moebot-next/internal/plugins/moesekai/masterdata"
+	"moebot-next/internal/plugins/moesekai/musicsearch"
 	"moebot-next/internal/renderer"
 
 	"github.com/gofiber/fiber/v2"

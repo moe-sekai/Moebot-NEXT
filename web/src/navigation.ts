@@ -8,26 +8,33 @@ export interface ConsoleNavItem {
   label: string
   subtitle: string
   icon: ConsoleIconName
-  section: 'main' | 'manage' | 'system'
+  section: 'main' | 'plugins' | 'manage' | 'system'
 }
 
 export const consoleNavItems: ConsoleNavItem[] = [
   { path: '/', name: 'dashboard', label: '概览', subtitle: 'Dashboard', icon: 'dashboard', section: 'main' },
   { path: '/status', name: 'status', label: '状态', subtitle: 'Runtime', icon: 'status', section: 'main' },
-  { path: '/commands', name: 'commands', label: '指令解析', subtitle: 'Parser', icon: 'command', section: 'main' },
-  { path: '/masterdata', name: 'masterdata', label: 'Masterdata', subtitle: 'Search', icon: 'masterdata', section: 'main' },
   { path: '/settings', name: 'settings', label: '设置', subtitle: 'Config', icon: 'settings', section: 'main' },
-  { path: '/bot', name: 'bot', label: 'Bot', subtitle: 'OneBot', icon: 'bot', section: 'manage' },
-  { path: '/filter', name: 'filter', label: 'Filter', subtitle: 'Gateway', icon: 'filter', section: 'manage' },
+  { path: '/bot', name: 'bot', label: 'Bot', subtitle: 'OneBot', icon: 'bot', section: 'main' },
+  { path: '/filter', name: 'filter', label: 'Filter', subtitle: 'Gateway', icon: 'filter', section: 'main' },
+
+  { path: '/plugins', name: 'plugins', label: '插件', subtitle: 'Plugins', icon: 'plugin', section: 'plugins' },
+  { path: '/plugins/market', name: 'plugins-market', label: '插件市场', subtitle: 'Marketplace', icon: 'market', section: 'plugins' },
+  { path: '/plugins/moesekai', name: 'plugins-moesekai', label: 'MoeSekai', subtitle: 'PJSK', icon: 'sparkle', section: 'plugins' },
+
+  { path: '/commands', name: 'commands', label: '指令解析', subtitle: 'Parser', icon: 'command', section: 'manage' },
+  { path: '/masterdata', name: 'masterdata', label: 'Masterdata', subtitle: 'Search', icon: 'masterdata', section: 'manage' },
   { path: '/groups', name: 'groups', label: '群组', subtitle: 'Groups', icon: 'groups', section: 'manage' },
   { path: '/users', name: 'users', label: '用户', subtitle: 'Users', icon: 'users', section: 'manage' },
   { path: '/stats', name: 'stats', label: '统计', subtitle: 'Stats', icon: 'stats', section: 'manage' },
+
   { path: '/logs', name: 'logs', label: '日志', subtitle: 'Logs', icon: 'logs', section: 'system' },
   { path: '/about', name: 'about', label: '关于', subtitle: 'About', icon: 'about', section: 'system' },
 ]
 
 export const navSectionLabels: Record<ConsoleNavItem['section'], string> = {
   main: '控制台',
+  plugins: '插件',
   manage: '管理',
   system: '系统',
 }
@@ -67,6 +74,21 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     title: 'Filter 网关',
     subtitle: '管理 OneBot 反向 WS 网关、下游 Bot 应用与过滤规则。',
     eyebrow: 'OneBot Gateway',
+  },
+  plugins: {
+    title: '插件',
+    subtitle: '管理已编译进当前进程的插件，启用/禁用并跳转到各插件设置。',
+    eyebrow: 'Plugins',
+  },
+  'plugins-market': {
+    title: '插件市场',
+    subtitle: '浏览官方与第三方（FloatTech ZeroBot-Plugin 上游）插件清单。',
+    eyebrow: 'Marketplace',
+  },
+  'plugins-moesekai': {
+    title: 'MoeSekai 插件',
+    subtitle: '管理 Project Sekai 业务相关的 masterdata、资源、API 与多区服配置。',
+    eyebrow: 'Plugin · MoeSekai',
   },
   groups: {
     title: '群组',

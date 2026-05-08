@@ -11,6 +11,9 @@ import Masterdata from '../views/Masterdata.vue'
 import Bot from '../views/Bot.vue'
 import Filter from '../views/Filter.vue'
 import Logs from '../views/Logs.vue'
+import Plugins from '../views/Plugins.vue'
+import PluginMarket from '../views/PluginMarket.vue'
+import MoesekaiSettings from '../views/MoesekaiSettings.vue'
 
 export default createRouter({
   history: createWebHistory(),
@@ -33,6 +36,9 @@ export default createRouter({
     { path: '/users', name: 'users', component: Users },
     { path: '/stats', name: 'stats', component: Stats },
     { path: '/logs', name: 'logs', component: Logs },
+    { path: '/plugins', name: 'plugins', component: Plugins },
+    { path: '/plugins/market', name: 'plugins-market', component: PluginMarket },
+    { path: '/plugins/moesekai', name: 'plugins-moesekai', component: MoesekaiSettings },
     { path: '/about', name: 'about', component: About },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],

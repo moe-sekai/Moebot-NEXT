@@ -10,20 +10,24 @@ import (
 	"syscall"
 	"time"
 
-	"moebot-next/internal/assets"
-	"moebot-next/internal/b30"
 	"moebot-next/internal/bot"
 	"moebot-next/internal/filter"
 	"moebot-next/internal/models"
+	"moebot-next/internal/plugin"
 
-	"moebot-next/internal/commandparser"
-	"moebot-next/internal/commands"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
 	"moebot-next/internal/logbuffer"
 	"moebot-next/internal/renderer"
-	"moebot-next/internal/servers"
 	"moebot-next/internal/web"
+
+	// 内置官方插件：通过空导入触发各插件的 init() 注册到 plugin.Registry。
+	// 第三方/市场插件按相同方式追加：
+	//
+	//   _ "github.com/FloatTech/ZeroBot-Plugin/plugin/example"
+	//
+	// （二期接入 zbputils/control 桥接后，上述导入即可零改动生效）
+	_ "moebot-next/internal/plugins/moesekai"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -44,11 +48,8 @@ func main() {
 	}
 	logBuffer := setupLogger(cfg.Log)
 
-	if err := ensureRuntimeDirs(cfg); err != nil {
+	if err := ensureCoreRuntimeDirs(cfg); err != nil {
 		log.Fatal().Err(err).Msg("Failed to create runtime directories")
-	}
-	if _, err := assets.Configure(cfg.Assets, cfg.Server.Region); err != nil {
-		log.Warn().Err(err).Msg("Asset CDN config is invalid; using built-in default")
 	}
 
 	db, err := database.New(cfg.Database)
@@ -57,12 +58,7 @@ func main() {
 	}
 	defer db.Close()
 
-	serverManager := servers.NewManager(cfg)
-	serverManager.LoadEnabled()
-	serverManager.StartPeriodicRefresh()
-	defer serverManager.StopPeriodicRefresh()
-
-	b30Client := b30.NewClient(cfg.B30)
+	// 通用渲染服务始终启动（裸项目核心能力之一）。
 	rendererClient := renderer.New(cfg.Renderer)
 	if err := rendererClient.StartProcess("renderer", cfg.Renderer.Port); err != nil {
 		log.Warn().Err(err).Msg("Renderer process failed to start; commands will fallback to text")
@@ -70,16 +66,9 @@ func main() {
 		defer rendererClient.StopProcess()
 	}
 
-	commandDefinitions := commandparser.Definitions(cfg.Bot.CommandAliases)
 	bot.RegisterMiddleware(db)
-	commands.RegisterAll(&commands.Deps{
-		DB:          db,
-		Renderer:    rendererClient,
-		Servers:     serverManager,
-		B30:         b30Client,
-		Definitions: commandDefinitions,
-	})
 
+	// Filter 网关：始终启动，作为所有插件共享的消息过滤层。
 	if err := seedBuiltinFilterApp(db, cfg.Bot.Driver); err != nil {
 		log.Warn().Err(err).Msg("Failed to seed builtin filter app")
 	}
@@ -89,11 +78,33 @@ func main() {
 	}
 	defer filterManager.Stop()
 
-	webServer := web.New(cfg, db, serverManager.Default().Store, rendererClient, cfgPath, serverManager.Default().Loader)
-	webServer.Servers = serverManager
+	// 构造 web.Server。Servers/Store/Loader/B30 等 PJSK 资源会在 moesekai
+	// 插件 Init 内挂回；插件未启用时这些字段保持 nil，对应路由会返回空数据。
+	webServer := web.New(cfg, db, nil, rendererClient, cfgPath, nil)
 	webServer.Logs = logBuffer
 	webServer.Filter = filterManager
 	webServer.SetupStaticFiles(webUI)
+
+	// 插件子系统：按数据库中的启用状态加载所有已注册插件。
+	pluginDataDir := pluginsDataDir(cfg)
+	if err := os.MkdirAll(pluginDataDir, 0o755); err != nil {
+		log.Warn().Err(err).Str("dir", pluginDataDir).Msg("Failed to create plugins data dir")
+	}
+	registry := plugin.NewRegistry(db.DB, pluginDataDir)
+	if err := registry.SeedDefaults(cfg.Plugins.Enabled); err != nil {
+		log.Warn().Err(err).Msg("Failed to seed plugin enable defaults")
+	}
+	registry.InitEnabled(plugin.Context{
+		Ctx:            context.Background(),
+		DB:             db,
+		Renderer:       rendererClient,
+		Filter:         filterManager,
+		Web:            webServer,
+		CoreConfig:     cfg,
+		CoreConfigPath: cfgPath,
+	})
+	defer registry.Shutdown()
+
 	go func() {
 		if err := webServer.Start(); err != nil {
 			log.Error().Err(err).Msg("Web server stopped")
@@ -129,35 +140,36 @@ func setupLogger(cfg config.LogConfig) *logbuffer.Buffer {
 	return buf
 }
 
-func ensureRuntimeDirs(cfg *config.Config) error {
+// ensureCoreRuntimeDirs 仅创建核心目录；插件相关目录由各插件在 Init 内自建。
+func ensureCoreRuntimeDirs(cfg *config.Config) error {
 	dirs := []string{
 		filepath.Dir(cfg.Database.Path),
-		cfg.Masterdata.LocalPath,
 		cfg.Renderer.Cache.Path,
-		cfg.Assets.StickerPath,
-	}
-	for _, region := range config.RegionKeys() {
-		profile := config.ResolveGameServerProfile(cfg, region)
-		dirs = append(dirs, profile.Masterdata.LocalPath, profile.Assets.StickerPath)
+		pluginsDataDir(cfg),
 	}
 	for _, dir := range dirs {
 		if dir == "" || dir == "." {
 			continue
 		}
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// seedBuiltinFilterApp ensures a "moebot-builtin" downstream app exists,
-// connecting the filter gateway to Moebot's own ZeroBot reverse-WS endpoint.
-// This realises the "Moebot is the default built-in plugin" behaviour.
+func pluginsDataDir(cfg *config.Config) string {
+	if cfg.Plugins.DataDir != "" {
+		return cfg.Plugins.DataDir
+	}
+	return "./data/plugins"
+}
+
+// seedBuiltinFilterApp 与原行为一致：确保 "moebot-builtin" 下游 app 存在。
 func seedBuiltinFilterApp(db *database.DB, drv config.DriverConfig) error {
 	const builtinName = "moebot-builtin"
 	if _, err := db.GetFilterAppByName(builtinName); err == nil {
-		return nil // already present, do not overwrite user edits
+		return nil
 	}
 	listen := drv.Listen
 	if listen == "" {

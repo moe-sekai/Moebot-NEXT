@@ -1,0 +1,174 @@
+# MoeSekai 插件子配置（data/plugins/moesekai.yml）
+#
+# 启用 moesekai 插件后由 moesekai 包加载。结构与旧版 config.yml 中的
+# PJSK 段落保持兼容，可直接整段复制粘贴。
+#
+# 各字段为可选；缺失时使用 internal/config/DefaultConfig 提供的默认值。
+
+# 默认 PJSK 区服：cn / jp / tw / kr / en
+region: "jp"
+
+# 自定义指令别名（替换关键词）。留空保留预设。
+command_aliases:
+  查卡: []
+  查曲: []
+
+masterdata:
+  region: "jp"
+  source: "moesekai" # moesekai / haruki / 8823 / custom
+  url: "https://sk.exmeaning.com/master"
+  fallback_url: "https://sekaimaster.exmeaning.com/master"
+  custom_url: ""
+  custom_fallback_url: ""
+  local_path: "./data/master"
+  refresh_interval: 3600
+
+sekai_api:
+  enabled: false
+  base_url: "https://seka-api.exmeaning.com/api/{region}"
+  region: "cn"
+  headers: {}
+  timeout: 10
+  rate_limit: 30
+
+suite_api:
+  enabled: true
+  url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
+  headers: {}
+  timeout: 10
+
+ranking_api:
+  base_url: "https://rks.exmeaning.com"
+  region: "cn"
+  timeout: 10
+
+b30:
+  constants_url: "https://moe.exmeaning.com/data/pjskb30/merged_chart.csv"
+  timeout: 10
+  refresh_interval: 21600
+
+assets:
+  region: "jp"
+  source: "moesekai"        # moesekai / sekai_best / custom
+  mirror: "main"            # main / backup / overseas / overseas_backup
+  cdn_source: "cn_main"
+  base_url: "https://storage.exmeaning.com/sekai-jp-assets"
+  custom_base_url: ""
+  music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+  chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
+  sticker_path: "./assets/stickers"
+
+# 多服务器配置。默认只启用日服；用户可用 /cn绑定、/tw绑定、/kr绑定、/en绑定
+# 绑定多个服务器账号，并用 /cn查卡、/en查曲 等前缀临时指定服务器。
+game_servers:
+  jp:
+    enabled: true
+    masterdata:
+      region: "jp"
+      source: "moesekai"
+      local_path: "./data/master/jp"
+      refresh_interval: 3600
+    assets:
+      region: "jp"
+      source: "moesekai"
+      mirror: "main"
+      music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
+      sticker_path: "./assets/stickers"
+    sekai_api:
+      enabled: false
+      base_url: "https://seka-api.exmeaning.com"
+      region: "jp"
+      headers: {}
+      timeout: 10
+      rate_limit: 30
+    suite_api:
+      enabled: true
+      url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
+      headers: {}
+      timeout: 10
+    ranking_api:
+      base_url: "https://rks.exmeaning.com"
+      region: "jp"
+      timeout: 10
+  cn:
+    enabled: false
+    masterdata:
+      region: "cn"
+      source: "moesekai"
+      local_path: "./data/master/cn"
+      refresh_interval: 3600
+    assets:
+      region: "cn"
+      source: "moesekai"
+      mirror: "main"
+      music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
+      sticker_path: "./assets/stickers"
+    sekai_api:
+      enabled: false
+      base_url: "https://seka-api.exmeaning.com"
+      region: "cn"
+      headers: {}
+      timeout: 10
+      rate_limit: 30
+    suite_api:
+      enabled: true
+      url: "https://suite-api.haruki.seiunx.com/public/{region}/suite/{uid}"
+      headers: {}
+      timeout: 10
+    ranking_api:
+      base_url: "https://rks.exmeaning.com"
+      region: "cn"
+      timeout: 10
+  tw:
+    enabled: false
+    masterdata:
+      region: "tw"
+      source: "haruki"
+      local_path: "./data/master/tw"
+      refresh_interval: 3600
+    assets:
+      region: "tw"
+      source: "sekai_best"
+      music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
+      sticker_path: "./assets/stickers"
+    ranking_api:
+      base_url: "https://rks.exmeaning.com"
+      region: "tw"
+      timeout: 10
+  kr:
+    enabled: false
+    masterdata:
+      region: "kr"
+      source: "haruki"
+      local_path: "./data/master/kr"
+      refresh_interval: 3600
+    assets:
+      region: "kr"
+      source: "sekai_best"
+      music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
+      sticker_path: "./assets/stickers"
+    ranking_api:
+      base_url: "https://rks.exmeaning.com"
+      region: "kr"
+      timeout: 10
+  en:
+    enabled: false
+    masterdata:
+      region: "en"
+      source: "haruki"
+      local_path: "./data/master/en"
+      refresh_interval: 3600
+    assets:
+      region: "en"
+      source: "sekai_best"
+      music_alias_url: "https://moe.exmeaning.com/data/music_alias/music_aliases.json"
+      chart_source_url: "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
+      sticker_path: "./assets/stickers"
+    ranking_api:
+      base_url: "https://rks.exmeaning.com"
+      region: "en"
+      timeout: 10

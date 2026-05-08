@@ -25,6 +25,17 @@ type Config struct {
 	Assets      AssetsConfig                `yaml:"assets"`
 	GameServers map[string]GameServerConfig `yaml:"game_servers"`
 	Log         LogConfig                   `yaml:"log"`
+	Plugins     PluginsConfig               `yaml:"plugins"`
+}
+
+// PluginsConfig 配置插件子系统。
+//
+//   - DataDir：插件子配置文件目录，默认 "./data/plugins"。
+//   - Enabled：首次启动时默认启用的插件名列表（仅在数据库尚无对应记录时
+//     生效；之后 WebUI 的开关状态成为唯一真值）。
+type PluginsConfig struct {
+	DataDir string   `yaml:"data_dir"`
+	Enabled []string `yaml:"enabled"`
 }
 
 // ServerConfig selects the default PJSK game server region.
@@ -254,6 +265,10 @@ func DefaultConfig() *Config {
 		Log: LogConfig{
 			Level:  "info",
 			Format: "console",
+		},
+		Plugins: PluginsConfig{
+			DataDir: "./data/plugins",
+			Enabled: []string{"moesekai"},
 		},
 	}
 }

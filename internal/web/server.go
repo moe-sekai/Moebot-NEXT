@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"time"
 
-	"moebot-next/internal/b30"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
 	"moebot-next/internal/filter"
 	"moebot-next/internal/logbuffer"
-	"moebot-next/internal/masterdata"
+	"moebot-next/internal/plugins/moesekai/b30"
+	"moebot-next/internal/plugins/moesekai/masterdata"
+	"moebot-next/internal/plugins/moesekai/servers"
 	"moebot-next/internal/renderer"
-	"moebot-next/internal/servers"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -90,19 +90,12 @@ func (s *Server) registerRoutes() {
 	api.Get("/status", s.handleStatus)
 	api.Get("/masterdata/summary", s.handleMasterdataSummary)
 	api.Get("/renderer/health", s.handleRendererHealth)
-	api.Get("/renderer/cache/card-thumbnails", s.handleRendererCardThumbnailCacheStatus)
-	api.Post("/renderer/cache/card-thumbnails/preload", s.handleRendererCardThumbnailPreload)
 	api.Get("/renderer/previews", s.handleRendererPreviews)
 	api.Get("/renderer/previews/:id/image", s.handleRendererPreviewImage)
 	api.Get("/commands/recent", s.handleRecentCommands)
-	api.Get("/commands/definitions", s.handleCommandDefinitions)
-	api.Get("/commands/parse", s.handleParseCommand)
-	api.Get("/commands/parse/image", s.handleParseCommandImage)
-	api.Get("/commands/aliases", s.handleGetCommandAliases)
-	api.Put("/commands/aliases", s.handleUpdateCommandAliases)
-	api.Post("/commands/aliases/reset", s.handleResetCommandAliases)
-	api.Get("/commands/aliases/export", s.handleExportCommandAliases)
-	api.Post("/commands/aliases/import", s.handleImportCommandAliases)
+	// /commands/definitions, /commands/parse{,/image}, /commands/aliases*,
+	// /renderer/cache/card-thumbnails* are registered by the moesekai plugin
+	// (internal/plugins/moesekai/webroutes/) at plugin Init time.
 	api.Get("/config/public", s.handlePublicConfig)
 	api.Put("/config/public", s.handleUpdatePublicConfig)
 	api.Post("/config/sekai/test-system", s.handleTestSekaiSystem)
@@ -152,6 +145,13 @@ func (s *Server) registerRoutes() {
 	api.Get("/search/events", s.handleSearchEvents)
 	api.Get("/search/gachas", s.handleSearchGachas)
 	api.Get("/search/virtual-lives", s.handleSearchVirtualLives)
+
+	// Plugins
+	api.Get("/plugins", s.handleListPlugins)
+	api.Post("/plugins/:name/enable", s.handleSetPluginEnabled(true))
+	api.Post("/plugins/:name/disable", s.handleSetPluginEnabled(false))
+	api.Get("/plugins/:name/config", s.handleGetPluginConfig)
+	api.Put("/plugins/:name/config", s.handleUpdatePluginConfig)
 
 	// TODO: auth middleware, settings, renderer preview, WebSocket
 }
