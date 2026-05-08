@@ -148,6 +148,8 @@ func (s *Server) registerRoutes() {
 	api.Post("/plugins/:name/disable", s.handleSetPluginEnabled(false))
 	api.Get("/plugins/:name/config", s.handleGetPluginConfig)
 	api.Put("/plugins/:name/config", s.handleUpdatePluginConfig)
+	api.Get("/plugins/:name/settings", s.handleGetPluginSettings)
+	api.Put("/plugins/:name/settings", s.handleUpdatePluginSettings)
 
 	// TODO: auth middleware, settings, renderer preview, WebSocket
 }

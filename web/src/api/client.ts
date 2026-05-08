@@ -443,6 +443,29 @@ export interface PluginManifest {
 export interface PluginListItem extends PluginManifest {
 	enabled: boolean;
 	loaded: boolean;
+	configurable: boolean;
+}
+
+export interface PluginSettingChoice {
+	label: string;
+	value: string;
+}
+
+export interface PluginSettingField {
+	key: string;
+	label: string;
+	type: "string" | "int" | "bool" | "select" | "textarea";
+	default?: unknown;
+	description?: string;
+	group?: string;
+	options?: PluginSettingChoice[];
+}
+
+export interface PluginSettingsResponse {
+	name: string;
+	schema: PluginSettingField[];
+	values: Record<string, unknown>;
+	configurable: boolean;
 }
 
 export async function listPlugins(): Promise<PluginListItem[]> {
@@ -455,6 +478,7 @@ export async function setPluginEnabled(name: string, enabled: boolean) {
 	const { data } = await api.post<{
 		name: string;
 		enabled: boolean;
+		loaded: boolean;
 		requires_restart: boolean;
 	}>(`/plugins/${encodeURIComponent(name)}/${action}`);
 	return data;
@@ -463,6 +487,24 @@ export async function setPluginEnabled(name: string, enabled: boolean) {
 export async function getPluginConfig(name: string) {
 	const { data } = await api.get<{ name: string; path: string; yaml: string }>(
 		`/plugins/${encodeURIComponent(name)}/config`,
+	);
+	return data;
+}
+
+export async function getPluginSettings(name: string): Promise<PluginSettingsResponse> {
+	const { data } = await api.get<PluginSettingsResponse>(
+		`/plugins/${encodeURIComponent(name)}/settings`,
+	);
+	return data;
+}
+
+export async function updatePluginSettings(
+	name: string,
+	values: Record<string, unknown>,
+): Promise<PluginSettingsResponse> {
+	const { data } = await api.put<PluginSettingsResponse>(
+		`/plugins/${encodeURIComponent(name)}/settings`,
+		{ values },
 	);
 	return data;
 }

@@ -23,12 +23,12 @@ const (
 // SettingField 描述一项可在 WebUI 表单中呈现的设置项。
 // 字段会被 JSON 化给前端，前端按 type 渲染。
 type SettingField struct {
-	Key         string         `json:"key"`
-	Label       string         `json:"label"`
-	Type        string         `json:"type"`        // string / int / bool / select / textarea
-	Default     any            `json:"default,omitempty"`
-	Description string         `json:"description,omitempty"`
-	Group       string         `json:"group,omitempty"`
+	Key         string          `json:"key"`
+	Label       string          `json:"label"`
+	Type        string          `json:"type"` // string / int / bool / select / textarea
+	Default     any             `json:"default,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Group       string          `json:"group,omitempty"`
 	Options     []SettingChoice `json:"options,omitempty"`
 }
 
@@ -40,19 +40,31 @@ type SettingChoice struct {
 
 // Manifest 描述一个插件的元信息，用于 WebUI 展示。
 type Manifest struct {
-	Name        string         `json:"name"`               // 唯一标识（kebab-case 或 snake_case）
-	Title       string         `json:"title"`              // 显示名
-	Version     string         `json:"version"`            // 语义化版本
-	Author      string         `json:"author,omitempty"`
-	Category    Category       `json:"category"`
-	Description string         `json:"description,omitempty"`
-	Repo        string         `json:"repo,omitempty"`     // 仓库链接，用于"插件市场"
-	Homepage    string         `json:"homepage,omitempty"`
-	Tags        []string       `json:"tags,omitempty"`
+	Name        string   `json:"name"`    // 唯一标识（kebab-case 或 snake_case）
+	Title       string   `json:"title"`   // 显示名
+	Version     string   `json:"version"` // 语义化版本
+	Author      string   `json:"author,omitempty"`
+	Category    Category `json:"category"`
+	Description string   `json:"description,omitempty"`
+	Repo        string   `json:"repo,omitempty"` // 仓库链接，用于"插件市场"
+	Homepage    string   `json:"homepage,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 	// SettingsRoute 指定 WebUI 中跳转到该插件设置页的路径，例如 "/plugins/moesekai"。
 	// 留空表示插件没有专属设置页。
 	SettingsRoute string         `json:"settings_route,omitempty"`
 	Settings      []SettingField `json:"settings,omitempty"`
+}
+
+// Configurable 是一个可选接口：插件实现后，WebUI 即可基于
+// Manifest.Settings 渲染表单读写其当前值，无需用户手编 YAML。
+//
+// 实现者应保证：
+//   - GetSettings 返回的 key 与 Manifest.Settings 中声明的 Key 一致；
+//   - UpdateSettings 收到的 map 中可能只包含部分字段，未给出的字段保持原值；
+//   - 写入后内存与持久化（data/plugins/<name>.yml）保持一致。
+type Configurable interface {
+	GetSettings() (map[string]any, error)
+	UpdateSettings(values map[string]any) error
 }
 
 // Plugin 是所有插件需实现的最小接口。
@@ -75,11 +87,11 @@ type Context struct {
 	Ctx context.Context
 
 	// 全局核心依赖
-	DB         any // *database.DB
-	Renderer   any // *renderer.Client
-	Filter     any // *filter.Manager
-	Web        any // *web.Server
-	Bot        any // *bot.Bot
+	DB       any // *database.DB
+	Renderer any // *renderer.Client
+	Filter   any // *filter.Manager
+	Web      any // *web.Server
+	Bot      any // *bot.Bot
 
 	// 插件相关路径
 	PluginName       string // 插件名（用于日志）

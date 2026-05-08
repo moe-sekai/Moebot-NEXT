@@ -123,15 +123,49 @@ func (r *Registry) IsEnabled(name string) bool {
 	return s.Enabled
 }
 
-// SetEnabled 持久化启用状态变更。变更不会重新加载插件 —— 调用者应提示用户重启。
+// SetEnabled 持久化启用状态变更。
+//
+//   - enabled=false 时立即触发该插件已注册的 OnShutdown 钩子（例如停止
+//     周期任务、断开外部连接），从而无需重启即可"停服"。
+//   - enabled=true 仍需要进程重启才会重新 Init（webroutes / 命令注册等无
+//     法在 fiber/zerobot 运行期安全重复挂载）。
 func (r *Registry) SetEnabled(name string, enabled bool) error {
+	found := false
 	for _, p := range r.plugins {
 		if p.Manifest().Name == name {
-			s := models.PluginState{Name: name, Enabled: enabled, UpdatedAt: time.Now()}
-			return r.db.Save(&s).Error
+			found = true
+			break
 		}
 	}
-	return errors.New("plugin not found: " + name)
+	if !found {
+		return errors.New("plugin not found: " + name)
+	}
+	s := models.PluginState{Name: name, Enabled: enabled, UpdatedAt: time.Now()}
+	if err := r.db.Save(&s).Error; err != nil {
+		return err
+	}
+	if !enabled {
+		r.mu.Lock()
+		ctx, ok := r.contexts[name]
+		if ok {
+			delete(r.contexts, name)
+		}
+		r.mu.Unlock()
+		if ok && ctx != nil {
+			log.Info().Str("plugin", name).Msg("plugin disabled, running shutdown hooks")
+			ctx.RunShutdownHooks()
+		}
+	}
+	return nil
+}
+
+// IsLoaded 返回插件当前是否已 Init 且未 Shutdown。与 IsEnabled 不同，
+// 后者反映持久化偏好；本方法反映运行期实际状态。
+func (r *Registry) IsLoaded(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.contexts[name]
+	return ok
 }
 
 // Plugins 返回 Registry 里的插件副本（按名字典序）。

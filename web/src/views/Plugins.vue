@@ -8,7 +8,10 @@
 
     <UiAlert v-if="error" variant="destructive" title="加载失败">{{ error }}</UiAlert>
     <UiAlert v-if="restartNotice" variant="info" title="需要重启">
-      已修改启用状态，重启 moebot 进程后变更才会生效。
+      已启用插件，重启 moebot 进程后才会真正加载（注册命令 / WebUI 路由）。
+    </UiAlert>
+    <UiAlert v-if="disabledNotice" variant="info" title="已即时禁用">
+      插件后台任务已停止；持久化偏好已保存。
     </UiAlert>
 
     <UiCard v-if="loading && !plugins.length">
@@ -28,7 +31,8 @@
           <div><dt>名称</dt><dd>{{ p.name }}</dd></div>
           <div v-if="p.author"><dt>作者</dt><dd>{{ p.author }}</dd></div>
           <div v-if="p.repo"><dt>仓库</dt><dd><a :href="p.repo" target="_blank" rel="noopener">{{ p.repo }}</a></dd></div>
-          <div><dt>启用状态</dt><dd>{{ p.enabled ? '已启用' : '已禁用' }}</dd></div>
+          <div><dt>启用偏好</dt><dd>{{ p.enabled ? '已启用' : '已禁用' }}</dd></div>
+          <div><dt>运行状态</dt><dd>{{ p.loaded ? '运行中' : '已停止' }}</dd></div>
         </dl>
         <div class="actions">
           <UiButton
@@ -64,6 +68,7 @@ const loading = ref(false)
 const error = ref('')
 const busy = ref<string | null>(null)
 const restartNotice = ref(false)
+const disabledNotice = ref(false)
 
 onMounted(load)
 
@@ -84,7 +89,14 @@ async function toggle(p: PluginListItem) {
   try {
     const result = await setPluginEnabled(p.name, !p.enabled)
     p.enabled = result.enabled
-    if (result.requires_restart) restartNotice.value = true
+    p.loaded = result.loaded
+    if (result.requires_restart) {
+      restartNotice.value = true
+      disabledNotice.value = false
+    } else {
+      disabledNotice.value = true
+      restartNotice.value = false
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '操作失败。'
   } finally {

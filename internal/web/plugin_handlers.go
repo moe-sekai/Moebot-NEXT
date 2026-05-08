@@ -10,8 +10,9 @@ import (
 
 type pluginListItem struct {
 	plugin.Manifest
-	Enabled bool `json:"enabled"`
-	Loaded  bool `json:"loaded"`
+	Enabled      bool `json:"enabled"`
+	Loaded       bool `json:"loaded"`
+	Configurable bool `json:"configurable"`
 }
 
 // handleListPlugins 返回所有已注册插件的 manifest + 启用状态。
@@ -23,11 +24,11 @@ func (s *Server) handleListPlugins(c *fiber.Ctx) error {
 	out := []pluginListItem{}
 	for _, p := range reg.Plugins() {
 		m := p.Manifest()
-		enabled := reg.IsEnabled(m.Name)
 		out = append(out, pluginListItem{
-			Manifest: m,
-			Enabled:  enabled,
-			Loaded:   enabled,
+			Manifest:     m,
+			Enabled:      reg.IsEnabled(m.Name),
+			Loaded:       reg.IsLoaded(m.Name),
+			Configurable: isConfigurable(p),
 		})
 	}
 	return c.JSON(fiber.Map{"plugins": out})
@@ -51,10 +52,13 @@ func (s *Server) handleSetPluginEnabled(enabled bool) fiber.Handler {
 		if err := reg.SetEnabled(name, enabled); err != nil {
 			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 		}
+		// 禁用即时生效（registry 已触发 OnShutdown 钩子）；
+		// 启用仍需重启以重新挂载 webroutes/命令。
 		return c.JSON(fiber.Map{
 			"name":             name,
 			"enabled":          enabled,
-			"requires_restart": true,
+			"loaded":           reg.IsLoaded(name),
+			"requires_restart": enabled,
 		})
 	}
 }
@@ -108,6 +112,73 @@ func (s *Server) handleUpdatePluginConfig(c *fiber.Ctx) error {
 		"path":             path,
 		"requires_restart": true,
 	})
+}
+
+// handleGetPluginSettings 返回 schema (Manifest.Settings) + 当前值。
+// 仅当插件实现了 plugin.Configurable 时才返回 values；否则 values 为空。
+func (s *Server) handleGetPluginSettings(c *fiber.Ctx) error {
+	reg := plugin.Global()
+	if reg == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "plugin registry not ready")
+	}
+	name := c.Params("name")
+	p := reg.Lookup(name)
+	if p == nil {
+		return fiber.NewError(fiber.StatusNotFound, "plugin not found")
+	}
+	m := p.Manifest()
+	values := map[string]any{}
+	if cp, ok := p.(plugin.Configurable); ok {
+		v, err := cp.GetSettings()
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		if v != nil {
+			values = v
+		}
+	}
+	return c.JSON(fiber.Map{
+		"name":         name,
+		"schema":       m.Settings,
+		"values":       values,
+		"configurable": isConfigurable(p),
+	})
+}
+
+// handleUpdatePluginSettings 接收 {values: {key: any}}，调用 Configurable.UpdateSettings。
+func (s *Server) handleUpdatePluginSettings(c *fiber.Ctx) error {
+	reg := plugin.Global()
+	if reg == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "plugin registry not ready")
+	}
+	name := c.Params("name")
+	p := reg.Lookup(name)
+	if p == nil {
+		return fiber.NewError(fiber.StatusNotFound, "plugin not found")
+	}
+	cp, ok := p.(plugin.Configurable)
+	if !ok {
+		return fiber.NewError(fiber.StatusBadRequest, "plugin is not configurable")
+	}
+	var body struct {
+		Values map[string]any `json:"values"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	if err := cp.UpdateSettings(body.Values); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	values, _ := cp.GetSettings()
+	if values == nil {
+		values = map[string]any{}
+	}
+	return c.JSON(fiber.Map{"name": name, "values": values})
+}
+
+func isConfigurable(p plugin.Plugin) bool {
+	_, ok := p.(plugin.Configurable)
+	return ok
 }
 
 func pluginsDir() string {

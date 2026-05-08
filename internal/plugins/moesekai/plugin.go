@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
@@ -23,8 +24,13 @@ import (
 
 const PluginName = "moesekai"
 
-// pluginImpl implements plugin.Plugin for the official MoeSekai plugin.
-type pluginImpl struct{}
+// pluginImpl implements plugin.Plugin (and plugin.Configurable) for the
+// official MoeSekai plugin. Init 后会缓存 ctx/cfg 引用，供 schema 读写使用。
+type pluginImpl struct {
+	mu         sync.RWMutex
+	cfg        *config.Config // shared core config (live)
+	configPath string         // data/plugins/moesekai.yml
+}
 
 // Manifest returns metadata exposed to the WebUI plugin list.
 func (p *pluginImpl) Manifest() plugin.Manifest {
@@ -38,7 +44,60 @@ func (p *pluginImpl) Manifest() plugin.Manifest {
 		Homepage:      "https://github.com/moe-sekai/Moebot-NEXT",
 		SettingsRoute: "/plugins/moesekai",
 		Tags:          []string{"pjsk", "official"},
+		Settings: []plugin.SettingField{
+			{
+				Key:         "region",
+				Label:       "默认游戏服 (region)",
+				Type:        "select",
+				Group:       "基础",
+				Description: "默认查询使用的游戏服，影响 masterdata / sekai_api 等。",
+				Options: []plugin.SettingChoice{
+					{Label: "日服 (JP)", Value: config.RegionJP},
+					{Label: "国服 (CN)", Value: config.RegionCN},
+					{Label: "台服 (TW)", Value: config.RegionTW},
+					{Label: "韩服 (KR)", Value: config.RegionKR},
+					{Label: "国际服 (EN)", Value: config.RegionEN},
+				},
+			},
+		},
 	}
+}
+
+// GetSettings 实现 plugin.Configurable，按 Manifest.Settings 中声明的 Key
+// 返回当前生效值（优先取内存里的 *config.Config，回退插件 yaml）。
+func (p *pluginImpl) GetSettings() (map[string]any, error) {
+	p.mu.RLock()
+	cfg := p.cfg
+	p.mu.RUnlock()
+	out := map[string]any{}
+	if cfg != nil {
+		out["region"] = cfg.Server.Region
+	}
+	return out, nil
+}
+
+// UpdateSettings 实现 plugin.Configurable，按 key 写回内存配置 + 插件 yaml。
+// 未识别的 key 会被忽略。
+func (p *pluginImpl) UpdateSettings(values map[string]any) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.cfg == nil || p.configPath == "" {
+		return errors.New("moesekai: plugin not initialized")
+	}
+	// 读现有 yaml 作为基线，避免覆盖未管理字段。
+	var sub Config
+	_ = plugin.ReadYAMLInto(p.configPath, &sub)
+
+	if v, ok := values["region"]; ok {
+		region, ok := v.(string)
+		if !ok || region == "" {
+			return fmt.Errorf("moesekai: invalid region value %v", v)
+		}
+		p.cfg.Server.Region = region
+		sub.Region = region
+	}
+	config.NormalizeConfig(p.cfg)
+	return SaveConfigFile(p.configPath, &sub)
 }
 
 // Init runs the PJSK boot sequence when the plugin is enabled:
@@ -61,6 +120,12 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 		log.Warn().Err(err).Str("path", ctx.PluginConfigPath).Msg("moesekai: failed to read plugin config, using defaults")
 	}
 	sub.applyTo(cfg)
+
+	// 缓存引用以支持 plugin.Configurable 的 GetSettings/UpdateSettings。
+	p.mu.Lock()
+	p.cfg = cfg
+	p.configPath = ctx.PluginConfigPath
+	p.mu.Unlock()
 
 	// 2) Ensure PJSK runtime directories exist.
 	if err := ensureMoesekaiDirs(cfg); err != nil {

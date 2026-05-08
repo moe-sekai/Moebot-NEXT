@@ -1,7 +1,10 @@
 <template>
   <n-config-provider>
-    <n-message-provider>
-      <div class="app-shell">
+    <n-loading-bar-provider>
+      <n-notification-provider>
+        <n-dialog-provider>
+          <n-message-provider>
+            <div class="app-shell">
         <aside class="app-sidebar" aria-label="Moebot NEXT 控制台侧边栏">
           <RouterLink to="/" class="brand" aria-label="返回概览">
             <MoebotLogo color="var(--accent-pink)" :height="60" />
@@ -29,14 +32,18 @@
             <RouterView />
           </main>
         </div>
-      </div>
-    </n-message-provider>
+            </div>
+          </n-message-provider>
+        </n-dialog-provider>
+      </n-notification-provider>
+    </n-loading-bar-provider>
   </n-config-provider>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { NConfigProvider, NMessageProvider, NDialogProvider, NNotificationProvider, NLoadingBarProvider } from 'naive-ui'
 import ConsoleNav from './components/layout/ConsoleNav.vue'
 import MoebotLogo from './components/MoebotLogo.vue'
 import { getPageDescription } from './navigation'

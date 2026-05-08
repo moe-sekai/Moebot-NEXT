@@ -16,10 +16,11 @@
       已写入 <code>{{ path }}</code>，重启 moebot 后 PJSK 业务才会以新配置启动。
     </UiAlert>
     <UiAlert variant="info" title="说明">
-      此页直接编辑插件子配置文件 <code>data/plugins/moesekai.yml</code>。
-      富表单 UI 仍在迁移中（旧版位于 <RouterLink to="/settings">设置</RouterLink>），
-      期间可在此处使用 YAML 直接编辑。
+      下方「常用设置」由插件通过 <code>plugin.Configurable</code> 接口暴露，可即时生效写回。
+      尚未覆盖的字段请使用底部 YAML 编辑器（<RouterLink to="/settings">高级设置</RouterLink>）。
     </UiAlert>
+
+    <PluginSettingsForm plugin-name="moesekai" title="MoeSekai 常用设置" />
 
     <UiCard>
       <div class="card-heading">
@@ -38,6 +39,7 @@ import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { getPluginConfig, updatePluginConfig } from '../api/client'
 import PageHeader from '../components/PageHeader.vue'
+import PluginSettingsForm from '../components/PluginSettingsForm.vue'
 import UiAlert from '../components/ui/UiAlert.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import UiCard from '../components/ui/UiCard.vue'
