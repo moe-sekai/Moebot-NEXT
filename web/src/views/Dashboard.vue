@@ -30,8 +30,15 @@
       variant="warning"
       title="渲染服务预载未完成"
     >
-      当前 {{ thumbnailCache?.region_label ?? '默认区服' }} 卡牌缩略图覆盖率仅 {{ thumbnailCacheProgress }}%（{{ thumbnailCache?.cached ?? 0 }}/{{ thumbnailCache?.total ?? 0 }}），可能导致部分渲染缺图。建议前往「设置 → Renderer → 卡牌缩略图预载」点击「预载卡牌缩略图」补齐。
+      当前 {{ thumbnailCache?.region_label ?? '默认区服' }} 卡牌缩略图覆盖率仅 {{ thumbnailCacheProgress }}%（{{ thumbnailCache?.cached ?? 0 }}/{{ thumbnailCache?.total ?? 0 }}），可能导致部分渲染缺图。
       <span style="display: block; margin-top: 4px; opacity: 0.75;">超过 99% 后此提醒会自动消失（少量素材无法加载属正常情况）。</span>
+      <div class="thumbnail-preload-actions">
+        <UiButton size="sm" :loading="preloadStarting" :disabled="preloadStarting" @click="startPreloadFromDashboard">
+          {{ preloadStarting ? '正在启动…' : '立即预载缩略图' }}
+        </UiButton>
+        <UiButton size="sm" variant="outline" @click="goToRendererSettings">前往设置</UiButton>
+        <span v-if="preloadHint" class="thumbnail-preload-hint">{{ preloadHint }}</span>
+      </div>
     </UiAlert>
 
     <div v-if="loading" class="status-grid">
@@ -80,7 +87,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onBeforeUnmount, ref } from "vue";
+import { useRouter } from "vue-router";
 import {
 	getHealth,
 	getMasterdataSummary,
@@ -89,6 +97,7 @@ import {
 	getRendererCardThumbnailCacheStatus,
 	getRendererHealth,
 	getStatus,
+	preloadRendererCardThumbnails,
 } from "../api/client";
 import type {
 	HealthResponse,
@@ -126,6 +135,11 @@ const pageError = ref("");
 const summaryError = ref("");
 const rendererError = ref("");
 const recentError = ref("");
+const preloadStarting = ref(false);
+const preloadHint = ref("");
+let thumbnailPollTimer: ReturnType<typeof window.setTimeout> | null = null;
+
+const router = useRouter();
 
 const webPortLabel = computed(() => {
 	const port = publicConfig.value?.web.port ?? status.value?.web.port ?? 8080;
@@ -236,11 +250,52 @@ async function loadRecentCommands() {
 
 async function loadThumbnailCacheStatus() {
 	try {
-		thumbnailCache.value = await getRendererCardThumbnailCacheStatus();
+		const data = await getRendererCardThumbnailCacheStatus();
+		thumbnailCache.value = data;
+		if (data?.running) scheduleThumbnailPoll();
 	} catch {
 		thumbnailCache.value = null;
 	}
 }
+
+function scheduleThumbnailPoll() {
+	clearThumbnailPoll();
+	thumbnailPollTimer = window.setTimeout(async () => {
+		thumbnailPollTimer = null;
+		await loadThumbnailCacheStatus();
+	}, 2000);
+}
+
+function clearThumbnailPoll() {
+	if (thumbnailPollTimer) {
+		window.clearTimeout(thumbnailPollTimer);
+		thumbnailPollTimer = null;
+	}
+}
+
+async function startPreloadFromDashboard() {
+	if (preloadStarting.value) return;
+	preloadStarting.value = true;
+	preloadHint.value = "";
+	try {
+		const data = await preloadRendererCardThumbnails();
+		thumbnailCache.value = data;
+		preloadHint.value = `已开始预载：${data.cached}/${data.total}，可在「设置」查看进度。`;
+		scheduleThumbnailPoll();
+	} catch (err) {
+		preloadHint.value = normalizeError(err, "启动预载失败");
+	} finally {
+		preloadStarting.value = false;
+	}
+}
+
+function goToRendererSettings() {
+	router.push({ path: "/settings", hash: "#renderer-cache" });
+}
+
+onBeforeUnmount(() => {
+	clearThumbnailPoll();
+});
 
 function normalizeError(err: unknown, fallback: string) {
 	return err instanceof Error ? `${fallback}：${err.message}` : fallback;

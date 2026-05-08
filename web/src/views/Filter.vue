@@ -61,6 +61,13 @@
           <input type="text" v-model="gatewayDraft.bot_id" />
         </label>
         <label class="gw-field">
+          <span>
+            Access Token
+            <small class="gw-field__hint">留空表示不鉴权；OneBot 客户端通过 Authorization 头或 ?access_token= 传入</small>
+          </span>
+          <input type="text" v-model="gatewayDraft.access_token" placeholder="留空 = 不鉴权" autocomplete="off" />
+        </label>
+        <label class="gw-field">
           <span>User-Agent</span>
           <input type="text" v-model="gatewayDraft.user_agent" />
         </label>
@@ -783,6 +790,7 @@ async function runImport() {
 }
 .gw-field--toggle { flex-direction: row; align-items: center; gap: 6px; padding-top: 18px; }
 .gw-field--toggle input { margin: 0; }
+.gw-field__hint { display: block; margin-top: 2px; font-size: 11px; font-weight: normal; color: var(--muted-foreground, #71717a); }
 .gw-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .gw-note { font-size: 12px; color: var(--muted-foreground, #71717a); }
 

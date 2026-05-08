@@ -355,7 +355,7 @@
               <strong>普通图片约 {{ rendererOutputScaleText }}，谱面约 {{ chartRendererOutputScaleText }}；越高越清晰但图片体积和耗时越大。</strong>
             </div>
           </div>
-          <div class="renderer-cache-panel">
+          <div id="renderer-cache" class="renderer-cache-panel">
             <div class="renderer-cache-panel__header">
               <div>
                 <strong>卡牌缩略图预载</strong>

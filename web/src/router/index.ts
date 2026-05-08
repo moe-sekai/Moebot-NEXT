@@ -14,6 +14,13 @@ import Logs from '../views/Logs.vue'
 
 export default createRouter({
   history: createWebHistory(),
+  scrollBehavior(to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (to.hash) {
+      return { el: to.hash, top: 80, behavior: 'smooth' }
+    }
+    return { left: 0, top: 0 }
+  },
   routes: [
     { path: '/', name: 'dashboard', component: Dashboard },
     { path: '/status', name: 'status', component: Status },

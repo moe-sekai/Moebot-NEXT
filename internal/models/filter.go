@@ -9,17 +9,22 @@ import "time"
 // (see FilterTemplate) — they used to live here as DefaultUserIDRules / DefaultGroupIDRules
 // but were migrated out as part of the template refactor.
 type FilterGateway struct {
-	ID         uint      `gorm:"primarykey" json:"id"`
-	Enabled    bool      `gorm:"default:true" json:"enabled"`
-	Host       string    `gorm:"default:'0.0.0.0'" json:"host"`
-	Port       int       `gorm:"default:3939" json:"port"`
-	Suffix     string    `gorm:"default:'/ws'" json:"suffix"`
-	BotID      string    `gorm:"default:'10000'" json:"bot_id"`
-	UserAgent  string    `gorm:"default:'Moebot'" json:"user_agent"`
-	BufferSize int       `gorm:"default:4096" json:"buffer_size"`
-	SleepTime  float32   `gorm:"default:5" json:"sleep_time"`
-	Debug      bool      `json:"debug"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID uint `gorm:"primarykey" json:"id"`
+	// Enabled toggles the gateway on/off.
+	Enabled bool   `gorm:"default:true" json:"enabled"`
+	Host    string `gorm:"default:'0.0.0.0'" json:"host"`
+	Port    int    `gorm:"default:3939" json:"port"`
+	Suffix  string `gorm:"default:'/ws'" json:"suffix"`
+	BotID   string `gorm:"default:'10000'" json:"bot_id"`
+	// AccessToken, if non-empty, is required from upstream OneBot clients
+	// connecting to the gateway. Accepted via header `Authorization: Bearer <t>`
+	// / `Authorization: Token <t>` or query string `?access_token=<t>`.
+	AccessToken string    `gorm:"default:''" json:"access_token"`
+	UserAgent   string    `gorm:"default:'Moebot'" json:"user_agent"`
+	BufferSize  int       `gorm:"default:4096" json:"buffer_size"`
+	SleepTime   float32   `gorm:"default:5" json:"sleep_time"`
+	Debug       bool      `json:"debug"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // FilterTemplate is a reusable bundle of filter rules that one or more

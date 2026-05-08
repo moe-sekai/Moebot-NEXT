@@ -662,6 +662,7 @@ export interface FilterGatewayPayload {
 	port: number;
 	suffix: string;
 	bot_id: string;
+	access_token: string;
 	user_agent: string;
 	buffer_size: number;
 	sleep_time: number;

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -227,6 +228,17 @@ func (m *Manager) handleUpstream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "filter gateway not ready", http.StatusServiceUnavailable)
 		return
 	}
+	// Read the configured token under the lock; the field is short and copying
+	// avoids holding the lock across the upgrade/serve call.
+	m.mu.Lock()
+	expected := m.gateway.AccessToken
+	m.mu.Unlock()
+	if expected != "" && !checkAccessToken(r, expected) {
+		log.Warn().Str("remote", r.RemoteAddr).Msg("Filter: upstream rejected, token mismatch")
+		w.Header().Set("WWW-Authenticate", `Bearer realm="moebot-filter"`)
+		http.Error(w, "invalid access token", http.StatusUnauthorized)
+		return
+	}
 	selfID := r.Header.Get("x-self-id")
 	conn, err := m.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -239,6 +251,29 @@ func (m *Manager) handleUpstream(w http.ResponseWriter, r *http.Request) {
 	if err := m.server.serve(r.Context(), conn, selfID, r.RemoteAddr); err != nil {
 		log.Info().Err(err).Str("self_id", selfID).Msg("Filter: upstream OneBot client disconnected")
 	}
+}
+
+// checkAccessToken validates the upstream request's access token against the
+// configured gateway token. OneBot v11 conventions: `Authorization: Bearer <t>`
+// or `Authorization: Token <t>`, plus `?access_token=<t>` query fallback.
+func checkAccessToken(r *http.Request, expected string) bool {
+	if expected == "" {
+		return true
+	}
+	if got := r.URL.Query().Get("access_token"); got != "" && got == expected {
+		return true
+	}
+	auth := r.Header.Get("Authorization")
+	if auth == "" {
+		return false
+	}
+	for _, prefix := range []string{"Bearer ", "Token "} {
+		if strings.HasPrefix(auth, prefix) {
+			return strings.TrimSpace(auth[len(prefix):]) == expected
+		}
+	}
+	// Allow bare token (some clients omit the scheme prefix).
+	return strings.TrimSpace(auth) == expected
 }
 
 func (m *Manager) startClientsLocked(ctx context.Context) error {

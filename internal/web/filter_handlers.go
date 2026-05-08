@@ -88,21 +88,23 @@ func payloadToApp(p *filterAppPayload, dst *models.FilterApp) {
 }
 
 type gatewayPayload struct {
-	Enabled    bool    `json:"enabled"`
-	Host       string  `json:"host"`
-	Port       int     `json:"port"`
-	Suffix     string  `json:"suffix"`
-	BotID      string  `json:"bot_id"`
-	UserAgent  string  `json:"user_agent"`
-	BufferSize int     `json:"buffer_size"`
-	SleepTime  float32 `json:"sleep_time"`
-	Debug      bool    `json:"debug"`
+	Enabled     bool    `json:"enabled"`
+	Host        string  `json:"host"`
+	Port        int     `json:"port"`
+	Suffix      string  `json:"suffix"`
+	BotID       string  `json:"bot_id"`
+	AccessToken string  `json:"access_token"`
+	UserAgent   string  `json:"user_agent"`
+	BufferSize  int     `json:"buffer_size"`
+	SleepTime   float32 `json:"sleep_time"`
+	Debug       bool    `json:"debug"`
 }
 
 func gatewayToPayload(g *models.FilterGateway) gatewayPayload {
 	return gatewayPayload{
 		Enabled: g.Enabled, Host: g.Host, Port: g.Port, Suffix: g.Suffix,
-		BotID: g.BotID, UserAgent: g.UserAgent, BufferSize: g.BufferSize,
+		BotID: g.BotID, AccessToken: g.AccessToken,
+		UserAgent: g.UserAgent, BufferSize: g.BufferSize,
 		SleepTime: g.SleepTime, Debug: g.Debug,
 	}
 }
@@ -181,6 +183,11 @@ func (s *Server) handleUpdateFilterGateway(c *fiber.Ctx) error {
 	if p.BotID != "" {
 		gw.BotID = p.BotID
 	}
+	// AccessToken: empty string means "no auth required". Allow clearing by
+	// posting "" explicitly. Use literal "-" sentinel if a future API needs to
+	// distinguish "leave unchanged" — for now, the WebUI always sends the full
+	// current value so we just overwrite.
+	gw.AccessToken = p.AccessToken
 	if p.UserAgent != "" {
 		gw.UserAgent = p.UserAgent
 	}

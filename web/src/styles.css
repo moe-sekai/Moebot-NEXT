@@ -185,6 +185,9 @@ button, input, select { font: inherit; }
 .hero-panel__meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
 .hero-panel__aside { min-width: 330px; display: grid; grid-template-columns: repeat(2, minmax(145px, 1fr)); gap: 12px; align-self: center; }
 
+.thumbnail-preload-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.thumbnail-preload-hint { font-size: 12px; color: var(--muted-foreground); }
+
 .status-grid, .dashboard-grid, .summary-grid, .command-grid, .settings-grid, .timing-grid, .dependency-list { display: grid; gap: 14px; }
 .status-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .dashboard-grid--main { grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); }
