@@ -639,3 +639,139 @@ export interface LogsQuery {
 	limit?: number;
 	sinceSeq?: number;
 }
+
+// --- Filter (OneBot gateway) ---
+
+export type FilterMode = "default" | "on" | "off" | "whitelist" | "blacklist";
+
+export interface FilterIDRule {
+	mode: FilterMode | "";
+	ids: number[];
+}
+
+export interface FilterMessageRule {
+	mode: FilterMode | "";
+	filters: string[];
+	prefix: string[];
+	prefix_replace: string;
+}
+
+export interface FilterGatewayPayload {
+	enabled: boolean;
+	host: string;
+	port: number;
+	suffix: string;
+	bot_id: string;
+	user_agent: string;
+	buffer_size: number;
+	sleep_time: number;
+	debug: boolean;
+}
+
+export interface FilterEffectiveRules {
+	user_id_rules: FilterIDRule;
+	group_id_rules: FilterIDRule;
+	message_rules: FilterMessageRule;
+	private_message_rules: FilterMessageRule;
+	group_message_rules: FilterMessageRule;
+}
+
+export interface FilterAppPayload {
+	id: number;
+	name: string;
+	uri: string;
+	access_token: string;
+	enabled: boolean;
+	builtin: boolean;
+	sort_order: number;
+	template_id: number | null;
+	user_id_rules: FilterIDRule;
+	group_id_rules: FilterIDRule;
+	message_rules: FilterMessageRule;
+	private_message_rules: FilterMessageRule;
+	group_message_rules: FilterMessageRule;
+	effective_rules: FilterEffectiveRules;
+}
+
+export interface FilterTemplatePayload {
+	id: number;
+	name: string;
+	description: string;
+	builtin: boolean;
+	user_id_rules: FilterIDRule;
+	group_id_rules: FilterIDRule;
+	message_rules: FilterMessageRule;
+	private_message_rules: FilterMessageRule;
+	group_message_rules: FilterMessageRule;
+	usage_count: number;
+}
+
+export interface FilterTemplateListResponse {
+	items: FilterTemplatePayload[];
+}
+
+export interface FilterClientStatus {
+	name: string;
+	uri: string;
+	connected: boolean;
+	builtin: boolean;
+}
+
+export interface FilterUpstreamStatus {
+	self_id: string;
+	remote: string;
+	connected: boolean;
+	since?: string;
+}
+
+export interface FilterStatus {
+	running: boolean;
+	listen: string;
+	suffix: string;
+	upstream_up: boolean;
+	started_at?: string;
+	upstreams: FilterUpstreamStatus[];
+	clients: FilterClientStatus[];
+}
+
+export interface FilterAppListResponse {
+	items: FilterAppPayload[];
+}
+
+export type FilterEventKind =
+	| "allow"
+	| "block"
+	| "prefix_pass"
+	| "client_up"
+	| "client_down"
+	| "upstream_up"
+	| "upstream_down";
+
+export interface FilterEvent {
+	seq: number;
+	time: string;
+	kind: FilterEventKind;
+	filter?: string;
+	reason?: string;
+	user_id?: number;
+	group_id?: number;
+	msg_type?: string;
+	raw?: string;
+}
+
+export interface FilterRegexTestPayload {
+	pattern: string;
+	text: string;
+}
+
+export interface FilterRegexTestResponse {
+	compiled: boolean;
+	matched: boolean;
+	error: string;
+}
+
+export interface FilterImportYAMLResponse {
+	created: number;
+	updated: number;
+	total: number;
+}

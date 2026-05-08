@@ -1,14 +1,27 @@
-version: '3.8'
-
 services:
   moebot:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: moebot-next-go:latest
     container_name: moebot-next-go
-    ports:
-      - "8080:8080"   # Web console
-      - "6700:6700"   # OneBot reverse WebSocket
-    volumes:
-      - ./data:/app/data
-      - ./config.yml:/app/config.yml
-      - ./assets:/app/assets
     restart: unless-stopped
+    ports:
+      - "8080:8080"   # Web 控制台
+      - "6700:6700"   # OneBot 反向 WebSocket
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      # 持久化数据库 / 缓存 / 下载的 master 数据
+      - ./data:/app/data
+      # 用户自定义配置:首次使用前请先 `make docker-init`(或手动 `cp config.example.yml config.yml`)
+      # 否则 Docker 会把不存在的 config.yml 当作目录创建,导致启动失败
+      - ./config.yml:/app/config.yml
+      # 静态资源(可选,需要替换/扩展时再挂载)
+      # - ./assets:/app/assets
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3

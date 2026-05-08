@@ -9,6 +9,7 @@ import (
 	"moebot-next/internal/b30"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
+	"moebot-next/internal/filter"
 	"moebot-next/internal/logbuffer"
 	"moebot-next/internal/masterdata"
 	"moebot-next/internal/renderer"
@@ -33,6 +34,7 @@ type Server struct {
 	Renderer   *renderer.Client
 	B30        *b30.Client
 	Logs       *logbuffer.Buffer
+	Filter     *filter.Manager
 	startedAt  time.Time
 }
 
@@ -122,6 +124,25 @@ func (s *Server) registerRoutes() {
 
 	// Logs
 	api.Get("/logs", s.handleListLogs)
+
+	// Filter (OneBot gateway)
+	api.Get("/filter/status", s.handleFilterStatus)
+	api.Get("/filter/gateway", s.handleGetFilterGateway)
+	api.Put("/filter/gateway", s.handleUpdateFilterGateway)
+	api.Get("/filter/apps", s.handleListFilterApps)
+	api.Post("/filter/apps", s.handleCreateFilterApp)
+	api.Put("/filter/apps/:id", s.handleUpdateFilterApp)
+	api.Delete("/filter/apps/:id", s.handleDeleteFilterApp)
+	api.Get("/filter/templates", s.handleListFilterTemplates)
+	api.Post("/filter/templates", s.handleCreateFilterTemplate)
+	api.Get("/filter/templates/:id", s.handleGetFilterTemplate)
+	api.Put("/filter/templates/:id", s.handleUpdateFilterTemplate)
+	api.Delete("/filter/templates/:id", s.handleDeleteFilterTemplate)
+	api.Get("/filter/events", s.handleFilterEvents)
+	api.Get("/filter/events/recent", s.handleFilterRecentEvents)
+	api.Post("/filter/test-regex", s.handleFilterTestRegex)
+	api.Get("/filter/export-yaml", s.handleFilterExportYAML)
+	api.Post("/filter/import-yaml", s.handleFilterImportYAML)
 
 	// Masterdata search
 	api.Get("/search/cards", s.handleSearchCards)

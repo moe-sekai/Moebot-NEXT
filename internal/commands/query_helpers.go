@@ -522,6 +522,10 @@ func characterNameByID(id int) string {
 	return "未知角色"
 }
 
+func characterDisplayName(id int) string {
+	return characterNameByID(id)
+}
+
 func cardPayloads(store *masterdata.Store, resolver *assets.Resolver, cards []masterdata.CardInfo) []renderer.CardDetailPayload {
 	out := make([]renderer.CardDetailPayload, 0, len(cards))
 	for _, card := range cards {

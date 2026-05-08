@@ -1,16 +1,21 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"moebot-next/internal/assets"
 	"moebot-next/internal/b30"
 	"moebot-next/internal/bot"
+	"moebot-next/internal/filter"
+	"moebot-next/internal/models"
+
 	"moebot-next/internal/commandparser"
 	"moebot-next/internal/commands"
 	"moebot-next/internal/config"
@@ -75,9 +80,19 @@ func main() {
 		Definitions: commandDefinitions,
 	})
 
+	if err := seedBuiltinFilterApp(db, cfg.Bot.Driver); err != nil {
+		log.Warn().Err(err).Msg("Failed to seed builtin filter app")
+	}
+	filterManager := filter.New(db)
+	if err := filterManager.Start(context.Background()); err != nil {
+		log.Warn().Err(err).Msg("Filter gateway failed to start")
+	}
+	defer filterManager.Stop()
+
 	webServer := web.New(cfg, db, serverManager.Default().Store, rendererClient, cfgPath, serverManager.Default().Loader)
 	webServer.Servers = serverManager
 	webServer.Logs = logBuffer
+	webServer.Filter = filterManager
 	webServer.SetupStaticFiles(webUI)
 	go func() {
 		if err := webServer.Start(); err != nil {
@@ -134,6 +149,42 @@ func ensureRuntimeDirs(cfg *config.Config) error {
 		}
 	}
 	return nil
+}
+
+// seedBuiltinFilterApp ensures a "moebot-builtin" downstream app exists,
+// connecting the filter gateway to Moebot's own ZeroBot reverse-WS endpoint.
+// This realises the "Moebot is the default built-in plugin" behaviour.
+func seedBuiltinFilterApp(db *database.DB, drv config.DriverConfig) error {
+	const builtinName = "moebot-builtin"
+	if _, err := db.GetFilterAppByName(builtinName); err == nil {
+		return nil // already present, do not overwrite user edits
+	}
+	listen := drv.Listen
+	if listen == "" {
+		listen = "127.0.0.1:6700"
+	}
+	if !strings.Contains(listen, ":") {
+		listen = "127.0.0.1:" + listen
+	}
+	host, port, _ := strings.Cut(listen, ":")
+	if host == "" || host == "0.0.0.0" {
+		host = "127.0.0.1"
+	}
+	uri := "ws://" + host + ":" + port
+	app := &models.FilterApp{
+		Name:                builtinName,
+		URI:                 uri,
+		AccessToken:         drv.Token,
+		Enabled:             true,
+		Builtin:             true,
+		SortOrder:           0,
+		UserIDRules:         filter.EncodeIDRule(filter.IDRule{Mode: filter.ModeOn}),
+		GroupIDRules:        filter.EncodeIDRule(filter.IDRule{Mode: filter.ModeOn}),
+		MessageRules:        filter.EncodeMessageRule(filter.MessageRule{Mode: filter.ModeOn}),
+		PrivateMessageRules: filter.EncodeMessageRule(filter.MessageRule{Mode: filter.ModeDefault}),
+		GroupMessageRules:   filter.EncodeMessageRule(filter.MessageRule{Mode: filter.ModeDefault}),
+	}
+	return db.CreateFilterApp(app)
 }
 
 func waitForSignal() {

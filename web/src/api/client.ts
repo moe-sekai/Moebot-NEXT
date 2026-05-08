@@ -8,6 +8,16 @@ import type {
 	CommandParseResponse,
 	CommandStatsResponse,
 	DashboardData,
+	FilterAppListResponse,
+	FilterAppPayload,
+	FilterEvent,
+	FilterGatewayPayload,
+	FilterImportYAMLResponse,
+	FilterTemplateListResponse,
+	FilterTemplatePayload,
+	FilterRegexTestPayload,
+	FilterRegexTestResponse,
+	FilterStatus,
 	GroupRow,
 	HealthResponse,
 	LogsQuery,
@@ -264,6 +274,122 @@ export async function getLogs(query: LogsQuery = {}) {
 	if (query.sinceSeq && query.sinceSeq > 0) params.since_seq = query.sinceSeq;
 	const { data } = await api.get<LogsResponse>("/logs", { params });
 	return data;
+}
+
+// --- Filter (OneBot gateway) ---
+
+export async function getFilterStatus() {
+	const { data } = await api.get<FilterStatus>("/filter/status");
+	return data;
+}
+
+export async function getFilterGateway() {
+	const { data } = await api.get<FilterGatewayPayload>("/filter/gateway");
+	return data;
+}
+
+export async function updateFilterGateway(payload: FilterGatewayPayload) {
+	const { data } = await api.put<FilterGatewayPayload>(
+		"/filter/gateway",
+		payload,
+	);
+	return data;
+}
+
+export async function listFilterApps() {
+	const { data } = await api.get<FilterAppListResponse>("/filter/apps");
+	return data.items;
+}
+
+export async function createFilterApp(payload: Partial<FilterAppPayload>) {
+	const { data } = await api.post<FilterAppPayload>("/filter/apps", payload);
+	return data;
+}
+
+export async function updateFilterApp(
+	id: number,
+	payload: Partial<FilterAppPayload>,
+) {
+	const { data } = await api.put<FilterAppPayload>(
+		`/filter/apps/${id}`,
+		payload,
+	);
+	return data;
+}
+
+export async function deleteFilterApp(id: number) {
+	const { data } = await api.delete<{ ok: boolean }>(`/filter/apps/${id}`);
+	return data;
+}
+
+export async function listFilterTemplates() {
+	const { data } = await api.get<FilterTemplateListResponse>("/filter/templates");
+	return data.items;
+}
+
+export async function getFilterTemplate(id: number) {
+	const { data } = await api.get<FilterTemplatePayload>(`/filter/templates/${id}`);
+	return data;
+}
+
+export async function createFilterTemplate(payload: Partial<FilterTemplatePayload>) {
+	const { data } = await api.post<FilterTemplatePayload>(
+		"/filter/templates",
+		payload,
+	);
+	return data;
+}
+
+export async function updateFilterTemplate(
+	id: number,
+	payload: Partial<FilterTemplatePayload>,
+) {
+	const { data } = await api.put<FilterTemplatePayload>(
+		`/filter/templates/${id}`,
+		payload,
+	);
+	return data;
+}
+
+export async function deleteFilterTemplate(id: number) {
+	const { data } = await api.delete<{ ok: boolean }>(`/filter/templates/${id}`);
+	return data;
+}
+
+export async function getFilterRecentEvents(limit = 100) {
+	const { data } = await api.get<{ items: FilterEvent[] }>(
+		"/filter/events/recent",
+		{ params: { limit } },
+	);
+	return data.items;
+}
+
+export async function testFilterRegex(payload: FilterRegexTestPayload) {
+	const { data } = await api.post<FilterRegexTestResponse>(
+		"/filter/test-regex",
+		payload,
+	);
+	return data;
+}
+
+export async function exportFilterYAML(): Promise<Blob> {
+	const response = await api.get<Blob>("/filter/export-yaml", {
+		responseType: "blob",
+	});
+	return response.data;
+}
+
+export async function importFilterYAML(yaml: string, replaceAll: boolean) {
+	const { data } = await api.post<FilterImportYAMLResponse>(
+		"/filter/import-yaml",
+		{ yaml, replace_all: replaceAll },
+	);
+	return data;
+}
+
+/** Returns an EventSource for `/api/filter/events`. Caller is responsible for closing it. */
+export function openFilterEvents(replay = 50): EventSource {
+	return new EventSource(`/api/filter/events?replay=${replay}`);
 }
 
 function debugBindingParams(binding?: CommandDebugBindingPayload) {

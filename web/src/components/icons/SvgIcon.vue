@@ -136,6 +136,10 @@ const icons = {
     viewBox: '0 0 24 24',
     paths: ['M4 7.5 12 3l8 4.5-8 4.5z', 'M4 12l8 4.5 8-4.5', 'M4 16.5 12 21l8-4.5'],
   },
+  filter: {
+    viewBox: '0 0 24 24',
+    paths: ['M4 5h16l-6 8v6l-4-2v-4Z'],
+  },
 } as const satisfies Record<string, IconDef>
 
 export type IconName = keyof typeof icons

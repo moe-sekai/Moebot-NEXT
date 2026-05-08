@@ -18,6 +18,7 @@ export const consoleNavItems: ConsoleNavItem[] = [
   { path: '/masterdata', name: 'masterdata', label: 'Masterdata', subtitle: 'Search', icon: 'masterdata', section: 'main' },
   { path: '/settings', name: 'settings', label: '设置', subtitle: 'Config', icon: 'settings', section: 'main' },
   { path: '/bot', name: 'bot', label: 'Bot', subtitle: 'OneBot', icon: 'bot', section: 'manage' },
+  { path: '/filter', name: 'filter', label: 'Filter', subtitle: 'Gateway', icon: 'filter', section: 'manage' },
   { path: '/groups', name: 'groups', label: '群组', subtitle: 'Groups', icon: 'groups', section: 'manage' },
   { path: '/users', name: 'users', label: '用户', subtitle: 'Users', icon: 'users', section: 'manage' },
   { path: '/stats', name: 'stats', label: '统计', subtitle: 'Stats', icon: 'stats', section: 'manage' },
@@ -61,6 +62,11 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     title: 'Bot',
     subtitle: '查看 OneBot 驱动、命令前缀、昵称与连接说明。',
     eyebrow: 'OneBot',
+  },
+  filter: {
+    title: 'Filter 网关',
+    subtitle: '管理 OneBot 反向 WS 网关、下游 Bot 应用与过滤规则。',
+    eyebrow: 'OneBot Gateway',
   },
   groups: {
     title: '群组',

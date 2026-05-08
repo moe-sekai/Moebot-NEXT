@@ -1,0 +1,38 @@
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts
+moebot
+moebot.exe
+bin/
+web/dist/
+web/node_modules/
+renderer/node_modules/
+renderer/data/
+
+# Local config / data
+config.yml
+*.local.yml
+.env
+data/*.db
+data/*.db-*
+data/cache/
+data/master/
+
+# Editor / IDE
+.idea/
+.vscode/
+.windsurf/
+.narrafork/
+.worktrees/
+
+# Logs / OS junk
+*.log
+.DS_Store
+Thumbs.db
+
+# Tests / scripts not needed in image
+**/*_test.go
+scripts/
