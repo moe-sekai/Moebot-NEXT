@@ -111,6 +111,27 @@
               <option v-for="m in allModels" :key="m" :value="m">{{ m }}</option>
             </select>
           </Field>
+          <Field label="格式修复模型">
+            <select v-model="model.format_repair.model">
+              <option value="">— 不启用 —</option>
+              <option v-for="m in allModels" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </Field>
+        </div>
+      </UiCard>
+
+      <!-- ===== 格式修复 ===== -->
+      <UiCard>
+        <SectionHeader title="格式修复 (Format Repair)" desc="当主模型输出的 XML 解析失败时，调用低成本模型尝试将原始输出转为标准格式，避免丢弃回复。" />
+        <div class="form-grid">
+          <Field label="启用">
+            <label class="check"><input type="checkbox" v-model="model.format_repair.enabled" /> 启用</label>
+          </Field>
+          <Field label="max_tokens"><input v-model.number="model.format_repair.max_tokens" type="number" /></Field>
+          <Field label="超时 (秒)"><input v-model.number="model.format_repair.timeout" type="number" /></Field>
+          <Field label="Prompt 模板（{raw} 占位）" full>
+            <textarea v-model="model.format_repair.prompt" rows="6" placeholder="系统会将 LLM 原始输出替换 {raw}，修复模型需输出标准 XML" />
+          </Field>
         </div>
       </UiCard>
 
@@ -487,6 +508,13 @@ function normalizeProviders(pv: Partial<AutochatProviders> | null | undefined): 
       model: p.rag_summary?.model ?? '',
       timeout: p.rag_summary?.timeout ?? 30,
       max_tokens: p.rag_summary?.max_tokens ?? 256,
+    },
+    format_repair: {
+      enabled: !!p.format_repair?.enabled,
+      model: p.format_repair?.model ?? '',
+      timeout: p.format_repair?.timeout ?? 30,
+      max_tokens: p.format_repair?.max_tokens ?? 1024,
+      prompt: p.format_repair?.prompt ?? '',
     },
   }
 }

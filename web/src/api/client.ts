@@ -656,6 +656,7 @@ export interface AutochatProviders {
 	vector: { enabled: boolean; dimensions: number; top_k: number }
 	image_caption: { enabled: boolean; model: string; timeout: number; max_tokens: number; prompt: string }
 	rag_summary: { enabled: boolean; model: string; timeout: number; max_tokens: number }
+	format_repair: { enabled: boolean; model: string; timeout: number; max_tokens: number; prompt: string }
 }
 
 export async function getAutochatProviders() {
