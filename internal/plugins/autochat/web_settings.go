@@ -263,6 +263,9 @@ func (p *pluginImpl) handlePutPersona(c *fiber.Ctx) error {
 // triggersPayload 对应 chat 段中触发与缓冲相关字段。
 type triggersPayload struct {
 	WillingThreshold float64  `json:"willing_threshold"`
+	AtDelta          float64  `json:"at_delta"`
+	KeywordDelta     float64  `json:"keyword_delta"`
+	RandomDeltaMax   float64  `json:"random_delta_max"`
 	ChatCDSeconds    int      `json:"chat_cd_seconds"`
 	TTSCDSeconds     int      `json:"tts_cd_seconds"`
 	ContextSize      int      `json:"context_size"`
@@ -276,6 +279,9 @@ type triggersPayload struct {
 func buildTriggersPayload(c *Config) triggersPayload {
 	return triggersPayload{
 		WillingThreshold: c.Chat.Willing.Threshold,
+		AtDelta:          c.Chat.Willing.AtDelta,
+		KeywordDelta:     c.Chat.Willing.KeywordDelta,
+		RandomDeltaMax:   c.Chat.Willing.RandomDeltaMax,
 		ChatCDSeconds:    c.Chat.ChatCDSeconds,
 		TTSCDSeconds:     c.Chat.TTSCDSeconds,
 		ContextSize:      c.Chat.ContextSize,
@@ -307,6 +313,15 @@ func (p *pluginImpl) handlePutTriggers(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusServiceUnavailable, "autochat config not loaded")
 	}
 	cfg.Chat.Willing.Threshold = body.WillingThreshold
+	if body.AtDelta > 0 {
+		cfg.Chat.Willing.AtDelta = body.AtDelta
+	}
+	if body.KeywordDelta > 0 {
+		cfg.Chat.Willing.KeywordDelta = body.KeywordDelta
+	}
+	if body.RandomDeltaMax > 0 {
+		cfg.Chat.Willing.RandomDeltaMax = body.RandomDeltaMax
+	}
 	cfg.Chat.ChatCDSeconds = body.ChatCDSeconds
 	cfg.Chat.TTSCDSeconds = body.TTSCDSeconds
 	cfg.Chat.ContextSize = body.ContextSize

@@ -112,23 +112,30 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 	cfg := GetConfig()
 	delta := 0.0
 	isDirect := false
+	hitReason := ""
 	if HasAt(msg, ctx.Event.SelfID) {
-		delta = 2.5
+		delta = cfg.Chat.Willing.AtDelta
 		isDirect = true
+		hitReason = "at"
 	}
 	if !isDirect {
 		if !p.autoWhiteList.Check(groupID) {
 			return
 		}
 		for _, kw := range cfg.Chat.Keywords {
+			if kw == "" {
+				continue
+			}
 			if strings.Contains(text, kw) {
-				delta = 1.0
+				delta = cfg.Chat.Willing.KeywordDelta
 				isDirect = true
+				hitReason = "keyword:" + kw
 				break
 			}
 		}
 		if !isDirect && text != "" {
-			delta = randFloat() * 0.2
+			delta = randFloat() * cfg.Chat.Willing.RandomDeltaMax
+			hitReason = "random"
 		}
 	}
 
@@ -138,16 +145,25 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 		target = g
 	}
 	newVal := cur + delta
+	if delta > 0 {
+		log.Debug().Int64("group", groupID).Str("reason", hitReason).
+			Float64("delta", delta).Float64("cur", cur).Float64("new", newVal).
+			Float64("target", target).Bool("direct", isDirect).
+			Msg("[autochat] 触发计分")
+	}
 	if newVal >= target {
 		p.setThreshold(groupID, 0)
 		cdKey := fmt.Sprintf("%d_%d", groupID, userID)
 		if !p.chatCD.Check(cdKey) {
+			log.Debug().Int64("group", groupID).Int64("user", userID).Msg("[autochat] 命中冷却跳过")
 			return
 		}
 		// 去掉对自己的 @
 		text = strings.ReplaceAll(text, fmt.Sprintf("@%d", ctx.Event.SelfID), "")
 		text = strings.TrimSpace(text)
-		log.Debug().Float64("threshold", newVal).Float64("target", target).Bool("direct", isDirect).Msg("[autochat] 阈值触发")
+		log.Info().Int64("group", groupID).Str("reason", hitReason).
+			Float64("threshold", newVal).Float64("target", target).Bool("direct", isDirect).
+			Msg("[autochat] 阈值触发")
 		p.processChat(ctx, groupID, userID, text, !isDirect)
 	} else {
 		p.setThreshold(groupID, newVal)

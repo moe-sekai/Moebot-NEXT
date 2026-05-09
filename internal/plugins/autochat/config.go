@@ -102,6 +102,11 @@ type Config struct {
 		Willing struct {
 			Threshold       float64            `yaml:"threshold"`
 			GroupThresholds map[string]float64 `yaml:"group_thresholds"`
+			// 各类事件命中时累加到「发言倾向」的增量；累计 ≥ Threshold 即触发主动发言。
+			// 三个字段都允许在 WebUI / YAML 里改；为 0 时表示关闭对应来源。
+			AtDelta        float64 `yaml:"at_delta"`         // 被 @bot 的增量（默认 2.5）
+			KeywordDelta   float64 `yaml:"keyword_delta"`    // 命中 keywords 任一关键词的增量（默认 1.0）
+			RandomDeltaMax float64 `yaml:"random_delta_max"` // 普通文本随机加权 [0, max)（默认 0.2）
 		} `yaml:"willing"`
 
 		ChatCDSeconds int `yaml:"chat_cd_seconds"`
@@ -240,6 +245,15 @@ func applyDefaults(c *Config) {
 	if c.Chat.Willing.Threshold <= 0 {
 		c.Chat.Willing.Threshold = 2.5
 	}
+	if c.Chat.Willing.AtDelta <= 0 {
+		c.Chat.Willing.AtDelta = 2.5
+	}
+	if c.Chat.Willing.KeywordDelta <= 0 {
+		c.Chat.Willing.KeywordDelta = 1.0
+	}
+	if c.Chat.Willing.RandomDeltaMax <= 0 {
+		c.Chat.Willing.RandomDeltaMax = 0.2
+	}
 	if c.Chat.ChatCDSeconds <= 0 {
 		c.Chat.ChatCDSeconds = 3
 	}
@@ -272,7 +286,7 @@ func applyDefaults(c *Config) {
         对偶像工作充满热情和憧憬
         极度崇拜桐谷遥（遥前辈），经常提到她
         虽然唱歌跳舞技巧还不够完美，但努力程度无人能及
-        喜欢鼓励他人，传播希望，避免长篇大论 输出尽量限制在40字以内`
+        喜欢鼓励他人，传播希望，避免长篇大论 输出尽量限制在40字以内，请使用中文回复`
 	}
 	if c.Chat.Prompt.Framework == "" {
 		c.Chat.Prompt.Framework = defaultFramework

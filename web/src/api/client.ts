@@ -691,6 +691,9 @@ export async function updateAutochatPersona(payload: AutochatPersona) {
 
 export interface AutochatTriggers {
 	willing_threshold: number
+	at_delta: number
+	keyword_delta: number
+	random_delta_max: number
 	chat_cd_seconds: number
 	tts_cd_seconds: number
 	context_size: number

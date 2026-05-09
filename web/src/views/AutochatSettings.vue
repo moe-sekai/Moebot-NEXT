@@ -69,7 +69,18 @@
           </div>
         </div>
         <div class="form-grid">
-          <Field label="willing_threshold"><input v-model.number="triggers.willing_threshold" type="number" step="0.1" /></Field>
+          <Field label="willing_threshold（触发阈值）" hint="累计达到该值即主动发言；越低越爱说话">
+            <input v-model.number="triggers.willing_threshold" type="number" step="0.1" />
+          </Field>
+          <Field label="at_delta（被 @ 的增量）" hint="默认 2.5；通常 ≥ threshold 即被 @ 必回复">
+            <input v-model.number="triggers.at_delta" type="number" step="0.1" />
+          </Field>
+          <Field label="keyword_delta（命中关键词的增量）" hint="默认 1.0；命中下方关键词列表时累加，热重载，无需重启">
+            <input v-model.number="triggers.keyword_delta" type="number" step="0.1" />
+          </Field>
+          <Field label="random_delta_max（随机加权上限）" hint="默认 0.2；普通文本随机叠加 [0, max)">
+            <input v-model.number="triggers.random_delta_max" type="number" step="0.05" />
+          </Field>
           <Field label="/chat 冷却（秒）"><input v-model.number="triggers.chat_cd_seconds" type="number" /></Field>
           <Field label="/tts 冷却（秒）"><input v-model.number="triggers.tts_cd_seconds" type="number" /></Field>
           <Field label="context_size 上下文条数"><input v-model.number="triggers.context_size" type="number" /></Field>
