@@ -104,10 +104,32 @@ func (p *pluginImpl) handleChat(ctx *zero.Ctx) {
 	msgTime := time.Now().Unix()
 	p.messageBuffer.Add(groupID, nick, userID, queryText, msgTime)
 	images := ExtractImageURLs(ctx.Event.Message)
-	if len(images) > 0 {
+	if len(images) > 0 && !p.groupUsesMultimodal(groupID) {
 		go p.processImageDescription(groupID, userID, msgTime, images, GetConfig())
 	}
 	p.processChat(ctx, groupID, userID, queryText, false)
+}
+
+// groupUsesMultimodal 判断指定群当前是否使用多模态主对话模型；用于决定是否
+// 跳过 image_caption（多模态时图片直接交给 LLM）。
+func (p *pluginImpl) groupUsesMultimodal(groupID int64) bool {
+	cfg := GetConfig()
+	if cfg == nil {
+		return false
+	}
+	tmpl, _ := resolveTemplate(cfg, groupID)
+	if tmpl != nil && tmpl.Multimodal != nil {
+		return *tmpl.Multimodal
+	}
+	primary := ""
+	if mn := p.fileDB.GetString(fmt.Sprintf("model_%d", groupID)); mn != "" {
+		primary = mn
+	} else if tmpl != nil && len(tmpl.Models) > 0 {
+		primary = tmpl.Models[0]
+	} else if len(cfg.LLM.Models) > 0 {
+		primary = cfg.LLM.Models[0]
+	}
+	return isMultimodalModel(cfg, primary)
 }
 
 // handleAutoReply 负责自动回复（@bot / 关键词 / 阈值随机触发）。
@@ -148,12 +170,28 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 		}
 		p.messageBuffer.Add(groupID, nick, userID, logText, msgTime)
 		images := ExtractImageURLs(msg)
-		if len(images) > 0 {
+		if len(images) > 0 && !p.groupUsesMultimodal(groupID) {
 			go p.processImageDescription(groupID, userID, msgTime, images, GetConfig())
 		}
 	}
 
 	cfg := GetConfig()
+	tmpl, _ := resolveTemplate(cfg, groupID)
+	// 模板可覆盖各种触发增量与关键词
+	atDelta := cfg.Chat.Willing.AtDelta
+	keywordDelta := cfg.Chat.Willing.KeywordDelta
+	randomDeltaMax := cfg.Chat.Willing.RandomDeltaMax
+	if tmpl != nil {
+		if tmpl.AtDelta > 0 {
+			atDelta = tmpl.AtDelta
+		}
+		if tmpl.KeywordDelta > 0 {
+			keywordDelta = tmpl.KeywordDelta
+		}
+		if tmpl.RandomDeltaMax > 0 {
+			randomDeltaMax = tmpl.RandomDeltaMax
+		}
+	}
 	delta := 0.0
 	isDirect := false
 	hitReason := ""
@@ -164,12 +202,12 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 	selfAtTag := fmt.Sprintf("[CQ:at,qq=%d", ctx.Event.SelfID)
 	switch {
 	case strings.Contains(ctx.Event.RawMessage, selfAtTag):
-		delta = cfg.Chat.Willing.AtDelta
+		delta = atDelta
 		isDirect = true
 		hitReason = "at"
 	case ctx.Event.IsToMe:
 		// 昵称前缀命中：按关键词处理，不算"被 @"
-		delta = cfg.Chat.Willing.KeywordDelta
+		delta = keywordDelta
 		isDirect = true
 		hitReason = "nickname"
 	default:
@@ -182,19 +220,24 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 		if !p.autoWhiteList.Check(groupID) {
 			return
 		}
-		for _, kw := range cfg.Chat.Keywords {
+		// 关键词来源：全局 Chat.Keywords ∪ 模板专属关键词
+		keywords := cfg.Chat.Keywords
+		if tmpl != nil && len(tmpl.Keywords) > 0 {
+			keywords = append(append([]string{}, cfg.Chat.Keywords...), tmpl.Keywords...)
+		}
+		for _, kw := range keywords {
 			if kw == "" {
 				continue
 			}
 			if strings.Contains(text, kw) {
-				delta = cfg.Chat.Willing.KeywordDelta
+				delta = keywordDelta
 				isDirect = true
 				hitReason = "keyword:" + kw
 				break
 			}
 		}
 		if !isDirect && text != "" {
-			delta = randFloat() * cfg.Chat.Willing.RandomDeltaMax
+			delta = randFloat() * randomDeltaMax
 			hitReason = "random"
 		}
 	}
@@ -203,6 +246,9 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 	target := cfg.Chat.Willing.Threshold
 	if g, ok := cfg.Chat.Willing.GroupThresholds[fmt.Sprintf("%d", groupID)]; ok {
 		target = g
+	}
+	if tmpl != nil && tmpl.WillingThreshold > 0 {
+		target = tmpl.WillingThreshold
 	}
 	newVal := cur + delta
 	// 命中关键词 / 被 @ 这种「直接触发」即使最终被冷却拦截，也至少要让用户在

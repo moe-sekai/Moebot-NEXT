@@ -17,6 +17,7 @@ type groupSettingPayload struct {
 	Persona         string   `json:"persona,omitempty"`           // 覆盖 Chat.Prompt.Persona[gid]
 	WillingOverride *float64 `json:"willing_threshold,omitempty"` // 覆盖 Chat.Willing.GroupThresholds[gid]
 	Model           string   `json:"model,omitempty"`             // 覆盖 fileDB model_<gid>
+	Template        string   `json:"template,omitempty"`          // 绑定的模板名（Chat.GroupTemplates[gid]）
 	ChatEnabled     bool     `json:"chat_enabled"`
 	AutoEnabled     bool     `json:"auto_enabled"`
 }
@@ -38,6 +39,9 @@ func (p *pluginImpl) registerWebRoutes(api fiber.Router) {
 	g.Get("/groups", p.handleListGroups)
 	g.Put("/groups/:gid", p.handleUpsertGroup)
 	g.Delete("/groups/:gid", p.handleDeleteGroup)
+	g.Get("/templates", p.handleListTemplates)
+	g.Put("/templates/:name", p.handleUpsertTemplate)
+	g.Delete("/templates/:name", p.handleDeleteTemplate)
 	g.Get("/memory/groups", p.handleListMemoryGroups)
 	g.Get("/memory", p.handleQueryMemoryItems)
 	g.Delete("/memory/:id", p.handleDeleteMemoryItem)
@@ -62,6 +66,9 @@ func (p *pluginImpl) handleListGroups(c *fiber.Ctx) error {
 		}
 	}
 	for k := range cfg.Chat.Willing.GroupThresholds {
+		mark(k)
+	}
+	for k := range cfg.Chat.GroupTemplates {
 		mark(k)
 	}
 	if p.fileDB != nil {
@@ -97,6 +104,9 @@ func (p *pluginImpl) buildGroupPayload(cfg *Config, gid int64) groupSettingPaylo
 	if p.fileDB != nil {
 		out.Model = p.fileDB.GetString("model_" + gs)
 	}
+	if v, ok := cfg.Chat.GroupTemplates[gs]; ok {
+		out.Template = v
+	}
 	if p.chatWhiteList != nil {
 		out.ChatEnabled = p.chatWhiteList.Check(gid)
 	}
@@ -116,6 +126,7 @@ func (p *pluginImpl) handleUpsertGroup(c *fiber.Ctx) error {
 		WillingOverride *float64 `json:"willing_threshold,omitempty"`
 		ClearWilling    bool     `json:"clear_willing,omitempty"`
 		Model           *string  `json:"model,omitempty"`
+		Template        *string  `json:"template,omitempty"`
 		ChatEnabled     *bool    `json:"chat_enabled,omitempty"`
 		AutoEnabled     *bool    `json:"auto_enabled,omitempty"`
 	}
@@ -147,6 +158,20 @@ func (p *pluginImpl) handleUpsertGroup(c *fiber.Ctx) error {
 			cfg.Chat.Willing.GroupThresholds = map[string]float64{}
 		}
 		cfg.Chat.Willing.GroupThresholds[gs] = *body.WillingOverride
+	}
+	if body.Template != nil {
+		if cfg.Chat.GroupTemplates == nil {
+			cfg.Chat.GroupTemplates = map[string]string{}
+		}
+		v := strings.TrimSpace(*body.Template)
+		if v == "" {
+			delete(cfg.Chat.GroupTemplates, gs)
+		} else if _, ok := cfg.Chat.Templates[v]; !ok {
+			p.mu.Unlock()
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("template %q does not exist", v))
+		} else {
+			cfg.Chat.GroupTemplates[gs] = v
+		}
 	}
 	if err := plugin.WriteYAMLFrom(p.configPath, cfg); err != nil {
 		p.mu.Unlock()
@@ -190,6 +215,7 @@ func (p *pluginImpl) handleDeleteGroup(c *fiber.Ctx) error {
 	if cfg != nil {
 		delete(cfg.Chat.Prompt.Persona, gs)
 		delete(cfg.Chat.Willing.GroupThresholds, gs)
+		delete(cfg.Chat.GroupTemplates, gs)
 		_ = plugin.WriteYAMLFrom(p.configPath, cfg)
 	}
 	p.mu.Unlock()

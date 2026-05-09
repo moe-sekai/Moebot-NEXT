@@ -49,11 +49,37 @@ func extractXMLBlock(raw string) string {
 func (p *pluginImpl) processChat(ctx *zero.Ctx, groupID, userID int64, queryText string, allowTargetSelection bool) {
 	cfg := GetConfig()
 	msg := ctx.Event.Message
-	images := ExtractImageURLs(msg)
+	tmpl, _ := resolveTemplate(cfg, groupID)
+
+	// 模型选择：消息内 model: 前缀 > 群级 fileDB 覆盖 > 模板 Models > 全局 Models
+	modelList := append([]string{}, cfg.LLM.Models...)
+	if tmpl != nil && len(tmpl.Models) > 0 {
+		modelList = append(append([]string{}, tmpl.Models...), modelList...)
+	}
+	if mn := p.fileDB.GetString(fmt.Sprintf("model_%d", groupID)); mn != "" {
+		modelList = append([]string{mn}, modelList...)
+	}
+	if mn, newText := ExtractModelName(queryText); mn != "" {
+		modelList = append([]string{mn}, modelList...)
+		queryText = newText
+	}
+
+	// 多模态判定：模板覆盖 > 首选模型是否在 MultimodalModels 列表。
+	multimodal := false
+	if len(modelList) > 0 {
+		multimodal = isMultimodalModel(cfg, modelList[0])
+	}
+	if tmpl != nil && tmpl.Multimodal != nil {
+		multimodal = *tmpl.Multimodal
+	}
+
+	// 仅在多模态模式下，把消息中的图片下载/压缩并直接挂到 user message。
 	imageB64s := make([]string, 0)
-	for _, u := range images {
-		if b64, err := DownloadImageToBase64(u); err == nil {
-			imageB64s = append(imageB64s, b64)
+	if multimodal {
+		for _, u := range ExtractImageURLs(msg) {
+			if b64, err := DownloadImageToBase64(u); err == nil {
+				imageB64s = append(imageB64s, b64)
+			}
 		}
 	}
 
@@ -69,9 +95,11 @@ func (p *pluginImpl) processChat(ctx *zero.Ctx, groupID, userID int64, queryText
 			refMsg := ctx.GetMessage(replyID)
 			if len(refMsg.Elements) > 0 {
 				refText := ExtractText(refMsg.Elements)
-				for _, u := range ExtractImageURLs(refMsg.Elements) {
-					if b64, err := DownloadImageToBase64(u); err == nil {
-						imageB64s = append(imageB64s, b64)
+				if multimodal {
+					for _, u := range ExtractImageURLs(refMsg.Elements) {
+						if b64, err := DownloadImageToBase64(u); err == nil {
+							imageB64s = append(imageB64s, b64)
+						}
 					}
 				}
 				if refText != "" {
@@ -83,16 +111,6 @@ func (p *pluginImpl) processChat(ctx *zero.Ctx, groupID, userID int64, queryText
 
 	if sess == nil {
 		sess = NewChatSession(p.buildSystemPrompt(ctx, cfg, groupID, userID, queryText, allowTargetSelection))
-	}
-
-	// 模型选择：群级覆盖 > 文本 model: 前缀 > cfg 列表
-	modelList := cfg.LLM.Models
-	if mn := p.fileDB.GetString(fmt.Sprintf("model_%d", groupID)); mn != "" {
-		modelList = append([]string{mn}, modelList...)
-	}
-	if mn, newText := ExtractModelName(queryText); mn != "" {
-		modelList = append([]string{mn}, modelList...)
-		queryText = newText
 	}
 
 	// CleanChat 模式
@@ -341,6 +359,9 @@ func (p *pluginImpl) buildSystemPrompt(ctx *zero.Ctx, cfg *Config, groupID, user
 }
 
 func loadPersona(cfg *Config, groupID int64) string {
+	if tmpl, _ := resolveTemplate(cfg, groupID); tmpl != nil && tmpl.Persona != "" {
+		return tmpl.Persona
+	}
 	gid := fmt.Sprintf("%d", groupID)
 	if v, ok := cfg.Chat.Prompt.Persona[gid]; ok && v != "" {
 		return v

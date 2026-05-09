@@ -51,9 +51,13 @@ type Config struct {
 		// Providers 是 v0 兼容字段：仅在 ProviderList 为空时被读取并迁移。
 		Providers legacyProviders `yaml:"providers,omitempty"`
 		Models    []string        `yaml:"models"`
-		MaxTokens int             `yaml:"max_tokens"`
-		Reasoning bool            `yaml:"reasoning"`
-		Timeout   int             `yaml:"timeout"`
+		// MultimodalModels：支持图像输入的模型 spec（与 Models 同格式）。
+		// 主对话使用列表里的模型时，触发消息中的图片会被压缩后直接发给 LLM；
+		// 否则走 image_caption 异步生成文字描述。
+		MultimodalModels []string `yaml:"multimodal_models,omitempty"`
+		MaxTokens        int      `yaml:"max_tokens"`
+		Reasoning        bool     `yaml:"reasoning"`
+		Timeout          int      `yaml:"timeout"`
 	} `yaml:"llm"`
 
 	Vector struct {
@@ -129,7 +133,30 @@ type Config struct {
 		// IgnorePatterns：额外的正则表达式列表，匹配到的纯文本会被忽略，
 		// 用于覆盖那些不以固定前缀开头的命令（例如纯中文指令名）。
 		IgnorePatterns []string `yaml:"ignore_patterns"`
+
+		// Templates：命名模板。每个模板可指定独立的 persona、首选模型、
+		// 触发倾向（at/keyword/random delta + threshold）、关键词和多模态开关；
+		// 通过 GroupTemplates 把模板分配给一个/多个群聊，没有指定模板的群继续走全局默认。
+		Templates map[string]ChatTemplate `yaml:"templates,omitempty"`
+		// GroupTemplates：群号 -> 模板名，覆盖默认配置。
+		GroupTemplates map[string]string `yaml:"group_templates,omitempty"`
 	} `yaml:"chat"`
+}
+
+// ChatTemplate 模板，所有字段都是可选覆盖；零值表示沿用全局/默认。
+//   - Multimodal：三态。nil = 按 Models 是否在 LLM.MultimodalModels 列表自动判定；
+//     true/false = 强制覆盖。
+//   - Models：模板首选模型列表（按顺序 fallback），与全局 Models 拼接（模板项在前）。
+//   - Keywords：模板专属关键词，会与全局 Chat.Keywords 合并。
+type ChatTemplate struct {
+	Persona          string   `yaml:"persona,omitempty"`
+	Models           []string `yaml:"models,omitempty"`
+	Multimodal       *bool    `yaml:"multimodal,omitempty"`
+	WillingThreshold float64  `yaml:"willing_threshold,omitempty"`
+	AtDelta          float64  `yaml:"at_delta,omitempty"`
+	KeywordDelta     float64  `yaml:"keyword_delta,omitempty"`
+	RandomDeltaMax   float64  `yaml:"random_delta_max,omitempty"`
+	Keywords         []string `yaml:"keywords,omitempty"`
 }
 
 var (
@@ -294,6 +321,43 @@ func applyDefaults(c *Config) {
 	if c.Chat.IgnorePrefixes == nil {
 		c.Chat.IgnorePrefixes = []string{"/", "#", "!", "！", ".", "。", ">", "&"}
 	}
+	if c.Chat.Templates == nil {
+		c.Chat.Templates = map[string]ChatTemplate{}
+	}
+	if c.Chat.GroupTemplates == nil {
+		c.Chat.GroupTemplates = map[string]string{}
+	}
+}
+
+// resolveTemplate 返回某群当前生效的模板（可能为 nil）和模板名（用于日志）。
+// 仅当 GroupTemplates 显式映射并且对应模板存在时返回非 nil。
+func resolveTemplate(c *Config, groupID int64) (*ChatTemplate, string) {
+	if c == nil {
+		return nil, ""
+	}
+	gs := fmt.Sprintf("%d", groupID)
+	name, ok := c.Chat.GroupTemplates[gs]
+	if !ok || name == "" {
+		return nil, ""
+	}
+	t, ok := c.Chat.Templates[name]
+	if !ok {
+		return nil, ""
+	}
+	return &t, name
+}
+
+// isMultimodalModel 判断给定 model spec 是否属于 LLM.MultimodalModels 列表。
+func isMultimodalModel(c *Config, modelSpec string) bool {
+	if c == nil || modelSpec == "" {
+		return false
+	}
+	for _, m := range c.LLM.MultimodalModels {
+		if m == modelSpec {
+			return true
+		}
+	}
+	return false
 }
 
 const defaultFramework = `# Role

@@ -99,6 +99,77 @@
       </UiCard>
     </template>
 
+    <!-- ================= 模板 ================= -->
+    <template v-if="tab === 'templates'">
+      <UiCard>
+        <div class="card-heading">
+          <div>
+            <h2>对话模板</h2>
+            <p>每个模板包含独立的人设、首选模型、触发倾向（at/关键词/随机增量）、专属关键词和多模态开关；在「单群配置」里把模板分配给一个或多个群聊即可。</p>
+          </div>
+          <div class="actions">
+            <UiButton variant="outline" size="sm" :loading="templatesLoading" @click="loadTemplates">刷新</UiButton>
+            <UiButton variant="default" size="sm" @click="addTemplate">新建模板</UiButton>
+          </div>
+        </div>
+
+        <UiAlert v-if="templatesError" variant="destructive" title="加载/保存失败">{{ templatesError }}</UiAlert>
+
+        <div v-if="!templates.length && !templatesLoading" class="empty">
+          暂无模板。点击"新建模板"创建。
+        </div>
+
+        <div v-for="t in templates" :key="t.name" class="group-card">
+          <div class="group-card-head">
+            <div>
+              <span class="group-id">{{ t.name }}</span>
+              <span v-if="t.isNew" class="badge badge-auto">未保存</span>
+              <span v-if="t.used_by_groups?.length" class="badge badge-on">绑定群 {{ t.used_by_groups.length }}</span>
+            </div>
+            <div class="actions">
+              <UiButton variant="outline" size="sm" :loading="t.saving" @click="saveTemplate(t)">保存</UiButton>
+              <UiButton variant="destructive" size="sm" @click="removeTemplate(t)">删除</UiButton>
+            </div>
+          </div>
+          <div class="form-grid">
+            <Field label="人设 Persona" full hint="留空则继承全局默认 persona">
+              <textarea v-model="t.persona" rows="4" />
+            </Field>
+            <Field label="首选模型（每行一个）" hint="按顺序 fallback；与全局 models 拼接，模板项在前">
+              <textarea :value="templateModelsText(t)" @input="setTemplateModelsText(t, ($event.target as HTMLTextAreaElement).value)" rows="3" placeholder="openai:gpt-4o-mini" />
+            </Field>
+            <Field label="多模态" hint="auto = 看首选模型是否在 multimodal_models 列表；on/off 强制覆盖">
+              <select v-model="t.multimodalMode">
+                <option value="auto">auto（按模型判定）</option>
+                <option value="on">强制开（图片直传 LLM）</option>
+                <option value="off">强制关（走 image_caption）</option>
+              </select>
+            </Field>
+            <Field label="willing_threshold 覆盖" hint="0 = 沿用全局/单群设置">
+              <input v-model.number="t.willing_threshold" type="number" step="0.1" />
+            </Field>
+            <Field label="at_delta（被 @ 增量）" hint="0 = 沿用全局">
+              <input v-model.number="t.at_delta" type="number" step="0.1" />
+            </Field>
+            <Field label="keyword_delta（关键词增量）" hint="0 = 沿用全局">
+              <input v-model.number="t.keyword_delta" type="number" step="0.1" />
+            </Field>
+            <Field label="random_delta_max（随机加权上限）" hint="0 = 沿用全局">
+              <input v-model.number="t.random_delta_max" type="number" step="0.05" />
+            </Field>
+            <Field label="模板专属关键词（每行一个）" full hint="会与全局 keywords 合并">
+              <textarea :value="templateKeywordsText(t)" @input="setTemplateKeywordsText(t, ($event.target as HTMLTextAreaElement).value)" rows="3" />
+            </Field>
+            <Field v-if="t.used_by_groups?.length" label="绑定群" full>
+              <div class="badge-list">
+                <span v-for="gid in t.used_by_groups" :key="gid" class="badge badge-auto">{{ gid }}</span>
+              </div>
+            </Field>
+          </div>
+        </div>
+      </UiCard>
+    </template>
+
     <!-- ================= 单群 ================= -->
     <template v-if="tab === 'groups'">
       <UiCard>
@@ -145,6 +216,12 @@
             <Field label="首选模型覆盖" hint="等价于群内 /模型 xxx">
               <input v-model="g.model" type="text" placeholder="如 openai:gpt-4o-mini" />
             </Field>
+            <Field label="使用模板" hint="留空表示不使用模板（沿用全局/单群覆盖）">
+              <select v-model="g.template">
+                <option value="">（无）</option>
+                <option v-for="n in templateNames" :key="n" :value="n">{{ n }}</option>
+              </select>
+            </Field>
             <Field label="开关">
               <div class="check-row">
                 <label class="check"><input type="checkbox" v-model="g.chat_enabled" /> /chat 命令</label>
@@ -188,9 +265,13 @@ import {
   deleteAutochatGroup,
   getPluginConfig,
   updatePluginConfig,
+  listAutochatTemplates,
+  upsertAutochatTemplate,
+  deleteAutochatTemplate,
   type AutochatPersona,
   type AutochatTriggers,
   type AutochatGroupSetting,
+  type AutochatTemplate,
 } from '../api/client'
 import PageHeader from '../components/PageHeader.vue'
 import UiAlert from '../components/ui/UiAlert.vue'
@@ -199,10 +280,11 @@ import UiCard from '../components/ui/UiCard.vue'
 import SectionHeader from '../components/autochat/AutochatSectionHeader.vue'
 import Field from '../components/autochat/AutochatField.vue'
 
-type TabId = 'persona' | 'triggers' | 'groups' | 'advanced'
+type TabId = 'persona' | 'triggers' | 'templates' | 'groups' | 'advanced'
 const tabs: { id: TabId; label: string }[] = [
   { id: 'persona', label: '人设与提示词' },
   { id: 'triggers', label: '触发与阈值' },
+  { id: 'templates', label: '模板' },
   { id: 'groups', label: '单群配置' },
   { id: 'advanced', label: 'YAML 高级' },
 ]
@@ -279,7 +361,7 @@ function addGroup() {
   if (!Number.isFinite(gid) || gid <= 0) { groupsError.value = '群号无效。'; return }
   if (groups.value.some(g => g.group_id === gid)) return
   groups.value.unshift({
-    group_id: gid, persona: '', willing_threshold: null, model: '',
+    group_id: gid, persona: '', willing_threshold: null, model: '', template: '',
     chat_enabled: false, auto_enabled: false,
   })
 }
@@ -293,6 +375,7 @@ async function saveGroup(g: GroupRow) {
       clear_willing: willing === null || willing === undefined,
       willing_threshold: willing === null || willing === undefined ? undefined : willing,
       model: g.model ?? '',
+      template: g.template ?? '',
       chat_enabled: g.chat_enabled,
       auto_enabled: g.auto_enabled,
     })
@@ -307,6 +390,116 @@ async function removeGroup(g: GroupRow) {
     groups.value = groups.value.filter(x => x.group_id !== g.group_id)
   } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
 }
+
+// ----- Templates -----
+interface TemplateRow extends AutochatTemplate {
+  saving?: boolean
+  isNew?: boolean
+  // 因 multimodal 是三态(null/true/false)，UI 用单独的字符串字段绑定
+  multimodalMode?: 'auto' | 'on' | 'off'
+}
+const templates = ref<TemplateRow[]>([])
+const templatesLoading = ref(false)
+const templatesError = ref('')
+
+function applyMultimodalMode(t: TemplateRow) {
+  if (t.multimodal === true) t.multimodalMode = 'on'
+  else if (t.multimodal === false) t.multimodalMode = 'off'
+  else t.multimodalMode = 'auto'
+}
+function syncMultimodalFromMode(t: TemplateRow) {
+  if (t.multimodalMode === 'on') t.multimodal = true
+  else if (t.multimodalMode === 'off') t.multimodal = false
+  else t.multimodal = null
+}
+
+async function loadTemplates() {
+  templatesLoading.value = true
+  templatesError.value = ''
+  try {
+    const data = await listAutochatTemplates()
+    templates.value = (data.templates || []).map(t => {
+      const row: TemplateRow = { ...t, models: t.models || [], keywords: t.keywords || [], used_by_groups: t.used_by_groups || [] }
+      applyMultimodalMode(row)
+      return row
+    })
+  } catch (e) {
+    templatesError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    templatesLoading.value = false
+  }
+}
+function addTemplate() {
+  const name = window.prompt('请输入新模板名（仅字母/数字/中划线，不能是 default）')
+  if (!name) return
+  const trimmed = name.trim()
+  if (!trimmed || trimmed === 'default') { templatesError.value = '模板名无效'; return }
+  if (templates.value.some(t => t.name === trimmed)) return
+  const row: TemplateRow = {
+    name: trimmed,
+    persona: '',
+    models: [],
+    multimodal: null,
+    willing_threshold: 0,
+    at_delta: 0,
+    keyword_delta: 0,
+    random_delta_max: 0,
+    keywords: [],
+    used_by_groups: [],
+    isNew: true,
+    multimodalMode: 'auto',
+  }
+  templates.value.unshift(row)
+}
+async function saveTemplate(t: TemplateRow) {
+  syncMultimodalFromMode(t)
+  t.saving = true
+  templatesError.value = ''
+  try {
+    const updated = await upsertAutochatTemplate(t.name, {
+      name: t.name,
+      persona: t.persona,
+      models: t.models,
+      multimodal: t.multimodal,
+      willing_threshold: t.willing_threshold || 0,
+      at_delta: t.at_delta || 0,
+      keyword_delta: t.keyword_delta || 0,
+      random_delta_max: t.random_delta_max || 0,
+      keywords: t.keywords,
+      used_by_groups: t.used_by_groups,
+    })
+    Object.assign(t, updated, { isNew: false })
+    applyMultimodalMode(t)
+  } catch (e) { templatesError.value = e instanceof Error ? e.message : String(e) }
+  finally { t.saving = false }
+}
+async function removeTemplate(t: TemplateRow) {
+  if (t.isNew) {
+    templates.value = templates.value.filter(x => x !== t)
+    return
+  }
+  if (!window.confirm(`删除模板 "${t.name}"？所有绑定该模板的群将自动解绑。`)) return
+  try {
+    await deleteAutochatTemplate(t.name)
+    templates.value = templates.value.filter(x => x.name !== t.name)
+    // 同步刷新 groups（解除绑定）
+    await loadGroups()
+  } catch (e) { templatesError.value = e instanceof Error ? e.message : String(e) }
+}
+function templateModelsText(t: TemplateRow) {
+  return (t.models || []).join('\n')
+}
+function setTemplateModelsText(t: TemplateRow, v: string) {
+  t.models = splitLines(v)
+}
+function templateKeywordsText(t: TemplateRow) {
+  return (t.keywords || []).join('\n')
+}
+function setTemplateKeywordsText(t: TemplateRow, v: string) {
+  t.keywords = splitLines(v)
+}
+
+const templateNames = computed(() => templates.value.map(t => t.name))
 
 // ----- YAML -----
 const yamlText = ref('')
@@ -331,7 +524,7 @@ async function saveYAML() {
   finally { savingYAML.value = false }
 }
 
-onMounted(() => { loadPersona(); loadTriggers(); loadGroups(); loadYAML() })
+onMounted(() => { loadPersona(); loadTriggers(); loadGroups(); loadTemplates(); loadYAML() })
 watch(tab, () => { error.value = '' })
 </script>
 
@@ -375,6 +568,7 @@ watch(tab, () => { error.value = '' })
 .badge { font-size: 11px; padding: 3px 8px; border-radius: 999px; margin-right: 4px; background: rgba(165, 180, 252, 0.18); color: var(--foreground); font-weight: 600; }
 .badge-on { background: rgba(80, 200, 120, 0.18); color: #1e8a4a; }
 .badge-auto { background: rgba(120, 140, 240, 0.2); color: #5868c5; }
+.badge-list { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px; }
 
 .yaml-editor {
   width: 100%; min-height: 480px;

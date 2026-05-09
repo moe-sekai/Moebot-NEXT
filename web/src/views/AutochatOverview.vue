@@ -112,6 +112,17 @@
             </select>
           </Field>
         </div>
+        <div class="form-grid" style="margin-top:12px">
+          <Field label="多模态模型（支持图片输入）" full hint="勾选的模型在主对话时会把消息图片压缩后直传给 LLM；未勾选的模型走 image_caption 异步生成文字描述。">
+            <div v-if="!allModels.length" class="empty">请先在上方接入提供商并选择模型。</div>
+            <div v-else class="model-chips">
+              <label v-for="m in allModels" :key="m" class="model-chip" :class="{ selected: isMultimodal(m) }">
+                <input type="checkbox" :checked="isMultimodal(m)" @change="toggleMultimodal(m)" />
+                {{ m }}
+              </label>
+            </div>
+          </Field>
+        </div>
       </UiCard>
 
       <!-- ===== 嵌入 / 重排 ===== -->
@@ -428,6 +439,20 @@ const primaryModel = computed({
 
 const allModels = computed(() => model.value?.llm.models || [])
 
+function isMultimodal(m: string): boolean {
+  return !!model.value?.llm.multimodal_models?.includes(m)
+}
+function toggleMultimodal(m: string) {
+  if (!model.value) return
+  const list = model.value.llm.multimodal_models || []
+  const idx = list.indexOf(m)
+  if (idx >= 0) {
+    model.value.llm.multimodal_models = list.filter(x => x !== m)
+  } else {
+    model.value.llm.multimodal_models = [...list, m]
+  }
+}
+
 const openaiCompatProviders = computed(() =>
   (model.value?.provider_list || []).filter(p => p.type === 'openai'),
 )
@@ -448,6 +473,7 @@ function normalizeProviders(pv: Partial<AutochatProviders> | null | undefined): 
     provider_list: Array.isArray(p.provider_list) ? p.provider_list : [],
     llm: {
       models: Array.isArray(p.llm?.models) ? p.llm!.models : [],
+      multimodal_models: Array.isArray(p.llm?.multimodal_models) ? p.llm!.multimodal_models : [],
       max_tokens: p.llm?.max_tokens ?? 2048,
       reasoning: !!p.llm?.reasoning,
       timeout: p.llm?.timeout ?? 120,

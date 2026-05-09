@@ -26,10 +26,11 @@ type providerDTO struct {
 type providersPayload struct {
 	ProviderList []providerDTO `json:"provider_list"`
 	LLM          struct {
-		Models    []string `json:"models"`
-		MaxTokens int      `json:"max_tokens"`
-		Reasoning bool     `json:"reasoning"`
-		Timeout   int      `json:"timeout"`
+		Models           []string `json:"models"`
+		MultimodalModels []string `json:"multimodal_models"`
+		MaxTokens        int      `json:"max_tokens"`
+		Reasoning        bool     `json:"reasoning"`
+		Timeout          int      `json:"timeout"`
 	} `json:"llm"`
 	Embedding struct {
 		Enabled    bool   `json:"enabled"`
@@ -80,6 +81,7 @@ func buildProvidersPayload(c *Config) providersPayload {
 		})
 	}
 	p.LLM.Models = append([]string{}, c.LLM.Models...)
+	p.LLM.MultimodalModels = append([]string{}, c.LLM.MultimodalModels...)
 	p.LLM.MaxTokens = c.LLM.MaxTokens
 	p.LLM.Reasoning = c.LLM.Reasoning
 	p.LLM.Timeout = c.LLM.Timeout
@@ -153,6 +155,7 @@ func (p *pluginImpl) handlePutProviders(c *fiber.Ctx) error {
 	cfg.LLM.ProviderList = pl
 	cfg.LLM.Providers = legacyProviders{} // 清空 v0 字段
 	cfg.LLM.Models = append([]string{}, body.LLM.Models...)
+	cfg.LLM.MultimodalModels = append([]string{}, body.LLM.MultimodalModels...)
 	cfg.LLM.MaxTokens = body.LLM.MaxTokens
 	cfg.LLM.Reasoning = body.LLM.Reasoning
 	cfg.LLM.Timeout = body.LLM.Timeout

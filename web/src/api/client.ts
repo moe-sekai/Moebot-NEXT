@@ -552,6 +552,7 @@ export interface AutochatGroupSetting {
 	persona?: string
 	willing_threshold?: number | null
 	model?: string
+	template?: string
 	chat_enabled: boolean
 	auto_enabled: boolean
 }
@@ -566,6 +567,7 @@ export interface AutochatGroupUpsertPayload {
 	willing_threshold?: number | null
 	clear_willing?: boolean
 	model?: string
+	template?: string
 	chat_enabled?: boolean
 	auto_enabled?: boolean
 }
@@ -634,7 +636,7 @@ export interface AutochatProvider {
 
 export interface AutochatProviders {
 	provider_list: AutochatProvider[]
-	llm: { models: string[]; max_tokens: number; reasoning: boolean; timeout: number }
+	llm: { models: string[]; multimodal_models: string[]; max_tokens: number; reasoning: boolean; timeout: number }
 	embedding: {
 		enabled: boolean
 		provider: string  // 引用 provider_list[].name；空则用下方独立 base_url/api_key
@@ -801,6 +803,43 @@ export async function queryAutochatMemory(params: MemoryQueryParams) {
 export async function deleteAutochatMemory(id: number) {
 	const { data } = await api.delete<{ ok: boolean; id: number }>(
 		`/plugins/autochat/memory/${id}`,
+	)
+	return data
+}
+
+// --- AutoChat Templates ---
+
+export interface AutochatTemplate {
+	name: string
+	persona: string
+	models: string[]
+	multimodal?: boolean | null
+	willing_threshold?: number
+	at_delta?: number
+	keyword_delta?: number
+	random_delta_max?: number
+	keywords: string[]
+	used_by_groups: string[]
+}
+
+export async function listAutochatTemplates() {
+	const { data } = await api.get<{ templates: AutochatTemplate[] }>(
+		'/plugins/autochat/templates',
+	)
+	return data
+}
+
+export async function upsertAutochatTemplate(name: string, payload: AutochatTemplate) {
+	const { data } = await api.put<AutochatTemplate>(
+		`/plugins/autochat/templates/${encodeURIComponent(name)}`,
+		payload,
+	)
+	return data
+}
+
+export async function deleteAutochatTemplate(name: string) {
+	const { data } = await api.delete<{ ok: boolean; name: string }>(
+		`/plugins/autochat/templates/${encodeURIComponent(name)}`,
 	)
 	return data
 }
