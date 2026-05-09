@@ -98,6 +98,14 @@ type Config struct {
 		Prompt    string `yaml:"prompt"`
 	} `yaml:"rag_summary"`
 
+	FormatRepair struct {
+		Enabled   bool   `yaml:"enabled"`
+		Model     string `yaml:"model"`     // 形如 openai:gpt-4o-mini
+		Timeout   int    `yaml:"timeout"`   // 秒
+		MaxTokens int    `yaml:"max_tokens"`
+		Prompt    string `yaml:"prompt"`    // {raw} 占位符
+	} `yaml:"format_repair"`
+
 	Chat struct {
 		Willing struct {
 			Threshold       float64            `yaml:"threshold"`
@@ -242,6 +250,15 @@ func applyDefaults(c *Config) {
 	if c.RAGSummary.Prompt == "" {
 		c.RAGSummary.Prompt = "请总结以下对话核心话题，用于检索相关历史，控制在80字以内：\n```\n{text}\n```"
 	}
+	if c.FormatRepair.Timeout <= 0 {
+		c.FormatRepair.Timeout = 30
+	}
+	if c.FormatRepair.MaxTokens <= 0 {
+		c.FormatRepair.MaxTokens = 1024
+	}
+	if c.FormatRepair.Prompt == "" {
+		c.FormatRepair.Prompt = defaultFormatRepairPrompt
+	}
 	if c.Chat.Willing.Threshold <= 0 {
 		c.Chat.Willing.Threshold = 2.5
 	}
@@ -295,6 +312,27 @@ func applyDefaults(c *Config) {
 		c.Chat.IgnorePrefixes = []string{"/", "#", "!", "！", ".", "。", ">", "&"}
 	}
 }
+
+const defaultFormatRepairPrompt = `你是一个 XML 格式修复器。用户会给你一段 LLM 的原始输出，请将其转换为以下 XML 格式并只输出 XML：
+<response>
+  <replies>
+    <reply>回复内容</reply>
+  </replies>
+  <dialogue_summary>对话简短总结</dialogue_summary>
+  <update_profiles></update_profiles>
+  <add_memories></add_memories>
+</response>
+
+规则：
+1. 从原始输出中提取回复内容放入 <reply> 标签。
+2. 如果原始输出已包含部分 XML 结构（如 <replies>、<reply>），请保留其内容并包裹到正确的 <response> 根标签中。
+3. 如果原始输出是纯文本，将整段视为一条回复。
+4. dialogue_summary 留空即可。
+5. 文本中 < > & 字符使用 &lt; &gt; &amp; 转义。
+6. 严格只输出 XML，不要有代码块包裹或前后多余文本。
+
+原始输出：
+{raw}`
 
 const defaultFramework = `# Role
 你是一个正在群聊中的真实用户，请基于人设进行沉浸式聊天。
