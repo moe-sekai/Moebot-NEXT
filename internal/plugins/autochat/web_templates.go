@@ -14,16 +14,25 @@ import (
 //   - nil 自动按主选模型是否在 multimodal_models 列表里判定
 //   - true / false 强制开/关图片直传
 type templatePayload struct {
-	Name             string   `json:"name"`
-	Persona          string   `json:"persona"`
-	Models           []string `json:"models"`
-	Multimodal       *bool    `json:"multimodal,omitempty"`
-	WillingThreshold float64  `json:"willing_threshold,omitempty"`
-	AtDelta          float64  `json:"at_delta,omitempty"`
-	KeywordDelta     float64  `json:"keyword_delta,omitempty"`
-	RandomDeltaMax   float64  `json:"random_delta_max,omitempty"`
+	Name       string   `json:"name"`
+	Persona    string   `json:"persona"`
+	Models     []string `json:"models"`
+	Multimodal *bool    `json:"multimodal"`
+	// 数值字段使用 *float64 以容忍 JSON null（前端清空 input 时会发 null）。
+	WillingThreshold *float64 `json:"willing_threshold"`
+	AtDelta          *float64 `json:"at_delta"`
+	KeywordDelta     *float64 `json:"keyword_delta"`
+	RandomDeltaMax   *float64 `json:"random_delta_max"`
 	Keywords         []string `json:"keywords"`
 	UsedByGroups     []string `json:"used_by_groups"`
+}
+
+func ptrFloat(v float64) *float64 { return &v }
+func derefFloat(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 func buildTemplatePayload(c *Config, name string) templatePayload {
@@ -40,10 +49,10 @@ func buildTemplatePayload(c *Config, name string) templatePayload {
 		Persona:          t.Persona,
 		Models:           append([]string{}, t.Models...),
 		Multimodal:       t.Multimodal,
-		WillingThreshold: t.WillingThreshold,
-		AtDelta:          t.AtDelta,
-		KeywordDelta:     t.KeywordDelta,
-		RandomDeltaMax:   t.RandomDeltaMax,
+		WillingThreshold: ptrFloat(t.WillingThreshold),
+		AtDelta:          ptrFloat(t.AtDelta),
+		KeywordDelta:     ptrFloat(t.KeywordDelta),
+		RandomDeltaMax:   ptrFloat(t.RandomDeltaMax),
 		Keywords:         append([]string{}, t.Keywords...),
 		UsedByGroups:     used,
 	}
@@ -100,10 +109,10 @@ func (p *pluginImpl) handleUpsertTemplate(c *fiber.Ctx) error {
 		Persona:          body.Persona,
 		Models:           models,
 		Multimodal:       body.Multimodal,
-		WillingThreshold: body.WillingThreshold,
-		AtDelta:          body.AtDelta,
-		KeywordDelta:     body.KeywordDelta,
-		RandomDeltaMax:   body.RandomDeltaMax,
+		WillingThreshold: derefFloat(body.WillingThreshold),
+		AtDelta:          derefFloat(body.AtDelta),
+		KeywordDelta:     derefFloat(body.KeywordDelta),
+		RandomDeltaMax:   derefFloat(body.RandomDeltaMax),
 		Keywords:         keywords,
 	}
 	if err := plugin.WriteYAMLFrom(p.configPath, cfg); err != nil {

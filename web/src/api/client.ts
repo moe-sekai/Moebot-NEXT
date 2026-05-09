@@ -815,10 +815,10 @@ export interface AutochatTemplate {
 	persona: string
 	models: string[]
 	multimodal?: boolean | null
-	willing_threshold?: number
-	at_delta?: number
-	keyword_delta?: number
-	random_delta_max?: number
+	willing_threshold?: number | null
+	at_delta?: number | null
+	keyword_delta?: number | null
+	random_delta_max?: number | null
 	keywords: string[]
 	used_by_groups: string[]
 }

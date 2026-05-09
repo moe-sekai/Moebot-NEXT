@@ -135,8 +135,23 @@
             <Field label="人设 Persona" full hint="留空则继承全局默认 persona">
               <textarea v-model="t.persona" rows="4" />
             </Field>
-            <Field label="首选模型（每行一个）" hint="按顺序 fallback；与全局 models 拼接，模板项在前">
-              <textarea :value="templateModelsText(t)" @input="setTemplateModelsText(t, ($event.target as HTMLTextAreaElement).value)" rows="3" placeholder="openai:gpt-4o-mini" />
+            <Field label="首选模型（按顺序 fallback）" full hint="勾选已接入的模型；如需手动输入未列出的模型，点 自定义 按钮">
+              <div v-if="t.models?.length" class="badge-list" style="margin-bottom: 8px;">
+                <span v-for="m in t.models" :key="m" class="badge badge-on">
+                  {{ m }}
+                  <button type="button" class="chip-x" @click="removeTemplateModel(t, m)" title="移除">×</button>
+                </span>
+              </div>
+              <div v-if="availableModels.length" class="model-chips">
+                <label v-for="m in availableModels" :key="m" class="model-chip" :class="{ selected: (t.models || []).includes(m) }">
+                  <input type="checkbox" :checked="(t.models || []).includes(m)" @change="toggleTemplateModel(t, m)" />
+                  {{ m }}
+                </label>
+              </div>
+              <div v-else class="empty-hint">暂无已接入模型。请先在「概览」页配置 Provider 与模型。</div>
+              <div style="margin-top: 8px;">
+                <UiButton variant="outline" size="sm" @click="addCustomTemplateModel(t)">＋ 自定义</UiButton>
+              </div>
             </Field>
             <Field label="多模态" hint="auto = 看首选模型是否在 multimodal_models 列表；on/off 强制覆盖">
               <select v-model="t.multimodalMode">
@@ -157,8 +172,20 @@
             <Field label="random_delta_max（随机加权上限）" hint="0 = 沿用全局">
               <input v-model.number="t.random_delta_max" type="number" step="0.05" />
             </Field>
-            <Field label="模板专属关键词（每行一个）" full hint="会与全局 keywords 合并">
-              <textarea :value="templateKeywordsText(t)" @input="setTemplateKeywordsText(t, ($event.target as HTMLTextAreaElement).value)" rows="3" />
+            <Field label="模板专属关键词（按 Enter 添加）" full hint="会与全局 keywords 合并；命中任一即触发回复">
+              <div v-if="t.keywords?.length" class="badge-list" style="margin-bottom: 8px;">
+                <span v-for="k in t.keywords" :key="k" class="badge badge-auto">
+                  {{ k }}
+                  <button type="button" class="chip-x" @click="removeKeyword(t, k)" title="移除">×</button>
+                </span>
+              </div>
+              <input
+                type="text"
+                :value="keywordDraft[t.name] || ''"
+                @input="keywordDraft[t.name] = ($event.target as HTMLInputElement).value"
+                @keydown.enter.prevent="addKeyword(t)"
+                placeholder="输入关键词后按 Enter 添加"
+              />
             </Field>
             <Field v-if="t.used_by_groups?.length" label="绑定群" full>
               <div class="badge-list">
@@ -176,7 +203,7 @@
         <div class="card-heading">
           <div>
             <h2>单群组配置</h2>
-            <p>每个群可独立设置：人设覆盖、阈值覆盖、首选模型覆盖、命令/自动回复开关。空白字段表示沿用默认。</p>
+            <p>选择该群使用哪个对话模板（人设、模型、阈值、关键词由模板统一管理）。这里只保留模板绑定与命令/自动回复开关。</p>
           </div>
           <div class="actions">
             <UiButton variant="outline" size="sm" :loading="groupsLoading" @click="loadGroups">刷新</UiButton>
@@ -203,22 +230,9 @@
             </div>
           </div>
           <div class="form-grid">
-            <Field label="人设覆盖" full>
-              <textarea v-model="g.persona" rows="3" placeholder="留空表示使用默认 persona" />
-            </Field>
-            <Field label="阈值覆盖" hint="留空恢复默认">
-              <input
-                type="number" step="0.1" :value="g.willing_threshold ?? ''"
-                :placeholder="`默认 ${defaultThreshold}`"
-                @input="g.willing_threshold = ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value)"
-              />
-            </Field>
-            <Field label="首选模型覆盖" hint="等价于群内 /模型 xxx">
-              <input v-model="g.model" type="text" placeholder="如 openai:gpt-4o-mini" />
-            </Field>
-            <Field label="使用模板" hint="留空表示不使用模板（沿用全局/单群覆盖）">
+            <Field label="使用模板" hint="留空表示不绑定模板（使用全局默认 persona/模型/阈值）">
               <select v-model="g.template">
-                <option value="">（无）</option>
+                <option value="">（无 / 默认）</option>
                 <option v-for="n in templateNames" :key="n" :value="n">{{ n }}</option>
               </select>
             </Field>
@@ -268,6 +282,7 @@ import {
   listAutochatTemplates,
   upsertAutochatTemplate,
   deleteAutochatTemplate,
+  getAutochatProviders,
   type AutochatPersona,
   type AutochatTriggers,
   type AutochatGroupSetting,
@@ -369,12 +384,8 @@ async function saveGroup(g: GroupRow) {
   g.saving = true
   groupsError.value = ''
   try {
-    const willing = g.willing_threshold
+    // 只发送 UI 中实际暴露的字段；persona/willing/model 现由模板统一管理。
     const updated = await upsertAutochatGroup(g.group_id, {
-      persona: g.persona ?? '',
-      clear_willing: willing === null || willing === undefined,
-      willing_threshold: willing === null || willing === undefined ? undefined : willing,
-      model: g.model ?? '',
       template: g.template ?? '',
       chat_enabled: g.chat_enabled,
       auto_enabled: g.auto_enabled,
@@ -401,6 +412,42 @@ interface TemplateRow extends AutochatTemplate {
 const templates = ref<TemplateRow[]>([])
 const templatesLoading = ref(false)
 const templatesError = ref('')
+const availableModels = ref<string[]>([])
+// 关键词 chip-input 的临时输入文本（每个模板一个）
+const keywordDraft = ref<Record<string, string>>({})
+
+async function loadAvailableModels() {
+  try {
+    const data = await getAutochatProviders()
+    availableModels.value = data.llm?.models || []
+  } catch { /* 忽略：模型列表可选 */ }
+}
+
+function toggleTemplateModel(t: TemplateRow, m: string) {
+  const list = t.models || []
+  if (list.includes(m)) t.models = list.filter(x => x !== m)
+  else t.models = [...list, m]
+}
+function addCustomTemplateModel(t: TemplateRow) {
+  const v = window.prompt('输入自定义模型 spec（如 openai:gpt-4o-mini）')
+  if (!v) return
+  const s = v.trim()
+  if (!s) return
+  if (!(t.models || []).includes(s)) t.models = [...(t.models || []), s]
+}
+function removeTemplateModel(t: TemplateRow, m: string) {
+  t.models = (t.models || []).filter(x => x !== m)
+}
+
+function addKeyword(t: TemplateRow) {
+  const v = (keywordDraft.value[t.name] || '').trim()
+  if (!v) return
+  if (!(t.keywords || []).includes(v)) t.keywords = [...(t.keywords || []), v]
+  keywordDraft.value[t.name] = ''
+}
+function removeKeyword(t: TemplateRow, k: string) {
+  t.keywords = (t.keywords || []).filter(x => x !== k)
+}
 
 function applyMultimodalMode(t: TemplateRow) {
   if (t.multimodal === true) t.multimodalMode = 'on'
@@ -451,6 +498,11 @@ function addTemplate() {
   }
   templates.value.unshift(row)
 }
+// 把可能为 NaN/undefined/null 的输入归一为有限数。
+function safeNum(v: unknown): number {
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : 0
+}
 async function saveTemplate(t: TemplateRow) {
   syncMultimodalFromMode(t)
   t.saving = true
@@ -458,15 +510,15 @@ async function saveTemplate(t: TemplateRow) {
   try {
     const updated = await upsertAutochatTemplate(t.name, {
       name: t.name,
-      persona: t.persona,
-      models: t.models,
-      multimodal: t.multimodal,
-      willing_threshold: t.willing_threshold || 0,
-      at_delta: t.at_delta || 0,
-      keyword_delta: t.keyword_delta || 0,
-      random_delta_max: t.random_delta_max || 0,
-      keywords: t.keywords,
-      used_by_groups: t.used_by_groups,
+      persona: t.persona ?? '',
+      models: t.models || [],
+      multimodal: t.multimodal ?? null,
+      willing_threshold: safeNum(t.willing_threshold),
+      at_delta: safeNum(t.at_delta),
+      keyword_delta: safeNum(t.keyword_delta),
+      random_delta_max: safeNum(t.random_delta_max),
+      keywords: t.keywords || [],
+      used_by_groups: t.used_by_groups || [],
     })
     Object.assign(t, updated, { isNew: false })
     applyMultimodalMode(t)
@@ -486,19 +538,6 @@ async function removeTemplate(t: TemplateRow) {
     await loadGroups()
   } catch (e) { templatesError.value = e instanceof Error ? e.message : String(e) }
 }
-function templateModelsText(t: TemplateRow) {
-  return (t.models || []).join('\n')
-}
-function setTemplateModelsText(t: TemplateRow, v: string) {
-  t.models = splitLines(v)
-}
-function templateKeywordsText(t: TemplateRow) {
-  return (t.keywords || []).join('\n')
-}
-function setTemplateKeywordsText(t: TemplateRow, v: string) {
-  t.keywords = splitLines(v)
-}
-
 const templateNames = computed(() => templates.value.map(t => t.name))
 
 // ----- YAML -----
@@ -524,7 +563,7 @@ async function saveYAML() {
   finally { savingYAML.value = false }
 }
 
-onMounted(() => { loadPersona(); loadTriggers(); loadGroups(); loadTemplates(); loadYAML() })
+onMounted(() => { loadPersona(); loadTriggers(); loadGroups(); loadTemplates(); loadAvailableModels(); loadYAML() })
 watch(tab, () => { error.value = '' })
 </script>
 
@@ -569,6 +608,21 @@ watch(tab, () => { error.value = '' })
 .badge-on { background: rgba(80, 200, 120, 0.18); color: #1e8a4a; }
 .badge-auto { background: rgba(120, 140, 240, 0.2); color: #5868c5; }
 .badge-list { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px; }
+.chip-x {
+  margin-left: 6px; border: none; background: transparent; cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 0; color: inherit; opacity: 0.6;
+}
+.chip-x:hover { opacity: 1; }
+.empty-hint { color: var(--muted-foreground); font-size: 12px; padding: 8px 0; }
+.model-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 160px; overflow-y: auto; }
+.model-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 999px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); background: rgba(255,255,255,0.8); color: var(--foreground);
+  user-select: none;
+}
+.model-chip input { display: none; }
+.model-chip.selected { background: rgba(80, 200, 120, 0.18); border-color: rgba(80, 200, 120, 0.4); color: #1e8a4a; font-weight: 600; }
 
 .yaml-editor {
   width: 100%; min-height: 480px;
