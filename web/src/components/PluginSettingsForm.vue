@@ -48,6 +48,15 @@
           @input="model[field.key] = Number(($event.target as HTMLInputElement).value)"
         />
 
+        <input
+          v-else-if="field.type === 'float'"
+          :id="`pf-${field.key}`"
+          type="number"
+          step="0.01"
+          :value="model[field.key] ?? ''"
+          @input="model[field.key] = Number(($event.target as HTMLInputElement).value)"
+        />
+
         <textarea
           v-else-if="field.type === 'textarea'"
           :id="`pf-${field.key}`"
@@ -141,16 +150,28 @@ async function save() {
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { display: flex; align-items: center; gap: 8px; font-weight: 500; }
 .field .group-tag {
-  font-size: 11px; padding: 2px 6px; border-radius: 4px;
-  background: var(--surface-soft, rgba(255,255,255,0.06)); color: var(--text-muted);
+  font-size: 11px; padding: 2px 6px; border-radius: 999px;
+  background: rgba(165, 180, 252, 0.18); color: var(--muted-foreground);
+  font-weight: 600;
 }
-.field input[type="text"], .field input[type="number"], .field select, .field textarea {
-  background: var(--surface-soft, #0c0d12); color: var(--text-primary, #e8e8f0);
-  border: 1px solid var(--border-default, rgba(255,255,255,0.08));
-  border-radius: 6px; padding: 8px 10px; font-size: 13px;
+.field input[type="text"], .field input[type="number"], .field select {
+  height: 38px;
+  background: rgba(255, 255, 255, 0.9); color: var(--foreground);
+  border: 1px solid var(--input); border-radius: 999px;
+  padding: 0 13px; font-size: 14px; font-weight: 600;
 }
-.field textarea { font-family: 'JetBrains Mono', Consolas, ui-monospace, monospace; }
-.hint { font-size: 12px; color: var(--text-muted); margin: 0; }
-.loading-placeholder, .empty { padding: 16px 0; color: var(--text-muted); font-size: 13px; }
-code { background: var(--surface-soft, rgba(255,255,255,0.04)); padding: 0 4px; border-radius: 4px; }
+.field textarea {
+  background: rgba(255, 255, 255, 0.9); color: var(--foreground);
+  border: 1px solid var(--input); border-radius: 16px;
+  padding: 10px 13px; font-size: 14px; line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  resize: vertical;
+}
+.field input:focus, .field textarea:focus, .field select:focus {
+  outline: none; border-color: var(--primary, #ff78b7);
+  box-shadow: 0 0 0 3px rgba(255, 120, 183, 0.18);
+}
+.hint { font-size: 12px; color: var(--muted-foreground); margin: 0; }
+.loading-placeholder, .empty { padding: 16px 0; color: var(--muted-foreground); font-size: 13px; }
+code { background: rgba(165, 180, 252, 0.18); padding: 1px 6px; border-radius: 6px; font-size: 12px; }
 </style>

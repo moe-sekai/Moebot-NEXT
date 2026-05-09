@@ -19,20 +19,25 @@ import (
 //   - 多模态：图片以 {"type":"image","source":{"type":"base64",...}} 注入
 //   - 鉴权头：x-api-key + anthropic-version
 type AnthropicProvider struct {
+	name    string
 	baseURL string
 	apiKey  string
 	version string
 	client  *http.Client
 }
 
-func newAnthropicProvider(baseURL, apiKey, version string, timeoutSeconds int) *AnthropicProvider {
+func newAnthropicProvider(name, baseURL, apiKey, version string, timeoutSeconds int) *AnthropicProvider {
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 60
 	}
 	if version == "" {
 		version = "2023-06-01"
 	}
+	if name == "" {
+		name = "anthropic"
+	}
 	return &AnthropicProvider{
+		name:    name,
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
 		version: version,
@@ -40,7 +45,7 @@ func newAnthropicProvider(baseURL, apiKey, version string, timeoutSeconds int) *
 	}
 }
 
-func (p *AnthropicProvider) Name() string { return "anthropic" }
+func (p *AnthropicProvider) Name() string { return p.name }
 
 func (p *AnthropicProvider) Chat(ctx context.Context, sess *ChatSession, model string, maxTokens int) (*LLMResponse, error) {
 	if p.apiKey == "" {
@@ -56,7 +61,7 @@ func (p *AnthropicProvider) Chat(ctx context.Context, sess *ChatSession, model s
 		Data      string `json:"data"`
 	}
 	type contentBlock struct {
-		Type   string       `json:"type"`             // text | image
+		Type   string       `json:"type"` // text | image
 		Text   string       `json:"text,omitempty"`
 		Source *imageSource `json:"source,omitempty"`
 	}

@@ -93,6 +93,17 @@ func (db *FileDB) Set(key string, value any) error {
 	return err
 }
 
+// Keys 返回当前所有 key 的快照（顺序不保证）。
+func (db *FileDB) Keys() []string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	out := make([]string, 0, len(db.data))
+	for k := range db.data {
+		out = append(out, k)
+	}
+	return out
+}
+
 func (db *FileDB) Delete(key string) {
 	db.mu.Lock()
 	delete(db.data, key)

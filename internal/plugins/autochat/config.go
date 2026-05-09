@@ -1,6 +1,7 @@
 package autochat
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -11,27 +12,48 @@ import (
 //   - 新增 LLM.Providers 描述 OpenAI 兼容与 Anthropic 双 provider
 //   - Embedding / Rerank 改为 OpenAI 兼容 endpoint
 //   - 向量库改用 SQLite + sqlite-vec
+//
+// ProviderConfig 描述一个用户接入的 LLM 提供商实例。
+//
+// Name 是用户自定义的标识（例如 "openai-main"、"siliconflow"、"claude"）；
+// 在 LLM.Models 中以 "<Name>:<modelId>" 形式被引用。
+// Type 取值 "openai" / "anthropic"，分别走 OpenAI 兼容协议或 Anthropic Messages API。
+type ProviderConfig struct {
+	Name             string `yaml:"name"`
+	Type             string `yaml:"type"` // openai | anthropic
+	BaseURL          string `yaml:"base_url"`
+	APIKey           string `yaml:"api_key"`
+	Timeout          int    `yaml:"timeout"`
+	AnthropicVersion string `yaml:"anthropic_version,omitempty"`
+}
+
+// legacyProviders 是 v0 配置中的固定双 provider 段，仅用于向后兼容自动迁移。
+type legacyProviders struct {
+	OpenAI struct {
+		BaseURL string `yaml:"base_url"`
+		APIKey  string `yaml:"api_key"`
+		Timeout int    `yaml:"timeout"`
+	} `yaml:"openai"`
+	Anthropic struct {
+		BaseURL          string `yaml:"base_url"`
+		APIKey           string `yaml:"api_key"`
+		AnthropicVersion string `yaml:"anthropic_version"`
+		Timeout          int    `yaml:"timeout"`
+	} `yaml:"anthropic"`
+}
+
 type Config struct {
 	LogLevel string `yaml:"log_level"`
 
 	LLM struct {
-		Providers struct {
-			OpenAI struct {
-				BaseURL string `yaml:"base_url"`
-				APIKey  string `yaml:"api_key"`
-				Timeout int    `yaml:"timeout"`
-			} `yaml:"openai"`
-			Anthropic struct {
-				BaseURL          string `yaml:"base_url"`
-				APIKey           string `yaml:"api_key"`
-				AnthropicVersion string `yaml:"anthropic_version"`
-				Timeout          int    `yaml:"timeout"`
-			} `yaml:"anthropic"`
-		} `yaml:"providers"`
-		Models    []string `yaml:"models"`
-		MaxTokens int      `yaml:"max_tokens"`
-		Reasoning bool     `yaml:"reasoning"`
-		Timeout   int      `yaml:"timeout"`
+		// ProviderList 是 v1 字段：用户可自由增删提供商实例。
+		ProviderList []ProviderConfig `yaml:"provider_list"`
+		// Providers 是 v0 兼容字段：仅在 ProviderList 为空时被读取并迁移。
+		Providers legacyProviders `yaml:"providers,omitempty"`
+		Models    []string        `yaml:"models"`
+		MaxTokens int             `yaml:"max_tokens"`
+		Reasoning bool            `yaml:"reasoning"`
+		Timeout   int             `yaml:"timeout"`
 	} `yaml:"llm"`
 
 	Vector struct {
@@ -42,8 +64,9 @@ type Config struct {
 
 	Embedding struct {
 		Enabled    bool   `yaml:"enabled"`
-		BaseURL    string `yaml:"base_url"`
-		APIKey     string `yaml:"api_key"`
+		Provider   string `yaml:"provider"` // 引用 ProviderList[].Name；为空则使用下方独立 base_url/api_key
+		BaseURL    string `yaml:"base_url,omitempty"`
+		APIKey     string `yaml:"api_key,omitempty"`
 		Model      string `yaml:"model"`
 		Dimensions int    `yaml:"dimensions"`
 		Timeout    int    `yaml:"timeout"`
@@ -51,8 +74,9 @@ type Config struct {
 
 	Rerank struct {
 		Enabled   bool    `yaml:"enabled"`
-		BaseURL   string  `yaml:"base_url"`
-		APIKey    string  `yaml:"api_key"`
+		Provider  string  `yaml:"provider"`
+		BaseURL   string  `yaml:"base_url,omitempty"`
+		APIKey    string  `yaml:"api_key,omitempty"`
 		Model     string  `yaml:"model"`
 		Timeout   int     `yaml:"timeout"`
 		Threshold float64 `yaml:"threshold"`
@@ -93,12 +117,19 @@ type Config struct {
 		} `yaml:"prompt"`
 
 		Keywords []string `yaml:"keywords"`
+
+		// IgnorePrefixes：以这些字符/字串开头的“纯文本”消息将不会触发 autochat，
+		// 避免其它插件命令（/查歌、#help 等）误触自动对话。
+		IgnorePrefixes []string `yaml:"ignore_prefixes"`
+		// IgnorePatterns：额外的正则表达式列表，匹配到的纯文本会被忽略，
+		// 用于覆盖那些不以固定前缀开头的命令（例如纯中文指令名）。
+		IgnorePatterns []string `yaml:"ignore_patterns"`
 	} `yaml:"chat"`
 }
 
 var (
-	cfg     *Config
-	cfgMu   sync.RWMutex
+	cfg   *Config
+	cfgMu sync.RWMutex
 )
 
 // GetConfig 返回当前生效配置（仅在 Init 后非 nil）。
@@ -114,22 +145,49 @@ func setConfig(c *Config) {
 	cfgMu.Unlock()
 }
 
-// applyDefaults 在 cfg 上填补未设置的字段。
+// applyDefaults 在 cfg 上填补未设置的字段；同时把 v0 的 Providers 双段迁移到 ProviderList。
 func applyDefaults(c *Config) {
-	if c.LLM.Providers.OpenAI.BaseURL == "" {
-		c.LLM.Providers.OpenAI.BaseURL = "https://api.openai.com/v1"
+	// ---- v0 -> v1 迁移 ----
+	if len(c.LLM.ProviderList) == 0 {
+		lp := c.LLM.Providers
+		if lp.OpenAI.BaseURL != "" || lp.OpenAI.APIKey != "" {
+			c.LLM.ProviderList = append(c.LLM.ProviderList, ProviderConfig{
+				Name: "openai", Type: "openai",
+				BaseURL: lp.OpenAI.BaseURL, APIKey: lp.OpenAI.APIKey, Timeout: lp.OpenAI.Timeout,
+			})
+		}
+		if lp.Anthropic.BaseURL != "" || lp.Anthropic.APIKey != "" {
+			c.LLM.ProviderList = append(c.LLM.ProviderList, ProviderConfig{
+				Name: "anthropic", Type: "anthropic",
+				BaseURL: lp.Anthropic.BaseURL, APIKey: lp.Anthropic.APIKey,
+				AnthropicVersion: lp.Anthropic.AnthropicVersion, Timeout: lp.Anthropic.Timeout,
+			})
+		}
+		// 清空 v0 字段，避免下次写盘还重复
+		c.LLM.Providers = legacyProviders{}
 	}
-	if c.LLM.Providers.OpenAI.Timeout <= 0 {
-		c.LLM.Providers.OpenAI.Timeout = 60
-	}
-	if c.LLM.Providers.Anthropic.BaseURL == "" {
-		c.LLM.Providers.Anthropic.BaseURL = "https://api.anthropic.com"
-	}
-	if c.LLM.Providers.Anthropic.AnthropicVersion == "" {
-		c.LLM.Providers.Anthropic.AnthropicVersion = "2023-06-01"
-	}
-	if c.LLM.Providers.Anthropic.Timeout <= 0 {
-		c.LLM.Providers.Anthropic.Timeout = 60
+	// 为 ProviderList 内每条填默认值并校正 Type
+	for i := range c.LLM.ProviderList {
+		pc := &c.LLM.ProviderList[i]
+		if pc.Name == "" {
+			pc.Name = fmt.Sprintf("provider-%d", i+1)
+		}
+		if pc.Type != "anthropic" {
+			pc.Type = "openai"
+		}
+		if pc.Timeout <= 0 {
+			pc.Timeout = 60
+		}
+		if pc.Type == "anthropic" && pc.AnthropicVersion == "" {
+			pc.AnthropicVersion = "2023-06-01"
+		}
+		if pc.BaseURL == "" {
+			if pc.Type == "anthropic" {
+				pc.BaseURL = "https://api.anthropic.com"
+			} else {
+				pc.BaseURL = "https://api.openai.com/v1"
+			}
+		}
 	}
 	if c.LLM.MaxTokens <= 0 {
 		c.LLM.MaxTokens = 2048
@@ -145,12 +203,6 @@ func applyDefaults(c *Config) {
 	}
 	if c.Vector.TopK <= 0 {
 		c.Vector.TopK = 5
-	}
-	if c.Embedding.BaseURL == "" {
-		c.Embedding.BaseURL = c.LLM.Providers.OpenAI.BaseURL
-	}
-	if c.Embedding.APIKey == "" {
-		c.Embedding.APIKey = c.LLM.Providers.OpenAI.APIKey
 	}
 	if c.Embedding.Model == "" {
 		c.Embedding.Model = "text-embedding-3-small"
@@ -207,10 +259,26 @@ func applyDefaults(c *Config) {
 		c.Chat.Prompt.Persona = map[string]string{}
 	}
 	if _, ok := c.Chat.Prompt.Persona["default"]; !ok {
-		c.Chat.Prompt.Persona["default"] = "你是一个有用的AI助手。"
+		c.Chat.Prompt.Persona["default"] = `你现在扮演的是《世界计划》中的花里实乃理，正在使用社交软件（QQ）和用户们聊天，请按照以下设定进行角色扮演：
+        基本信息：
+        年龄：17岁（高中二年级）
+        所属组合：MORE MORE JUMP!
+        身份：新人偶像，MMJ的精神支柱
+        性格特征：
+        极度乐观开朗，充满正能量
+        即使遇到挫折也绝不放弃，总是积极向前
+        天然呆，经常会做出笨拙的举动，不喜欢吃西兰花
+        对朋友非常真诚，总是为他人着想
+        对偶像工作充满热情和憧憬
+        极度崇拜桐谷遥（遥前辈），经常提到她
+        虽然唱歌跳舞技巧还不够完美，但努力程度无人能及
+        喜欢鼓励他人，传播希望，避免长篇大论 输出尽量限制在40字以内`
 	}
 	if c.Chat.Prompt.Framework == "" {
 		c.Chat.Prompt.Framework = defaultFramework
+	}
+	if c.Chat.IgnorePrefixes == nil {
+		c.Chat.IgnorePrefixes = []string{"/", "#", "!", "！", ".", "。", ">", "&"}
 	}
 }
 

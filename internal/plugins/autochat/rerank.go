@@ -33,7 +33,17 @@ var (
 func initRerankClient(c *Config) {
 	rerankMu.Lock()
 	defer rerankMu.Unlock()
-	if !c.Rerank.Enabled || c.Rerank.APIKey == "" {
+	if !c.Rerank.Enabled {
+		rerankClient = &RerankClient{enabled: false}
+		return
+	}
+	baseURL := c.Rerank.BaseURL
+	apiKey := c.Rerank.APIKey
+	if pc := resolveProviderConfig(c, c.Rerank.Provider); pc != nil {
+		baseURL = pc.BaseURL
+		apiKey = pc.APIKey
+	}
+	if apiKey == "" {
 		rerankClient = &RerankClient{enabled: false}
 		return
 	}
@@ -42,8 +52,8 @@ func initRerankClient(c *Config) {
 		timeout = 15
 	}
 	rerankClient = &RerankClient{
-		baseURL:   strings.TrimRight(c.Rerank.BaseURL, "/"),
-		apiKey:    c.Rerank.APIKey,
+		baseURL:   strings.TrimRight(baseURL, "/"),
+		apiKey:    apiKey,
 		model:     c.Rerank.Model,
 		timeout:   time.Duration(timeout) * time.Second,
 		threshold: c.Rerank.Threshold,

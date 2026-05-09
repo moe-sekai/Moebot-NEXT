@@ -99,20 +99,27 @@ async function save() {
 .yaml-editor {
   width: 100%;
   min-height: 480px;
-  font-family: 'JetBrains Mono', Consolas, ui-monospace, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   line-height: 1.55;
-  background: var(--surface-soft, #0c0d12);
-  color: var(--text-primary, #e8e8f0);
-  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--foreground);
+  border: 1px solid var(--input);
+  border-radius: 16px;
   padding: 12px 14px;
   resize: vertical;
 }
+.yaml-editor:focus {
+  outline: none;
+  border-color: var(--primary, #ff78b7);
+  box-shadow: 0 0 0 3px rgba(255, 120, 183, 0.18);
+}
 code {
-  background: var(--surface-soft, rgba(255, 255, 255, 0.04));
-  padding: 0 4px;
-  border-radius: 4px;
+  background: rgba(165, 180, 252, 0.18);
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
 }
 .moesekai-links {
   display: flex;

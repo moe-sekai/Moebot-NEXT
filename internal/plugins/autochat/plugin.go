@@ -11,12 +11,15 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"moebot-next/internal/database"
 	"moebot-next/internal/filter"
 	"moebot-next/internal/plugin"
+	"moebot-next/internal/web"
 
 	"github.com/rs/zerolog/log"
 	zero "github.com/wdvxdr1123/ZeroBot"
@@ -29,6 +32,7 @@ const PluginName = "autochat"
 // 缓冲 / 阈值 / 会话 / 记忆 / Token 统计 / 当前 ZeroBot Engine）。
 type pluginImpl struct {
 	mu         sync.RWMutex
+	routesOnce sync.Once
 	configPath string
 
 	fileDB        *FileDB
@@ -69,13 +73,26 @@ func (p *pluginImpl) Manifest() plugin.Manifest {
 		SettingsRoute: "/plugins/autochat",
 		Tags:          []string{"llm", "official"},
 		Settings: []plugin.SettingField{
-			{Key: "openai_base_url", Label: "OpenAI 兼容 BaseURL", Type: "string", Group: "OpenAI",
+			{Key: "openai_base_url", Label: "OpenAI 兼容 BaseURL", Type: "string", Group: "Endpoints",
 				Description: "可指向 OpenAI / Azure / SiliconFlow / Ollama / 任一 OpenAI 兼容 endpoint。"},
-			{Key: "openai_api_key", Label: "OpenAI 兼容 API Key", Type: "string", Group: "OpenAI"},
-			{Key: "anthropic_api_key", Label: "Anthropic API Key", Type: "string", Group: "Anthropic"},
+			{Key: "openai_api_key", Label: "OpenAI 兼容 API Key", Type: "string", Group: "Endpoints"},
+			{Key: "anthropic_base_url", Label: "Anthropic BaseURL", Type: "string", Group: "Endpoints",
+				Description: "默认 https://api.anthropic.com，可指向自建中转。"},
+			{Key: "anthropic_api_key", Label: "Anthropic API Key", Type: "string", Group: "Endpoints"},
+
 			{Key: "primary_model", Label: "首选模型", Type: "string", Group: "对话",
 				Description: "格式 <provider>:<model>，如 openai:gpt-4o-mini 或 anthropic:claude-3-5-haiku-20241022。"},
+			{Key: "models", Label: "候选模型（每行一个）", Type: "textarea", Group: "对话",
+				Description: "/模型列表 命令展示与 /模型 切换可选项。首选模型会自动置顶。"},
 			{Key: "system_prompt", Label: "默认 System Prompt（人设）", Type: "textarea", Group: "对话"},
+
+			{Key: "willing_threshold", Label: "默认发言倾向阈值", Type: "float", Group: "触发",
+				Description: "群里每条消息会按规则增加阈值；累积到该值时触发主动发言。值越低越爱说话（建议 1.5–4.0）。"},
+			{Key: "chat_cd_seconds", Label: "/chat 冷却（秒）", Type: "int", Group: "触发"},
+			{Key: "keywords", Label: "关键词触发列表（每行一个）", Type: "textarea", Group: "触发",
+				Description: "消息包含任一关键词时直接增加较大阈值（更易触发）。"},
+			{Key: "ignore_prefixes", Label: "命令前缀屏蔽（每行一个）", Type: "textarea", Group: "触发",
+				Description: "以这些字符/字串开头的消息不会触发自动对话，避免与其它插件命令冲突。"},
 		},
 	}
 }
@@ -90,12 +107,35 @@ func (p *pluginImpl) GetSettings() (map[string]any, error) {
 	if len(c.LLM.Models) > 0 {
 		primaryModel = c.LLM.Models[0]
 	}
+	// 旧 schema 的 openai_*/anthropic_* 字段：从 ProviderList 中按 Name 查首条同类型项做兼容回填。
+	var oa, an *ProviderConfig
+	for i := range c.LLM.ProviderList {
+		pc := &c.LLM.ProviderList[i]
+		if oa == nil && pc.Type == "openai" {
+			oa = pc
+		}
+		if an == nil && pc.Type == "anthropic" {
+			an = pc
+		}
+	}
+	get := func(p *ProviderConfig, f func(*ProviderConfig) string) string {
+		if p == nil {
+			return ""
+		}
+		return f(p)
+	}
 	return map[string]any{
-		"openai_base_url":   c.LLM.Providers.OpenAI.BaseURL,
-		"openai_api_key":    c.LLM.Providers.OpenAI.APIKey,
-		"anthropic_api_key": c.LLM.Providers.Anthropic.APIKey,
-		"primary_model":     primaryModel,
-		"system_prompt":     c.Chat.Prompt.Persona["default"],
+		"openai_base_url":    get(oa, func(p *ProviderConfig) string { return p.BaseURL }),
+		"openai_api_key":     get(oa, func(p *ProviderConfig) string { return p.APIKey }),
+		"anthropic_base_url": get(an, func(p *ProviderConfig) string { return p.BaseURL }),
+		"anthropic_api_key":  get(an, func(p *ProviderConfig) string { return p.APIKey }),
+		"primary_model":      primaryModel,
+		"models":             strings.Join(c.LLM.Models, "\n"),
+		"system_prompt":      c.Chat.Prompt.Persona["default"],
+		"willing_threshold":  c.Chat.Willing.Threshold,
+		"chat_cd_seconds":    c.Chat.ChatCDSeconds,
+		"keywords":           strings.Join(c.Chat.Keywords, "\n"),
+		"ignore_prefixes":    strings.Join(c.Chat.IgnorePrefixes, "\n"),
 	}, nil
 }
 
@@ -118,14 +158,70 @@ func (p *pluginImpl) UpdateSettings(values map[string]any) error {
 		}
 		return "", false
 	}
+	asFloat := func(k string) (float64, bool) {
+		v, ok := values[k]
+		if !ok {
+			return 0, false
+		}
+		switch x := v.(type) {
+		case float64:
+			return x, true
+		case int:
+			return float64(x), true
+		case int64:
+			return float64(x), true
+		case string:
+			if x == "" {
+				return 0, false
+			}
+			if f, err := strconv.ParseFloat(x, 64); err == nil {
+				return f, true
+			}
+		}
+		return 0, false
+	}
+	asInt := func(k string) (int, bool) {
+		if f, ok := asFloat(k); ok {
+			return int(f), true
+		}
+		return 0, false
+	}
+	splitLines := func(s string) []string {
+		out := []string{}
+		for _, line := range strings.Split(s, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				out = append(out, line)
+			}
+		}
+		return out
+	}
+	// 旧 schema 字段写入：定位/创建 openai 和 anthropic 类型首条 ProviderConfig。
+	upsertProvider := func(typ string, mut func(*ProviderConfig)) {
+		for i := range c.LLM.ProviderList {
+			if c.LLM.ProviderList[i].Type == typ {
+				mut(&c.LLM.ProviderList[i])
+				return
+			}
+		}
+		pc := ProviderConfig{Name: typ, Type: typ}
+		mut(&pc)
+		c.LLM.ProviderList = append(c.LLM.ProviderList, pc)
+	}
 	if v, ok := asString("openai_base_url"); ok {
-		c.LLM.Providers.OpenAI.BaseURL = v
+		upsertProvider("openai", func(pc *ProviderConfig) { pc.BaseURL = v })
 	}
 	if v, ok := asString("openai_api_key"); ok {
-		c.LLM.Providers.OpenAI.APIKey = v
+		upsertProvider("openai", func(pc *ProviderConfig) { pc.APIKey = v })
+	}
+	if v, ok := asString("anthropic_base_url"); ok {
+		upsertProvider("anthropic", func(pc *ProviderConfig) { pc.BaseURL = v })
 	}
 	if v, ok := asString("anthropic_api_key"); ok {
-		c.LLM.Providers.Anthropic.APIKey = v
+		upsertProvider("anthropic", func(pc *ProviderConfig) { pc.APIKey = v })
+	}
+	if v, ok := asString("models"); ok {
+		c.LLM.Models = splitLines(v)
 	}
 	if v, ok := asString("primary_model"); ok && v != "" {
 		// 把 v 提前到 models 列表头
@@ -143,6 +239,18 @@ func (p *pluginImpl) UpdateSettings(values map[string]any) error {
 		}
 		c.Chat.Prompt.Persona["default"] = v
 	}
+	if v, ok := asFloat("willing_threshold"); ok && v > 0 {
+		c.Chat.Willing.Threshold = v
+	}
+	if v, ok := asInt("chat_cd_seconds"); ok && v > 0 {
+		c.Chat.ChatCDSeconds = v
+	}
+	if v, ok := asString("keywords"); ok {
+		c.Chat.Keywords = splitLines(v)
+	}
+	if v, ok := asString("ignore_prefixes"); ok {
+		c.Chat.IgnorePrefixes = splitLines(v)
+	}
 	if err := plugin.WriteYAMLFrom(p.configPath, c); err != nil {
 		return err
 	}
@@ -153,17 +261,14 @@ func (p *pluginImpl) UpdateSettings(values map[string]any) error {
 
 func (p *pluginImpl) applyProviders(c *Config) {
 	clearProviders()
-	registerProvider(newOpenAIProvider(
-		c.LLM.Providers.OpenAI.BaseURL,
-		c.LLM.Providers.OpenAI.APIKey,
-		c.LLM.Providers.OpenAI.Timeout,
-	))
-	registerProvider(newAnthropicProvider(
-		c.LLM.Providers.Anthropic.BaseURL,
-		c.LLM.Providers.Anthropic.APIKey,
-		c.LLM.Providers.Anthropic.AnthropicVersion,
-		c.LLM.Providers.Anthropic.Timeout,
-	))
+	for _, pc := range c.LLM.ProviderList {
+		switch pc.Type {
+		case "anthropic":
+			registerProvider(newAnthropicProvider(pc.Name, pc.BaseURL, pc.APIKey, pc.AnthropicVersion, pc.Timeout))
+		default:
+			registerProvider(newOpenAIProvider(pc.Name, pc.BaseURL, pc.APIKey, pc.Timeout))
+		}
+	}
 	initEmbeddingClient(c)
 	initRerankClient(c)
 }
@@ -225,6 +330,13 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 
 	// 5) 注册 ZeroBot 处理器
 	p.engine = p.registerHandlers()
+
+	// 5.1) 注册 Web 路由（per-group 配置）。Fiber 不支持注销路由，sync.Once 保护避免重复注册。
+	if webServer, ok := ctx.Web.(*web.Server); ok && webServer != nil {
+		p.routesOnce.Do(func() {
+			p.registerWebRoutes(webServer.App.Group("/api"))
+		})
+	}
 
 	// 6) 关闭钩子
 	ctx.OnShutdown(func() {

@@ -29,6 +29,11 @@ export const consoleNavItems: ConsoleNavItem[] = [
   { path: '/plugins/moesekai/advanced', name: 'plugins-moesekai-advanced', label: '高级配置', subtitle: 'Region/API/Assets', icon: 'settings', section: 'moesekai', requiresPlugin: 'moesekai' },
   { path: '/plugins/moesekai/commands', name: 'plugins-moesekai-commands', label: '指令解析', subtitle: 'Parser', icon: 'command', section: 'moesekai', requiresPlugin: 'moesekai' },
 
+  // AutoChat 插件命名空间（仅当 autochat 启用时显示）
+  { path: '/plugins/autochat', name: 'plugins-autochat', label: '概览', subtitle: 'Overview & Providers', icon: 'sparkle', section: 'autochat', requiresPlugin: 'autochat' },
+  { path: '/plugins/autochat/settings', name: 'plugins-autochat-settings', label: '设置', subtitle: 'Persona / Triggers / Groups', icon: 'settings', section: 'autochat', requiresPlugin: 'autochat' },
+  { path: '/plugins/autochat/memory', name: 'plugins-autochat-memory', label: '记忆管理', subtitle: 'Memory', icon: 'logs', section: 'autochat', requiresPlugin: 'autochat' },
+
   // 通用管理
   { path: '/groups', name: 'groups', label: '群组', subtitle: 'Groups', icon: 'groups', section: 'manage' },
   { path: '/users', name: 'users', label: '用户', subtitle: 'Users', icon: 'users', section: 'manage' },
@@ -99,8 +104,18 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     eyebrow: 'Plugin · MoeSekai',
   },
   'plugins-autochat': {
+    title: 'AutoChat · 概览',
+    subtitle: '查看插件状态、Token 用量并集中配置 LLM / 视觉 / 嵌入 / 重排 / 向量 等提供商。',
+    eyebrow: 'Plugin · AutoChat',
+  },
+  'plugins-autochat-settings': {
     title: 'AutoChat · 设置',
-    subtitle: '配置 OpenAI 兼容 / Anthropic 端点、模型与系统提示词。',
+    subtitle: '人设 / 触发与阈值 / 单群覆盖 / YAML 高级编辑。',
+    eyebrow: 'Plugin · AutoChat',
+  },
+  'plugins-autochat-memory': {
+    title: 'AutoChat · 记忆管理',
+    subtitle: '检索向量库中的用户画像与对话总结，支持语义搜索与单条删除。',
     eyebrow: 'Plugin · AutoChat',
   },
   groups: {

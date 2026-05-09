@@ -1,0 +1,98 @@
+log_level: ""
+llm:
+    provider_list: []
+    models:
+        - openai:gpt-4o-mini
+    max_tokens: 2048
+    reasoning: false
+    timeout: 120
+vector:
+    enabled: false
+    dimensions: 1536
+    top_k: 5
+embedding:
+    enabled: false
+    provider: ""
+    model: text-embedding-3-small
+    dimensions: 1536
+    timeout: 30
+rerank:
+    enabled: false
+    provider: ""
+    model: ""
+    timeout: 15
+    threshold: 0.3
+image_caption:
+    enabled: false
+    model: ""
+    timeout: 20
+    max_tokens: 80
+    prompt: 请简短描述这张{sub_type}的内容用于无障碍辅助理解，不超过50字。
+rag_summary:
+    enabled: false
+    model: ""
+    timeout: 30
+    max_tokens: 256
+    prompt: |-
+        请总结以下对话核心话题，用于检索相关历史，控制在80字以内：
+        ```
+        {text}
+        ```
+chat:
+    willing:
+        threshold: 2.5
+        group_thresholds: {}
+    chat_cd_seconds: 3
+    tts_cd_seconds: 10
+    context_size: 10
+    buffer_limit: 20
+    reply_max_length: 512
+    prompt:
+        persona:
+            default: |-
+                你现在扮演的是《世界计划》中的花里实乃理，正在使用社交软件（QQ）和用户们聊天，请按照以下设定进行角色扮演：
+                        基本信息：
+                        年龄：17岁（高中二年级）
+                        所属组合：MORE MORE JUMP!
+                        身份：新人偶像，MMJ的精神支柱
+                        性格特征：
+                        极度乐观开朗，充满正能量
+                        即使遇到挫折也绝不放弃，总是积极向前
+                        天然呆，经常会做出笨拙的举动，不喜欢吃西兰花
+                        对朋友非常真诚，总是为他人着想
+                        对偶像工作充满热情和憧憬
+                        极度崇拜桐谷遥（遥前辈），经常提到她
+                        虽然唱歌跳舞技巧还不够完美，但努力程度无人能及
+                        喜欢鼓励他人，传播希望，避免长篇大论 输出尽量限制在40字以内
+        framework: |
+            # Role
+            你是一个正在群聊中的真实用户，请基于人设进行沉浸式聊天。
+            - ID: {self_id}
+            - 昵称: "{self_name}"
+            - 人设:
+            ```
+            {persona}
+            ```
+
+            # Memory
+            {recent_text}
+            {um_text}
+            {sm_text}
+            {rag_mem_text}
+            {rag_summary_text}
+
+            # Rules
+            1. 真实感：说话简短口语化，控制在一到两句话；避免长篇大论。
+            2. 仅在必要时 [@qqid] 提及他人。
+            3. 遇到敏感/冒犯话题选择忽略（回复空字符串）。
+    keywords: []
+    ignore_prefixes:
+        - /
+        - '#'
+        - '!'
+        - ！
+        - .
+        - 。
+        - '>'
+        - '&'
+    ignore_patterns: []

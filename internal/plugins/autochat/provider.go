@@ -50,22 +50,36 @@ func getProvider(name string) (LLMProvider, bool) {
 	return p, ok
 }
 
-// parseModelSpec 解析 `<provider>:<model>` 形式的模型字符串，
-// 兼容别名：oa→openai, an/claude→anthropic。无前缀时默认 openai。
+// parseModelSpec 解析 `<provider>:<model>` 形式的模型字符串。
+// provider 名为用户在 ProviderList 里自定义的标识；
+// 兼容旧别名：oa→openai, an/claude→anthropic；无前缀时默认 "openai"。
 func parseModelSpec(spec string) (provider, model string) {
 	idx := strings.Index(spec, ":")
 	if idx <= 0 {
 		return "openai", spec
 	}
-	provider = strings.ToLower(spec[:idx])
+	provider = spec[:idx]
 	model = spec[idx+1:]
-	switch provider {
+	switch strings.ToLower(provider) {
 	case "oa":
 		provider = "openai"
 	case "an", "claude":
 		provider = "anthropic"
 	}
 	return
+}
+
+// resolveProviderConfig 在 cfg.LLM.ProviderList 中按 Name 查找；不存在则返回 nil。
+func resolveProviderConfig(c *Config, name string) *ProviderConfig {
+	if c == nil || name == "" {
+		return nil
+	}
+	for i := range c.LLM.ProviderList {
+		if c.LLM.ProviderList[i].Name == name {
+			return &c.LLM.ProviderList[i]
+		}
+	}
+	return nil
 }
 
 // UniversalChat 按模型字符串前缀分发到对应 provider。

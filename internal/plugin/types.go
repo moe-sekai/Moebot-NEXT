@@ -25,7 +25,7 @@ const (
 type SettingField struct {
 	Key         string          `json:"key"`
 	Label       string          `json:"label"`
-	Type        string          `json:"type"` // string / int / bool / select / textarea
+	Type        string          `json:"type"` // string / int / float / bool / select / textarea
 	Default     any             `json:"default,omitempty"`
 	Description string          `json:"description,omitempty"`
 	Group       string          `json:"group,omitempty"`

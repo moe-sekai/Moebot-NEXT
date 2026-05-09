@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wdvxdr1123/ZeroBot/message"
@@ -140,6 +141,81 @@ func formatTimestamp(ts int64) string {
 		return "未知时间"
 	}
 	return time.Unix(ts, 0).Format("01-02 15:04")
+}
+
+// extractPureText 拼接 text 段，跳过 at-bot 段，得到“真正的用户输入文本”，
+// 用于判断是否是其它插件的命令。其它 @人 的 at 段保留为 " @qq "（与 ZeroBot 命令注册处的写法一致）。
+func extractPureText(msg message.Message, selfID int64) string {
+	selfStr := strconv.FormatInt(selfID, 10)
+	var b strings.Builder
+	for _, seg := range msg {
+		switch seg.Type {
+		case "text":
+			b.WriteString(seg.Data["text"])
+		case "at":
+			if seg.Data["qq"] == selfStr {
+				continue
+			}
+			if qq, ok := seg.Data["qq"]; ok {
+				b.WriteString(" @" + qq + " ")
+			}
+		}
+	}
+	return b.String()
+}
+
+// ignorePatternCache 缓存编译后的正则，避免每条消息重复编译。
+var (
+	ignorePatternMu    sync.RWMutex
+	ignorePatternCache = map[string]*regexp.Regexp{}
+)
+
+func compileIgnorePattern(p string) *regexp.Regexp {
+	ignorePatternMu.RLock()
+	re, ok := ignorePatternCache[p]
+	ignorePatternMu.RUnlock()
+	if ok {
+		return re
+	}
+	compiled, err := regexp.Compile(p)
+	if err != nil {
+		return nil
+	}
+	ignorePatternMu.Lock()
+	ignorePatternCache[p] = compiled
+	ignorePatternMu.Unlock()
+	return compiled
+}
+
+// isIgnoredCommand 判断 pureText 是否应被视作其它插件的命令而跳过 autochat。
+// 规则：去掉首尾空白后，若以任一 IgnorePrefixes 开头，或匹配任一 IgnorePatterns 正则，则返回 true。
+func isIgnoredCommand(pureText string) bool {
+	t := strings.TrimSpace(pureText)
+	if t == "" {
+		return false
+	}
+	c := GetConfig()
+	if c == nil {
+		// 与默认值保持一致
+		return strings.ContainsAny(string([]rune(t)[0:1]), "/#!！.。>&")
+	}
+	for _, p := range c.Chat.IgnorePrefixes {
+		if p == "" {
+			continue
+		}
+		if strings.HasPrefix(t, p) {
+			return true
+		}
+	}
+	for _, p := range c.Chat.IgnorePatterns {
+		if p == "" {
+			continue
+		}
+		if re := compileIgnorePattern(p); re != nil && re.MatchString(t) {
+			return true
+		}
+	}
+	return false
 }
 
 // fmtUserName 兼容空昵称

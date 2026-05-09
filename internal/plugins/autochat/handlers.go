@@ -85,7 +85,9 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 		}
 	}
 	text := strings.TrimSpace(b.String())
-	if strings.HasPrefix(text, "/") {
+	// 提取剔除 @bot 之后的“纯文本”，用于判定是否是其它插件的命令。
+	pureText := strings.TrimSpace(extractPureText(msg, ctx.Event.SelfID))
+	if isIgnoredCommand(pureText) {
 		return
 	}
 

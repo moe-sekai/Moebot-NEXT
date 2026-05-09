@@ -30,7 +30,18 @@ var (
 func initEmbeddingClient(c *Config) {
 	embeddingMu.Lock()
 	defer embeddingMu.Unlock()
-	if !c.Embedding.Enabled || c.Embedding.APIKey == "" {
+	if !c.Embedding.Enabled {
+		embeddingClient = &EmbeddingClient{enabled: false}
+		return
+	}
+	// 优先从 Provider 引用解析 base_url/api_key；空则使用独立字段。
+	baseURL := c.Embedding.BaseURL
+	apiKey := c.Embedding.APIKey
+	if pc := resolveProviderConfig(c, c.Embedding.Provider); pc != nil {
+		baseURL = pc.BaseURL
+		apiKey = pc.APIKey
+	}
+	if apiKey == "" {
 		embeddingClient = &EmbeddingClient{enabled: false}
 		return
 	}
@@ -39,8 +50,8 @@ func initEmbeddingClient(c *Config) {
 		timeout = 30
 	}
 	embeddingClient = &EmbeddingClient{
-		baseURL:    strings.TrimRight(c.Embedding.BaseURL, "/"),
-		apiKey:     c.Embedding.APIKey,
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		apiKey:     apiKey,
 		model:      c.Embedding.Model,
 		dimensions: c.Embedding.Dimensions,
 		client:     &http.Client{Timeout: time.Duration(timeout) * time.Second},

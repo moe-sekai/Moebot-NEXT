@@ -41,7 +41,7 @@ function isVisible(item: ConsoleNavItem) {
 }
 
 const sections = computed(() => {
-  return (['main', 'plugins', 'moesekai', 'manage', 'system'] as const)
+  return (['main', 'plugins', 'moesekai', 'autochat', 'manage', 'system'] as const)
     .map(section => ({
       key: section,
       label: navSectionLabels[section],

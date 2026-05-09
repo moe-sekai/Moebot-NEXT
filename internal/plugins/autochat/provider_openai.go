@@ -14,23 +14,28 @@ import (
 // OpenAIProvider 实现 OpenAI 兼容的 /v1/chat/completions 协议。
 // 适用于 OpenAI 官方 / Azure / SiliconFlow / Ollama / OpenRouter 等。
 type OpenAIProvider struct {
+	name    string
 	baseURL string
 	apiKey  string
 	client  *http.Client
 }
 
-func newOpenAIProvider(baseURL, apiKey string, timeoutSeconds int) *OpenAIProvider {
+func newOpenAIProvider(name, baseURL, apiKey string, timeoutSeconds int) *OpenAIProvider {
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 60
 	}
+	if name == "" {
+		name = "openai"
+	}
 	return &OpenAIProvider{
+		name:    name,
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
 		client:  &http.Client{Timeout: time.Duration(timeoutSeconds) * time.Second},
 	}
 }
 
-func (p *OpenAIProvider) Name() string { return "openai" }
+func (p *OpenAIProvider) Name() string { return p.name }
 
 func (p *OpenAIProvider) Chat(ctx context.Context, sess *ChatSession, model string, maxTokens int) (*LLMResponse, error) {
 	if p.apiKey == "" {

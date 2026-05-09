@@ -460,7 +460,7 @@ export interface PluginSettingChoice {
 export interface PluginSettingField {
 	key: string;
 	label: string;
-	type: "string" | "int" | "bool" | "select" | "textarea";
+	type: "string" | "int" | "float" | "bool" | "select" | "textarea";
 	default?: unknown;
 	description?: string;
 	group?: string;
@@ -543,6 +543,263 @@ export async function updatePluginSettings(
 		{ values },
 	);
 	return data;
+}
+
+// --- AutoChat 插件 per-group 配置 ---
+
+export interface AutochatGroupSetting {
+	group_id: number
+	persona?: string
+	willing_threshold?: number | null
+	model?: string
+	chat_enabled: boolean
+	auto_enabled: boolean
+}
+
+export interface AutochatGroupListResponse {
+	groups: AutochatGroupSetting[]
+	default_threshold: number
+}
+
+export interface AutochatGroupUpsertPayload {
+	persona?: string
+	willing_threshold?: number | null
+	clear_willing?: boolean
+	model?: string
+	chat_enabled?: boolean
+	auto_enabled?: boolean
+}
+
+export async function listAutochatGroups() {
+	const { data } = await api.get<AutochatGroupListResponse>(
+		"/plugins/autochat/groups",
+	)
+	return data
+}
+
+export async function upsertAutochatGroup(
+	gid: number | string,
+	payload: AutochatGroupUpsertPayload,
+) {
+	const { data } = await api.put<AutochatGroupSetting>(
+		`/plugins/autochat/groups/${gid}`,
+		payload,
+	)
+	return data
+}
+
+export async function deleteAutochatGroup(gid: number | string) {
+	const { data } = await api.delete<{ ok: boolean }>(
+		`/plugins/autochat/groups/${gid}`,
+	)
+	return data
+}
+
+// --- AutoChat Overview ---
+
+export interface AutochatOverview {
+	primary_model: string
+	models_count: number
+	providers: {
+		openai: boolean
+		anthropic: boolean
+		embedding: boolean
+		rerank: boolean
+		vector: boolean
+		image_caption: boolean
+	}
+	keywords_count: number
+	willing_threshold: number
+	group_overrides: number
+	persona_overrides: number
+	token_stats_today: { prompt: number; completion: number; requests: number; total: number }
+	token_stats_7days: { prompt: number; completion: number; requests: number; total: number }
+}
+
+export async function getAutochatOverview() {
+	const { data } = await api.get<AutochatOverview>('/plugins/autochat/overview')
+	return data
+}
+
+// --- AutoChat Providers ---
+
+export interface AutochatProvider {
+	name: string
+	type: 'openai' | 'anthropic'
+	base_url: string
+	api_key: string
+	timeout: number
+	anthropic_version?: string
+}
+
+export interface AutochatProviders {
+	provider_list: AutochatProvider[]
+	llm: { models: string[]; max_tokens: number; reasoning: boolean; timeout: number }
+	embedding: {
+		enabled: boolean
+		provider: string  // 引用 provider_list[].name；空则用下方独立 base_url/api_key
+		base_url: string
+		api_key: string
+		model: string
+		dimensions: number
+		timeout: number
+	}
+	rerank: {
+		enabled: boolean
+		provider: string
+		base_url: string
+		api_key: string
+		model: string
+		threshold: number
+		timeout: number
+	}
+	vector: { enabled: boolean; dimensions: number; top_k: number }
+	image_caption: { enabled: boolean; model: string; timeout: number; max_tokens: number; prompt: string }
+	rag_summary: { enabled: boolean; model: string; timeout: number; max_tokens: number }
+}
+
+export async function getAutochatProviders() {
+	const { data } = await api.get<AutochatProviders>('/plugins/autochat/providers')
+	return data
+}
+
+export async function updateAutochatProviders(payload: AutochatProviders) {
+	const { data } = await api.put<AutochatProviders>('/plugins/autochat/providers', payload)
+	return data
+}
+
+// --- AutoChat Persona ---
+
+export interface AutochatPersona {
+	default_persona: string
+	framework: string
+	group_personas: Record<string, string>
+	rag_summary: { enabled: boolean; model: string; timeout: number; max_tokens: number; prompt: string }
+}
+
+export async function getAutochatPersona() {
+	const { data } = await api.get<AutochatPersona>('/plugins/autochat/persona')
+	return data
+}
+
+export async function updateAutochatPersona(payload: AutochatPersona) {
+	const { data } = await api.put<AutochatPersona>('/plugins/autochat/persona', payload)
+	return data
+}
+
+// --- AutoChat Triggers ---
+
+export interface AutochatTriggers {
+	willing_threshold: number
+	chat_cd_seconds: number
+	tts_cd_seconds: number
+	context_size: number
+	buffer_limit: number
+	reply_max_length: number
+	keywords: string[]
+	ignore_prefixes: string[]
+	ignore_patterns: string[]
+}
+
+export async function getAutochatTriggers() {
+	const { data } = await api.get<AutochatTriggers>('/plugins/autochat/triggers')
+	return data
+}
+
+export async function updateAutochatTriggers(payload: AutochatTriggers) {
+	const { data } = await api.put<AutochatTriggers>('/plugins/autochat/triggers', payload)
+	return data
+}
+
+// --- AutoChat Provider Test & Models ---
+
+export interface TestProviderResult {
+	ok: boolean
+	error?: string
+	reachable?: boolean
+	status?: number
+	message?: string
+}
+
+export async function testAutochatProvider(payload: {
+	type: string; base_url: string; api_key: string; timeout?: number
+}) {
+	const { data } = await api.post<TestProviderResult>('/plugins/autochat/test-provider', payload)
+	return data
+}
+
+export interface ModelOption { id: string; name: string }
+
+export async function listAutochatModels(payload: {
+	type: string; base_url: string; api_key: string; timeout?: number; prefix?: string
+}) {
+	const { data } = await api.post<{ models: ModelOption[]; source: string }>(
+		'/plugins/autochat/list-models', payload,
+	)
+	return data
+}
+
+// --- AutoChat YAML (settings 高级 tab) ---
+
+export async function getAutochatYAML() {
+	const { data } = await api.get<{ path: string; yaml: string }>('/plugins/autochat/yaml')
+	return data
+}
+
+// --- AutoChat Memory ---
+
+export interface AutochatMemoryGroup {
+	group_id: number
+	count: number
+}
+
+export interface AutochatMemoryItem {
+	id: number
+	group_id: number
+	user_id: number
+	user_name?: string
+	type: 'user_memory' | 'summary'
+	text: string
+	timestamp: number
+	score?: number
+}
+
+export async function listAutochatMemoryGroups() {
+	const { data } = await api.get<{ groups: AutochatMemoryGroup[]; vector_enabled: boolean }>(
+		'/plugins/autochat/memory/groups',
+	)
+	return data
+}
+
+export interface MemoryQueryParams {
+	group_id?: number
+	user_id?: number
+	type?: 'user_memory' | 'summary' | ''
+	q?: string
+	limit?: number
+}
+
+export async function queryAutochatMemory(params: MemoryQueryParams) {
+	const search: Record<string, string | number> = {}
+	if (params.group_id) search.group_id = params.group_id
+	if (params.user_id) search.user_id = params.user_id
+	if (params.type) search.type = params.type
+	if (params.q) search.q = params.q
+	if (params.limit) search.limit = params.limit
+	const { data } = await api.get<{
+		items: AutochatMemoryItem[]
+		total: number
+		vector_enabled: boolean
+		mode: 'semantic' | 'recent'
+	}>('/plugins/autochat/memory', { params: search })
+	return data
+}
+
+export async function deleteAutochatMemory(id: number) {
+	const { data } = await api.delete<{ ok: boolean; id: number }>(
+		`/plugins/autochat/memory/${id}`,
+	)
+	return data
 }
 
 export async function updatePluginConfig(name: string, yaml: string) {
