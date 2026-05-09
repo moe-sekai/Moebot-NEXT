@@ -292,6 +292,10 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 	p.db = db
 	p.mu.Unlock()
 	filterMgr, _ := ctx.Filter.(*filter.Manager)
+	rendererClient, _ := ctx.Renderer.(*renderer.Client)
+	p.mu.Lock()
+	p.rendererClient = rendererClient
+	p.mu.Unlock()
 
 	// 0) 在 Filter 网关中 seed 本插件对应的 internal app；让控制台「Filter」
 	//    页面能够独立分配模板/规则。已存在时不覆盖用户配置。

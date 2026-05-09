@@ -65,6 +65,8 @@ func RegisterAll(deps *Deps) {
 	RegisterDeckRecommend(deps)
 	RegisterRanking(deps)
 	RegisterBirthday()
+	RegisterDefaultRegion(deps)
+	RegisterSkillCalc(deps)
 	// RegisterSticker(deps)  // Phase 2
 	// RegisterGuess(deps)    // Phase 3
 

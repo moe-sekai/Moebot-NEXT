@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"moebot-next/internal/plugins/moesekai/commandparser"
 	"moebot-next/internal/config"
 	"moebot-next/internal/models"
+	"moebot-next/internal/plugins/moesekai/commandparser"
 	"moebot-next/internal/plugins/moesekai/servers"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
@@ -86,7 +86,19 @@ func runtimeForCommand(deps *Deps, ctx *zero.Ctx, forcedRegion string) (*servers
 	if region != "" {
 		return deps.Servers.GetExact(region), nil
 	}
-	user, err := deps.DB.GetUserByPlatform("onebot", userIDFromCtx(ctx))
+	platformID := userIDFromCtx(ctx)
+	// 优先使用用户通过 /pjsk服务器 设置的默认区服。
+	if def, _ := deps.DB.GetUserDefaultRegion("onebot", platformID); def != "" {
+		runtime := deps.Servers.GetExact(def)
+		user, err := deps.DB.GetUserByPlatformRegion("onebot", platformID, def)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return runtime, nil
+		}
+		if runtime != nil {
+			return runtime, user
+		}
+	}
+	user, err := deps.DB.GetUserByPlatform("onebot", platformID)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return deps.Servers.Default(), nil
 	}

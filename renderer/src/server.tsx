@@ -22,6 +22,7 @@ import {
 	GachaInfo,
 	GachaList,
 	HelpCard,
+	SkillCalc,
 	MemoryCard,
 	MusicDetail,
 	MusicList,
@@ -837,6 +838,9 @@ async function createElement(req: RenderRequest) {
 		case "help_card":
 		case "help":
 			return <HelpCard {...(data ?? defaultHelpData())} />;
+		case "skill_calc":
+		case "skillcalc":
+			return <SkillCalc {...(data ?? {})} />;
 		case "autochat_memory":
 		case "memory_card":
 			return <MemoryCard {...(data ?? {})} />;

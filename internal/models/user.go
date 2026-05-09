@@ -14,6 +14,18 @@ type User struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// UserDefaultRegion stores a platform user's preferred default game region.
+// Used when a moesekai command is invoked without a region prefix and the user
+// has explicitly set a default via /pjsk服务器.
+type UserDefaultRegion struct {
+	ID           uint      `gorm:"primarykey" json:"id"`
+	Platform     string    `gorm:"not null;uniqueIndex:idx_user_default_region" json:"platform"`
+	PlatformID   string    `gorm:"not null;uniqueIndex:idx_user_default_region" json:"platform_id"`
+	ServerRegion string    `gorm:"not null;default:'jp'" json:"server_region"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 // SuiteSetting stores per-region Suite data privacy and source preference.
 type SuiteSetting struct {
 	ID           uint      `gorm:"primarykey" json:"id"`

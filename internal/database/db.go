@@ -56,6 +56,7 @@ func New(cfg config.DatabaseConfig) (*DB, error) {
 	// and removes default_*_rules columns from filter_gateways).
 	if err := db.AutoMigrate(
 		&models.User{},
+		&models.UserDefaultRegion{},
 		&models.SuiteSetting{},
 		&models.Group{},
 		&models.CommandStat{},

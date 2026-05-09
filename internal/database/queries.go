@@ -11,13 +11,49 @@ import (
 // --- User Queries ---
 
 // GetUserByPlatform finds the first user binding for their platform ID.
+// If the user has explicitly set a default region via UserDefaultRegion, that
+// region's binding is returned first; otherwise it falls back to JP-first
+// then most-recently-updated ordering.
 func (d *DB) GetUserByPlatform(platform, platformID string) (*models.User, error) {
+	if region, _ := d.GetUserDefaultRegion(platform, platformID); region != "" {
+		if user, err := d.GetUserByPlatformRegion(platform, platformID, region); err == nil {
+			return user, nil
+		}
+	}
 	var user models.User
 	err := d.Where("platform = ? AND platform_id = ?", platform, platformID).Order("server_region = 'jp' DESC, updated_at DESC").First(&user).Error
 	if err != nil {
 		return nil, err
 	}
 	return &user, nil
+}
+
+// GetUserDefaultRegion returns the user's explicitly set default region, or
+// an empty string when none is configured.
+func (d *DB) GetUserDefaultRegion(platform, platformID string) (string, error) {
+	var row models.UserDefaultRegion
+	err := d.Where("platform = ? AND platform_id = ?", platform, platformID).First(&row).Error
+	if err != nil {
+		return "", err
+	}
+	return config.NormalizeRegion(row.ServerRegion), nil
+}
+
+// SetUserDefaultRegion upserts the default region for a platform user.
+// The region is normalized; an empty / invalid region returns an error.
+func (d *DB) SetUserDefaultRegion(platform, platformID, region string) error {
+	region = config.NormalizeRegion(region)
+	if region == "" || !config.IsValidRegion(region) {
+		return fmt.Errorf("invalid region: %s", region)
+	}
+	var row models.UserDefaultRegion
+	err := d.Where("platform = ? AND platform_id = ?", platform, platformID).First(&row).Error
+	if err != nil {
+		row = models.UserDefaultRegion{Platform: platform, PlatformID: platformID, ServerRegion: region}
+		return d.Create(&row).Error
+	}
+	row.ServerRegion = region
+	return d.Save(&row).Error
 }
 
 // GetUserByPlatformRegion finds a user binding for one game server.
