@@ -149,7 +149,10 @@ async function reload() {
   loading.value = true
   error.value = ''
   try {
-    galleries.value = await listGalleries()
+    galleries.value = (await listGalleries()) ?? []
+    for (const g of galleries.value) {
+      if (!g.aliases) g.aliases = []
+    }
   } catch (e: any) {
     error.value = e.response?.data?.message || e.message
   } finally {
