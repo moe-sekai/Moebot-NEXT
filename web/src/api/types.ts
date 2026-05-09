@@ -222,6 +222,7 @@ export interface PublicConfig {
 		nickname: string[];
 		command_prefix: string;
 		command_aliases?: Record<string, string[]>;
+		super_users: number[];
 		driver_type: string;
 		listen: string;
 		url?: string;
@@ -334,11 +335,12 @@ export interface UpdateBotDriverPayload {
 export interface UpdateBotPayload {
 	nickname?: string[];
 	command_prefix?: string;
+	super_users?: number[];
 	driver?: UpdateBotDriverPayload;
 }
 
 export interface UpdatePublicConfigPayload {
-	server: {
+	server?: {
 		region: string;
 	};
 	servers?: Record<string, UpdateServerProfilePayload>;

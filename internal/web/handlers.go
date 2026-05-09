@@ -255,6 +255,7 @@ type updatePublicConfigRequest struct {
 type botSettingsRequest struct {
 	Nickname      *[]string                 `json:"nickname"`
 	CommandPrefix *string                   `json:"command_prefix"`
+	SuperUsers    *[]int64                  `json:"super_users"`
 	Driver        *botDriverSettingsRequest `json:"driver"`
 }
 
@@ -493,6 +494,19 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 				return fiber.NewError(fiber.StatusBadRequest, "Command prefix must not be empty")
 			}
 			next.Bot.CommandPrefix = prefix
+		}
+		if req.Bot.SuperUsers != nil {
+			// 去重并丢掉非法 (<=0) 项；保持用户给出的顺序。
+			seen := map[int64]bool{}
+			cleaned := make([]int64, 0, len(*req.Bot.SuperUsers))
+			for _, qq := range *req.Bot.SuperUsers {
+				if qq <= 0 || seen[qq] {
+					continue
+				}
+				seen[qq] = true
+				cleaned = append(cleaned, qq)
+			}
+			next.Bot.SuperUsers = cleaned
 		}
 		if req.Bot.Driver != nil {
 			if req.Bot.Driver.Type != nil {
@@ -770,6 +784,7 @@ func (s *Server) publicConfigMap() fiber.Map {
 			"nickname":        s.Config.Bot.Nickname,
 			"command_prefix":  s.Config.Bot.CommandPrefix,
 			"command_aliases": s.Config.Bot.CommandAliases,
+			"super_users":     append([]int64{}, s.Config.Bot.SuperUsers...),
 			"driver_type":     s.Config.Bot.Driver.Type,
 			"listen":          s.Config.Bot.Driver.Listen,
 			"url":             s.Config.Bot.Driver.URL,

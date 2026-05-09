@@ -29,6 +29,33 @@
       </dl>
     </UiCard>
 
+    <!-- 超级管理员 (ZeroBot SuperUsers) -->
+    <UiCard>
+      <div class="card-heading">
+        <div>
+          <h2>超级管理员</h2>
+          <p>在这里填入的 QQ 将被设置为 ZeroBot 的 SuperUsers，拥有全局最高权限。多个插件的权限命令仅限超级管理员使用，例如 AutoChat 的 <code>/开启聊天</code>、<code>/关闭聊天</code>、<code>/开启autochat</code>、<code>/关闭autochat</code>。</p>
+        </div>
+      </div>
+      <UiAlert v-if="superSaveError" variant="destructive" title="保存失败">{{ superSaveError }}</UiAlert>
+      <UiAlert v-if="superSaveSuccess" variant="info" title="已保存">
+        超级管理员名单已写入 <code>data/config.yml</code>。<strong>需要重启 Moebot 进程</strong> 后 ZeroBot 才会重新加载。
+      </UiAlert>
+      <div class="super-users">
+        <label class="super-label">QQ 列表（每行一个）</label>
+        <textarea
+          v-model="superUsersText"
+          rows="4"
+          class="ui-textarea"
+          placeholder="123456789&#10;987654321"
+        />
+        <div class="super-foot">
+          <span class="hint">当前已配置 {{ parsedSuperUsers.length }} 人</span>
+          <UiButton variant="default" size="sm" :loading="superSaving" :disabled="!superDirty" @click="saveSuperUsers">保存</UiButton>
+        </div>
+      </div>
+    </UiCard>
+
     <UiAlert variant="info" title="业务配置已下沉到插件">
       原“区服 / Masterdata / Assets / Sekai API”等设置属于
       <strong>MoeSekai</strong> 插件，已迁移至
@@ -98,9 +125,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { getStatus, listPlugins, type PluginListItem } from '../api/client'
+import {
+  getPublicConfig,
+  getStatus,
+  listPlugins,
+  updatePublicConfig,
+  type PluginListItem,
+} from '../api/client'
 import type { RuntimeStatus } from '../api/types'
 import PageHeader from '../components/PageHeader.vue'
 import UiAlert from '../components/ui/UiAlert.vue'
@@ -116,9 +149,67 @@ const status = ref<RuntimeStatus | null>(null)
 const loadingBot = ref(false)
 const botError = ref('')
 
+// 超级管理员状态
+const superUsersText = ref('')
+const superUsersOriginal = ref('')
+const superSaving = ref(false)
+const superSaveError = ref('')
+const superSaveSuccess = ref(false)
+
+// 解析文本区为 int64[]：允许每行 / 逗号 / 空格分隔；忽略非法项。
+const parsedSuperUsers = computed(() => {
+  const seen = new Set<number>()
+  const out: number[] = []
+  for (const tok of superUsersText.value.split(/[\s,]+/)) {
+    const t = tok.trim()
+    if (!t) continue
+    const qq = Number(t)
+    if (!Number.isInteger(qq) || qq <= 0) continue
+    if (seen.has(qq)) continue
+    seen.add(qq)
+    out.push(qq)
+  }
+  return out
+})
+
+const superDirty = computed(() => superUsersText.value !== superUsersOriginal.value)
+
+async function loadSuperUsers() {
+  try {
+    const cfg = await getPublicConfig()
+    const list = cfg.bot?.super_users || []
+    superUsersText.value = list.join('\n')
+    superUsersOriginal.value = superUsersText.value
+  } catch (err) {
+    // 不阻断其他加载；在超级管理员的保存错误区提示。
+    superSaveError.value = err instanceof Error ? err.message : '加载超级管理员名单失败。'
+  }
+}
+
+async function saveSuperUsers() {
+  superSaving.value = true
+  superSaveError.value = ''
+  superSaveSuccess.value = false
+  try {
+    const list = parsedSuperUsers.value
+    await updatePublicConfig({
+      // 仅 patch bot.super_users；不传 server，避免触发区服校验。
+      bot: { super_users: list },
+    })
+    superUsersText.value = list.join('\n')
+    superUsersOriginal.value = superUsersText.value
+    superSaveSuccess.value = true
+  } catch (err) {
+    superSaveError.value = err instanceof Error ? err.message : '保存失败。'
+  } finally {
+    superSaving.value = false
+  }
+}
+
 onMounted(() => {
   load()
   loadBot()
+  loadSuperUsers()
 })
 
 async function loadBot() {
@@ -175,4 +266,19 @@ function categoryLabel(c: PluginListItem['category']) {
 .dot--ok { background: #5fd49a; box-shadow: 0 0 6px rgba(95,212,154,0.6); }
 .dot--off { background: #6c707a; }
 .muted { color: var(--text-muted); }
+
+/* ---- 超级管理员 ---- */
+.super-users { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.super-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.ui-textarea {
+  width: 100%; box-sizing: border-box;
+  border: 1px solid var(--border-default, rgba(255,255,255,0.08));
+  border-radius: 12px; padding: 10px 12px;
+  background: rgba(255,255,255,0.04); color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px; resize: vertical; min-height: 80px;
+}
+.ui-textarea:focus { outline: none; border-color: var(--accent, #5fd49a); }
+.super-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.super-foot .hint { font-size: 12px; color: var(--text-muted); }
 </style>

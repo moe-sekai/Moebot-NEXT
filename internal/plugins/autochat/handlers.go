@@ -15,6 +15,10 @@ import (
 
 // registerHandlers 在独立的 ZeroBot Engine 上注册所有处理器。
 // 返回 engine 句柄，便于插件禁用时调用 engine.Delete() 注销。
+//
+// 权限说明：/开启|关闭 (聊天|autochat) 等管理类命令仅放给 ZeroBot 全局
+// SuperUser（即 data/config.yml -> bot.super_users 列出的 QQ）。需要在
+// 控制台「核心设置 → 超级管理员」中配置；保存后重启进程生效。
 func (p *pluginImpl) registerHandlers() *zero.Engine {
 	engine := zero.New()
 

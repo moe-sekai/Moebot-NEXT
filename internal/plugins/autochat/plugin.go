@@ -47,6 +47,7 @@ type pluginImpl struct {
 
 	filterMgr *filter.Manager // 用于查询本插件的 internal FilterApp 规则
 	engine    *zero.Engine    // 独立 ZeroBot Engine，禁用插件时调用 Delete 注销
+	db        *database.DB    // 共享 Moebot 主 SQLite；applyProviders 重新初始化向量库时复用
 }
 
 // filterAppName 返回本插件在 filter 网关中的 internal app 名字。
@@ -271,6 +272,12 @@ func (p *pluginImpl) applyProviders(c *Config) {
 	}
 	initEmbeddingClient(c)
 	initRerankClient(c)
+	// 向量库：Web 保存后立即生效，避免“必须重启才能用记忆”。
+	if p.db != nil && p.db.DB != nil {
+		if err := initVectorClient(c, p.db.DB); err != nil {
+			log.Warn().Err(err).Msg("[autochat] 向量库重初始化失败")
+		}
+	}
 }
 
 // Init 加载配置 → 初始化客户端 / 状态 → 注册处理器 → 登记关闭钩子。
@@ -279,6 +286,9 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 	if db == nil || db.DB == nil {
 		return errors.New("autochat: database not available in plugin context")
 	}
+	p.mu.Lock()
+	p.db = db
+	p.mu.Unlock()
 	filterMgr, _ := ctx.Filter.(*filter.Manager)
 
 	// 0) 在 Filter 网关中 seed 本插件对应的 internal app；让控制台「Filter」

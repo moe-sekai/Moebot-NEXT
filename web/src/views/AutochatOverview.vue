@@ -137,6 +137,12 @@
             <Field label="自定义 API Key"><input v-model="model.embedding.api_key" type="text" /></Field>
           </div>
         </template>
+        <div class="btn-row">
+          <UiButton variant="outline" size="sm" :loading="testingEmbedding" @click="testEmbedding">测试可用性</UiButton>
+          <span v-if="embeddingTestResult" class="test-result" :class="embeddingTestResult.ok ? 'ok' : 'fail'">
+            {{ embeddingTestResult.ok ? embeddingTestResult.message : embeddingTestResult.error }}
+          </span>
+        </div>
       </UiCard>
 
       <UiCard>
@@ -161,6 +167,53 @@
             <Field label="自定义 API Key"><input v-model="model.rerank.api_key" type="text" /></Field>
           </div>
         </template>
+        <div class="btn-row">
+          <UiButton variant="outline" size="sm" :loading="testingRerank" @click="testRerank">测试可用性</UiButton>
+          <span v-if="rerankTestResult" class="test-result" :class="rerankTestResult.ok ? 'ok' : 'fail'">
+            {{ rerankTestResult.ok ? rerankTestResult.message : rerankTestResult.error }}
+          </span>
+        </div>
+      </UiCard>
+
+      <!-- ===== 管理员指令说明 ===== -->
+      <UiCard>
+        <SectionHeader
+          title="管理员指令"
+          desc="以下指令仅限「超级管理员（SuperUser）」使用。请前往 核心设置 → 超级管理员 配置 QQ 名单。" />
+        <div class="cmd-grid">
+          <div class="cmd-row">
+            <code>/开启聊天</code>
+            <span>把当前群加入 <code>/chat</code> 白名单（手动调用 LLM 模式）。</span>
+          </div>
+          <div class="cmd-row">
+            <code>/关闭聊天</code>
+            <span>从 <code>/chat</code> 白名单移除当前群。</span>
+          </div>
+          <div class="cmd-row">
+            <code>/开启autochat</code>
+            <span>把当前群加入主动发言白名单（按发言倾向阈值自动插嘴）。</span>
+          </div>
+          <div class="cmd-row">
+            <code>/关闭autochat</code>
+            <span>从主动发言白名单移除当前群。</span>
+          </div>
+          <div class="cmd-row">
+            <code>/模型 &lt;model&gt;</code>
+            <span>切换当前群使用的模型（管理员或 SuperUser 均可）。<code>/模型</code> 单独发查看当前。</span>
+          </div>
+          <div class="cmd-row">
+            <code>/模型列表</code>
+            <span>列出已配置的所有候选模型。</span>
+          </div>
+          <div class="cmd-row">
+            <code>/消耗统计</code>
+            <span>查看 24 小时 / 7 日 token 用量与请求次数。</span>
+          </div>
+          <div class="cmd-row">
+            <code>/查询记忆</code>
+            <span>从向量库检索本群历史画像与对话总结。</span>
+          </div>
+        </div>
       </UiCard>
 
       <UiCard>
@@ -303,6 +356,67 @@ function emptyProvider(): AutochatProvider {
   return { name: '', type: 'openai', base_url: '', api_key: '', timeout: 60, anthropic_version: '2023-06-01' }
 }
 
+// ---------- Embedding / Rerank availability test ----------
+const testingEmbedding = ref(false)
+const testingRerank = ref(false)
+const embeddingTestResult = ref<TestProviderResult | null>(null)
+const rerankTestResult = ref<TestProviderResult | null>(null)
+
+// 解析 embedding/rerank 的有效端点：优先 provider 引用；否则用独立 base_url/api_key。
+function resolveEndpoint(provName: string, fallbackBaseURL: string, fallbackKey: string) {
+  if (provName) {
+    const p = (model.value?.provider_list || []).find(x => x.name === provName)
+    if (p) return { base_url: p.base_url, api_key: p.api_key, timeout: p.timeout }
+  }
+  return { base_url: fallbackBaseURL, api_key: fallbackKey, timeout: 15 }
+}
+
+async function testEmbedding() {
+  if (!model.value) return
+  testingEmbedding.value = true
+  embeddingTestResult.value = null
+  try {
+    const ep = resolveEndpoint(
+      model.value.embedding.provider,
+      model.value.embedding.base_url,
+      model.value.embedding.api_key,
+    )
+    embeddingTestResult.value = await testAutochatProvider({
+      type: 'openai', // /models 端点对 OpenAI 兼容供应商通用
+      base_url: ep.base_url,
+      api_key: ep.api_key,
+      timeout: model.value.embedding.timeout || ep.timeout,
+    })
+  } catch (e) {
+    embeddingTestResult.value = { ok: false, error: e instanceof Error ? e.message : String(e) }
+  } finally {
+    testingEmbedding.value = false
+  }
+}
+
+async function testRerank() {
+  if (!model.value) return
+  testingRerank.value = true
+  rerankTestResult.value = null
+  try {
+    const ep = resolveEndpoint(
+      model.value.rerank.provider,
+      model.value.rerank.base_url,
+      model.value.rerank.api_key,
+    )
+    rerankTestResult.value = await testAutochatProvider({
+      type: 'openai',
+      base_url: ep.base_url,
+      api_key: ep.api_key,
+      timeout: model.value.rerank.timeout || ep.timeout,
+    })
+  } catch (e) {
+    rerankTestResult.value = { ok: false, error: e instanceof Error ? e.message : String(e) }
+  } finally {
+    testingRerank.value = false
+  }
+}
+
 const primaryModel = computed({
   get: () => model.value?.llm.models?.[0] || '',
   set: (v: string) => {
@@ -325,14 +439,74 @@ const dirty = computed(() =>
 onMounted(reload)
 watch(model, () => { successMsg.value = '' }, { deep: true })
 
+// normalizeProviders 给 payload 补齐所有字段默认值，避免后端旧二进制 / 字段缺失
+// 时 Vue 模板里 model.provider_list.length / model.embedding.* 抛 TypeError
+// 导致整张子卡片静默不渲染（典型症状：刚把插件由关闭切到开启后，部分卡片消失）。
+function normalizeProviders(pv: Partial<AutochatProviders> | null | undefined): AutochatProviders {
+  const p = (pv || {}) as Partial<AutochatProviders>
+  return {
+    provider_list: Array.isArray(p.provider_list) ? p.provider_list : [],
+    llm: {
+      models: Array.isArray(p.llm?.models) ? p.llm!.models : [],
+      max_tokens: p.llm?.max_tokens ?? 2048,
+      reasoning: !!p.llm?.reasoning,
+      timeout: p.llm?.timeout ?? 120,
+    },
+    embedding: {
+      enabled: !!p.embedding?.enabled,
+      provider: p.embedding?.provider ?? '',
+      base_url: p.embedding?.base_url ?? '',
+      api_key: p.embedding?.api_key ?? '',
+      model: p.embedding?.model ?? '',
+      dimensions: p.embedding?.dimensions ?? 1536,
+      timeout: p.embedding?.timeout ?? 30,
+    },
+    rerank: {
+      enabled: !!p.rerank?.enabled,
+      provider: p.rerank?.provider ?? '',
+      base_url: p.rerank?.base_url ?? '',
+      api_key: p.rerank?.api_key ?? '',
+      model: p.rerank?.model ?? '',
+      threshold: p.rerank?.threshold ?? 0.3,
+      timeout: p.rerank?.timeout ?? 15,
+    },
+    vector: {
+      enabled: !!p.vector?.enabled,
+      dimensions: p.vector?.dimensions ?? 1536,
+      top_k: p.vector?.top_k ?? 5,
+    },
+    image_caption: {
+      enabled: !!p.image_caption?.enabled,
+      model: p.image_caption?.model ?? '',
+      timeout: p.image_caption?.timeout ?? 20,
+      max_tokens: p.image_caption?.max_tokens ?? 80,
+      prompt: p.image_caption?.prompt ?? '',
+    },
+    rag_summary: {
+      enabled: !!p.rag_summary?.enabled,
+      model: p.rag_summary?.model ?? '',
+      timeout: p.rag_summary?.timeout ?? 30,
+      max_tokens: p.rag_summary?.max_tokens ?? 256,
+    },
+  }
+}
+
 async function reload() {
   loading.value = true
   error.value = ''
   try {
-    const [ov, pv] = await Promise.all([getAutochatOverview(), getAutochatProviders()])
+    // 拆开两个请求：overview 失败时不影响下方表单加载；
+    // 这样在插件刚由关闭切到开启时，至少配置面板可以正常显示。
+    const ovP = getAutochatOverview().catch(err => {
+      console.warn('[autochat] overview load failed', err)
+      return null
+    })
+    const pvP = getAutochatProviders()
+    const [ov, pv] = await Promise.all([ovP, pvP])
     overview.value = ov
-    model.value = pv
-    original.value = JSON.stringify(pv)
+    const normalized = normalizeProviders(pv)
+    model.value = normalized
+    original.value = JSON.stringify(normalized)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载失败。'
   } finally {
@@ -607,4 +781,21 @@ function confirmDialog() {
 }
 .type-tab:hover { border-color: var(--input); }
 .type-tab.active { background: var(--primary, #ff78b7); color: #fff; border-color: var(--primary, #ff78b7); }
+
+/* ---- 管理员指令表 ---- */
+.cmd-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.cmd-row {
+  display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 16px;
+  padding: 10px 14px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55); border: 1px solid var(--border);
+  font-size: 13px; align-items: baseline;
+}
+.cmd-row code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: rgba(165, 180, 252, 0.18); padding: 2px 8px; border-radius: 6px;
+  color: var(--foreground); font-weight: 600; font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cmd-row span { color: var(--muted-foreground); line-height: 1.55; }
+.cmd-row span code { background: rgba(255,165,200,0.2); font-size: 11px; padding: 1px 6px; }
 </style>
