@@ -2,7 +2,7 @@ package autochat
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -14,18 +14,38 @@ import (
 	"github.com/wdvxdr1123/ZeroBot/message"
 )
 
-// AutoChatJSONResponse 是 LLM 必须输出的 JSON 结构。
-type AutoChatJSONResponse struct {
-	Replies         []string          `json:"replies"`
-	Reply           string            `json:"reply"` // 旧字段兼容
-	DialogueSummary string            `json:"dialogue_summary"`
-	UpdateProfiles  map[string]string `json:"update_profiles"` // 用户画像（覆盖式）
-	AddMemories    map[string]string  `json:"add_memories"`    // 历史记忆（增量 RAG）
-	UpdateMemories map[string]string  `json:"update_memories"` // 旧字段兼容
-	ReplyToQQs     []int64            `json:"reply_to_qqs,omitempty"`
+// AutoChatXMLResponse 是 LLM 必须输出的 XML 结构。
+// 选择 XML 而非 JSON 是因为 LLM 输出 XML 时格式更稳定（不易因引号/逗号丢格式）。
+type AutoChatXMLResponse struct {
+	XMLName         xml.Name     `xml:"response"`
+	Replies         []string     `xml:"replies>reply"`
+	DialogueSummary string       `xml:"dialogue_summary"`
+	UpdateProfiles  []xmlEntryKV `xml:"update_profiles>profile"` // 用户画像（覆盖式）
+	AddMemories     []xmlEntryKV `xml:"add_memories>memory"`     // 历史记忆（增量 RAG）
+	ReplyToQQs      []int64      `xml:"reply_to_qqs>qq"`
 }
 
-// processChat 处理一次对话：拼 system prompt → 调 LLM → 解析 JSON → 发送回复 + 更新记忆。
+// xmlEntryKV 表示一条带 qq 属性的键值条目，例如：
+//
+//	<profile qq="123456">覆盖式用户画像</profile>
+type xmlEntryKV struct {
+	QQ    string `xml:"qq,attr"`
+	Value string `xml:",chardata"`
+}
+
+// extractXMLBlock 从 LLM 原文中提取 <response>...</response> 片段。
+// 兼容代码块包裹（```xml ... ```）以及前后多余文本。
+func extractXMLBlock(raw string) string {
+	s := strings.TrimSpace(raw)
+	start := strings.Index(s, "<response>")
+	end := strings.LastIndex(s, "</response>")
+	if start >= 0 && end > start {
+		return s[start : end+len("</response>")]
+	}
+	return s
+}
+
+// processChat 处理一次对话：拼 system prompt → 调 LLM → 解析 XML → 发送回复 + 更新记忆。
 func (p *pluginImpl) processChat(ctx *zero.Ctx, groupID, userID int64, queryText string, allowTargetSelection bool) {
 	cfg := GetConfig()
 	msg := ctx.Event.Message
@@ -98,48 +118,48 @@ func (p *pluginImpl) processChat(ctx *zero.Ctx, groupID, userID int64, queryText
 	}
 	elapsed := time.Since(timeStart)
 
-	// 解析 JSON 响应
-	clean := strings.TrimSpace(resp.Result)
-	clean = strings.TrimPrefix(clean, "```json")
-	clean = strings.TrimPrefix(clean, "```")
-	clean = strings.TrimSuffix(clean, "```")
-	clean = strings.TrimSpace(clean)
+	// 解析 XML 响应
+	clean := extractXMLBlock(resp.Result)
 
-	var llmResp AutoChatJSONResponse
-	if err := json.Unmarshal([]byte(clean), &llmResp); err != nil {
-		log.Warn().Err(err).Str("raw", truncate(clean, 200)).Msg("[autochat] JSON 解析失败，丢弃")
+	var llmResp AutoChatXMLResponse
+	if err := xml.Unmarshal([]byte(clean), &llmResp); err != nil {
+		log.Warn().Err(err).Str("raw", truncate(clean, 200)).Msg("[autochat] XML 解析失败，丢弃")
 		return
 	}
 
-	finalReplies := make([]string, 0)
-	if len(llmResp.Replies) > 0 {
-		finalReplies = append(finalReplies, llmResp.Replies...)
-	} else if llmResp.Reply != "" {
-		finalReplies = append(finalReplies, llmResp.Reply)
+	finalReplies := make([]string, 0, len(llmResp.Replies))
+	for _, r := range llmResp.Replies {
+		r = strings.TrimSpace(r)
+		if r != "" {
+			finalReplies = append(finalReplies, r)
+		}
 	}
 	if len(finalReplies) > 10 {
 		finalReplies = finalReplies[:10]
 	}
 
-	if llmResp.DialogueSummary != "" {
-		_ = p.memory.AddSummary(groupID, llmResp.DialogueSummary)
+	if s := strings.TrimSpace(llmResp.DialogueSummary); s != "" {
+		_ = p.memory.AddSummary(groupID, s)
 	}
-	for uidStr, text := range llmResp.UpdateProfiles {
-		if uid, err := strconv.ParseInt(uidStr, 10, 64); err == nil {
+	for _, e := range llmResp.UpdateProfiles {
+		text := strings.TrimSpace(e.Value)
+		if text == "" {
+			continue
+		}
+		if uid, err := strconv.ParseInt(strings.TrimSpace(e.QQ), 10, 64); err == nil {
 			_ = p.memory.UpdateUserMemory(groupID, uid, text)
 		}
 	}
 	if vc := GetVectorClient(); vc != nil && vc.IsEnabled() {
-		for uidStr, text := range llmResp.AddMemories {
-			if uid, err := strconv.ParseInt(uidStr, 10, 64); err == nil {
+		for _, e := range llmResp.AddMemories {
+			text := strings.TrimSpace(e.Value)
+			if text == "" {
+				continue
+			}
+			if uid, err := strconv.ParseInt(strings.TrimSpace(e.QQ), 10, 64); err == nil {
 				userName := ctx.CardOrNickName(uid)
 				go func(g, u int64, n, t string) { _ = vc.UpsertUserMemory(g, u, n, t) }(groupID, uid, userName, text)
 			}
-		}
-	}
-	for uidStr, text := range llmResp.UpdateMemories { // 旧字段
-		if uid, err := strconv.ParseInt(uidStr, 10, 64); err == nil {
-			_ = p.memory.UpdateUserMemory(groupID, uid, text)
 		}
 	}
 
@@ -291,22 +311,32 @@ func (p *pluginImpl) buildSystemPrompt(ctx *zero.Ctx, cfg *Config, groupID, user
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{rag_mem_text}", ragMemText)
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{rag_summary_text}", ragSummaryText)
 
-	jsonFormat := `{
-  "replies": ["回复1", "回复2"],
-  "dialogue_summary": "本次对话简短总结，用于未来的[前情提要]",
-  "update_profiles": { "123456": "覆盖式用户画像描述" },
-  "add_memories": { "123456": "新增的具体事件/细节，将进入RAG" }`
+	xmlFormat := `<response>
+  <replies>
+    <reply>回复1</reply>
+    <reply>回复2</reply>
+  </replies>
+  <dialogue_summary>本次对话简短总结，用于未来的[前情提要]</dialogue_summary>
+  <update_profiles>
+    <profile qq="123456">覆盖式用户画像描述</profile>
+  </update_profiles>
+  <add_memories>
+    <memory qq="123456">新增的具体事件/细节，将进入RAG</memory>
+  </add_memories>`
 	if allowTargetSelection {
-		jsonFormat += `,
-  "reply_to_qqs": [123456]`
+		xmlFormat += `
+  <reply_to_qqs>
+    <qq>123456</qq>
+  </reply_to_qqs>`
 	}
-	jsonFormat += `
-}
+	xmlFormat += `
+</response>
 说明：
-1. 严格输出 JSON（不要 Markdown 代码块）。
-2. 单条回复尽量 30 字以内，可拆为多条。
-3. 闲聊无新信息时 update_profiles / add_memories 留空对象 {}。`
-	systemPrompt += "\n\n# Output Format\n请严格按下列格式输出：\n" + jsonFormat
+1. 严格输出 XML（不要 Markdown 代码块、不要前后多余文字），根标签必须是 <response>。
+2. 单条回复尽量 30 字以内，可拆为多条 <reply>；无回复时 <replies></replies> 留空。
+3. 闲聊无新信息时 <update_profiles>/<add_memories> 留空（不要写 <profile>/<memory>）。
+4. 文本中如出现 < > & 字符请使用 &lt; &gt; &amp; 转义；除此之外不要做其他转义。`
+	systemPrompt += "\n\n# Output Format\n请严格按下列格式输出：\n" + xmlFormat
 	return systemPrompt
 }
 
