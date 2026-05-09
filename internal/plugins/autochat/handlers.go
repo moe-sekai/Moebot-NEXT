@@ -113,17 +113,26 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 	delta := 0.0
 	isDirect := false
 	hitReason := ""
-	// ZeroBot 在 preprocessMessageEvent 阶段会扫描 at 段、对比 SelfID 后置位
-	// IsToMe，并默认把 at-bot 段从 Message 里剥离（KeepAtMeMessage=false）。
-	// 因此判定是否被 @ 必须直接读 IsToMe，自己再去 msg 里找 at 段是徒劳的。
-	if ctx.Event.IsToMe {
+	// ZeroBot 的 preprocessMessageEvent 会把以下两种情况都置为 IsToMe：
+	//   1) 真正的 @bot（at 段 qq==SelfID）—— 此时 RawMessage 里能看到 [CQ:at,qq=<self>
+	//   2) 消息以昵称（BotConfig.NickName）开头 —— 没有 at 段，仅前缀命中
+	// 两者权重不同：前者用户主动呼叫 bot，给 AtDelta；后者只是出现了名字，给 KeywordDelta。
+	selfAtTag := fmt.Sprintf("[CQ:at,qq=%d", ctx.Event.SelfID)
+	switch {
+	case strings.Contains(ctx.Event.RawMessage, selfAtTag):
 		delta = cfg.Chat.Willing.AtDelta
 		isDirect = true
 		hitReason = "at"
-	} else if otherAts := ExtractAtQQ(msg); len(otherAts) > 0 {
-		// 消息里有 @ 段但都不是 bot：用户 @ 别人，正常忽略，仅 Debug 记录。
-		log.Debug().Int64("self_id", ctx.Event.SelfID).Ints64("at_ids", otherAts).
-			Msg("[autochat] 检测到 @ 段但未命中 bot")
+	case ctx.Event.IsToMe:
+		// 昵称前缀命中：按关键词处理，不算"被 @"
+		delta = cfg.Chat.Willing.KeywordDelta
+		isDirect = true
+		hitReason = "nickname"
+	default:
+		if otherAts := ExtractAtQQ(msg); len(otherAts) > 0 {
+			log.Debug().Int64("self_id", ctx.Event.SelfID).Ints64("at_ids", otherAts).
+				Msg("[autochat] 检测到 @ 段但未命中 bot")
+		}
 	}
 	if !isDirect {
 		if !p.autoWhiteList.Check(groupID) {
