@@ -15,6 +15,8 @@ export { ForecastRankingList } from "./ForecastRankingList";
 export { WaterTable } from "./WaterTable";
 export { ProfileCard } from "./ProfileCard";
 export { HelpCard } from "./HelpCard";
+export { MemoryCard } from "./MemoryCard";
+export type { MemoryCardProps, MemorySegment, MemoryResult } from "./MemoryCard";
 export { GachaInfo } from "./GachaInfo";
 export type { GachaInfoProps } from "./GachaInfo";
 export { GachaList } from "./GachaList";

@@ -19,6 +19,7 @@ import (
 	"moebot-next/internal/database"
 	"moebot-next/internal/filter"
 	"moebot-next/internal/plugin"
+	"moebot-next/internal/renderer"
 	"moebot-next/internal/web"
 
 	"github.com/rs/zerolog/log"
@@ -45,9 +46,10 @@ type pluginImpl struct {
 	memory        *MemoryManager
 	thresholds    map[int64]float64
 
-	filterMgr *filter.Manager // 用于查询本插件的 internal FilterApp 规则
-	engine    *zero.Engine    // 独立 ZeroBot Engine，禁用插件时调用 Delete 注销
-	db        *database.DB    // 共享 Moebot 主 SQLite；applyProviders 重新初始化向量库时复用
+	rendererClient *renderer.Client // 共享 Bun Satori 渲染服务，用于把 /查询记忆 渲染成图片
+	filterMgr      *filter.Manager  // 用于查询本插件的 internal FilterApp 规则
+	engine         *zero.Engine     // 独立 ZeroBot Engine，禁用插件时调用 Delete 注销
+	db             *database.DB     // 共享 Moebot 主 SQLite；applyProviders 重新初始化向量库时复用
 }
 
 // filterAppName 返回本插件在 filter 网关中的 internal app 名字。

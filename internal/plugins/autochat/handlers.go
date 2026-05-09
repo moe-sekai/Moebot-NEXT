@@ -8,10 +8,54 @@ import (
 	"sync"
 	"time"
 
+	"moebot-next/internal/renderer"
+
 	"github.com/rs/zerolog/log"
 	zero "github.com/wdvxdr1123/ZeroBot"
 	"github.com/wdvxdr1123/ZeroBot/message"
 )
+
+// memorySegment / memoryResult / memoryCardPayload 是 autochat 与 renderer
+// 共享的 payload schema，对应 renderer/src/templates/MemoryCard.tsx 的 props。
+// 字段名（JSON tag）必须与 .tsx 中的 prop key 完全一致。
+type memorySegment struct {
+	Timestamp string `json:"timestamp,omitempty"`
+	Text      string `json:"text"`
+}
+
+type memoryResult struct {
+	Index     int    `json:"index,omitempty"`
+	Name      string `json:"name,omitempty"`
+	UserID    int64  `json:"userId,omitempty"`
+	Timestamp string `json:"timestamp,omitempty"`
+	Text      string `json:"text"`
+}
+
+type memoryCardPayload struct {
+	Title         string          `json:"title,omitempty"`
+	Subtitle      string          `json:"subtitle,omitempty"`
+	ProfileName   string          `json:"profileName,omitempty"`
+	ProfileUserID int64           `json:"profileUserId,omitempty"`
+	Profile       string          `json:"profile,omitempty"`
+	Segments      []memorySegment `json:"segments,omitempty"`
+	Results       []memoryResult  `json:"results,omitempty"`
+	EmptyText     string          `json:"emptyText,omitempty"`
+	Hint          string          `json:"hint,omitempty"`
+}
+
+// renderMemoryCard 通过 Satori 把 /查询记忆 的结果渲染成图片。
+// 渲染失败 / renderer 未配置时返回 nil，调用方应回退到纯文本。
+func (p *pluginImpl) renderMemoryCard(payload memoryCardPayload) []byte {
+	if p == nil || p.rendererClient == nil {
+		return nil
+	}
+	png, err := p.rendererClient.Render(renderer.RenderRequest{Template: "autochat_memory", Data: payload})
+	if err != nil {
+		log.Warn().Err(err).Msg("[autochat] 记忆卡片渲染失败，回退到纯文本")
+		return nil
+	}
+	return png
+}
 
 // registerHandlers 在独立的 ZeroBot Engine 上注册所有处理器。
 // 返回 engine 句柄，便于插件禁用时调用 engine.Delete() 注销。
@@ -279,27 +323,56 @@ func (p *pluginImpl) handleQueryMemory(ctx *zero.Ctx) {
 }
 
 func (p *pluginImpl) queryUserMemory(ctx *zero.Ctx, groupID, userID int64, name string) {
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("[记忆查询] %s (%d)\n", name, userID))
-	if local, err := p.memory.GetUserMemory(groupID, userID); err == nil && local != "" {
-		b.WriteString("\n📌 用户画像:\n")
-		b.WriteString(local)
-	} else {
-		b.WriteString("\n📌 用户画像: (无)")
+	var profile string
+	if local, err := p.memory.GetUserMemory(groupID, userID); err == nil {
+		profile = local
 	}
+	var segments []memorySegment
 	if vc := GetVectorClient(); vc != nil && vc.IsEnabled() {
-		if mems, err := vc.QueryUserMemories(groupID, userID, 5); err == nil && len(mems) > 0 {
-			b.WriteString("\n\n📜 历史记忆片段:\n")
-			for i, m := range mems {
+		if mems, err := vc.QueryUserMemories(groupID, userID, 5); err == nil {
+			for _, m := range mems {
 				text := m.Text
 				if len([]rune(text)) > 100 {
 					text = string([]rune(text)[:100]) + "..."
 				}
-				b.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, formatTimestamp(m.Timestamp), text))
+				segments = append(segments, memorySegment{
+					Timestamp: formatTimestamp(m.Timestamp),
+					Text:      text,
+				})
 			}
 		}
 	}
-	b.WriteString("\n\n💡 输入 /查询记忆 <关键词> 可语义检索")
+	payload := memoryCardPayload{
+		Title:         "记忆查询",
+		Subtitle:      fmt.Sprintf("用户 %s", name),
+		ProfileName:   name,
+		ProfileUserID: userID,
+		Profile:       profile,
+		Segments:      segments,
+		EmptyText:     "尚未生成用户画像，也没有历史记忆片段。",
+		Hint:          "输入 /查询记忆 <关键词> 可进行语义检索。",
+	}
+	if png := p.renderMemoryCard(payload); png != nil {
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.ImageBytes(png))
+		return
+	}
+
+	// 渲染不可用时回退到纯文本，避免功能完全失效。
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("[记忆查询] %s (%d)\n", name, userID))
+	if profile != "" {
+		b.WriteString("\n用户画像:\n")
+		b.WriteString(profile)
+	} else {
+		b.WriteString("\n用户画像: (无)")
+	}
+	if len(segments) > 0 {
+		b.WriteString("\n\n历史记忆片段:\n")
+		for i, s := range segments {
+			b.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, s.Timestamp, s.Text))
+		}
+	}
+	b.WriteString("\n\n输入 /查询记忆 <关键词> 可语义检索")
 	ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(b.String()))
 }
 
@@ -328,15 +401,35 @@ func (p *pluginImpl) queryMemoryByKeyword(ctx *zero.Ctx, groupID int64, keyword 
 	if len(mems) > 5 {
 		mems = mems[:5]
 	}
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("[vector] 关键词 '%s' 命中 %d 条:\n\n", keyword, len(mems)))
+
+	results := make([]memoryResult, 0, len(mems))
 	for i, m := range mems {
-		name := fmtUserName(m.UserName, m.UserID)
 		text := m.Text
-		if len([]rune(text)) > 60 {
-			text = string([]rune(text)[:60]) + "..."
+		if len([]rune(text)) > 80 {
+			text = string([]rune(text)[:80]) + "..."
 		}
-		b.WriteString(fmt.Sprintf("%d. %s (%s)\n   %s\n", i+1, name, formatTimestamp(m.Timestamp), text))
+		results = append(results, memoryResult{
+			Index:     i + 1,
+			Name:      fmtUserName(m.UserName, m.UserID),
+			UserID:    m.UserID,
+			Timestamp: formatTimestamp(m.Timestamp),
+			Text:      text,
+		})
+	}
+	payload := memoryCardPayload{
+		Title:    "记忆检索",
+		Subtitle: fmt.Sprintf("关键词「%s」 · 命中 %d 条", keyword, len(mems)),
+		Results:  results,
+	}
+	if png := p.renderMemoryCard(payload); png != nil {
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.ImageBytes(png))
+		return
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("[vector] 关键词 '%s' 命中 %d 条:\n\n", keyword, len(results)))
+	for _, r := range results {
+		b.WriteString(fmt.Sprintf("%d. %s (%s)\n   %s\n", r.Index, r.Name, r.Timestamp, r.Text))
 	}
 	ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(b.String()))
 }
