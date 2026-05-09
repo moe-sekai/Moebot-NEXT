@@ -29,6 +29,7 @@ import (
 	//
 	// （二期接入 zbputils/control 桥接后，上述导入即可零改动生效）
 	_ "moebot-next/internal/plugins/autochat"
+	_ "moebot-next/internal/plugins/gallery"
 	_ "moebot-next/internal/plugins/moesekai"
 
 	"github.com/rs/zerolog"

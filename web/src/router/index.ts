@@ -14,6 +14,7 @@ import MoesekaiSettings from '../views/MoesekaiSettings.vue'
 import AutochatOverview from '../views/AutochatOverview.vue'
 import AutochatSettings from '../views/AutochatSettings.vue'
 import AutochatMemory from '../views/AutochatMemory.vue'
+import GalleryOverview from '../views/GalleryOverview.vue'
 
 export default createRouter({
   history: createWebHistory(),
@@ -48,6 +49,9 @@ export default createRouter({
     { path: '/plugins/autochat', name: 'plugins-autochat', component: AutochatOverview },
     { path: '/plugins/autochat/settings', name: 'plugins-autochat-settings', component: AutochatSettings },
     { path: '/plugins/autochat/memory', name: 'plugins-autochat-memory', component: AutochatMemory },
+
+    // Gallery 插件命名空间
+    { path: '/plugins/gallery', name: 'plugins-gallery', component: GalleryOverview },
 
     // 旧路径重定向（保持外链兼容）
     { path: '/bot', redirect: '/settings' },

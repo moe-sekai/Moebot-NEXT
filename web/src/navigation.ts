@@ -8,7 +8,7 @@ export interface ConsoleNavItem {
   label: string
   subtitle: string
   icon: ConsoleIconName
-  section: 'main' | 'plugins' | 'moesekai' | 'autochat' | 'manage' | 'system'
+  section: 'main' | 'plugins' | 'moesekai' | 'autochat' | 'gallery' | 'manage' | 'system'
   // 若设置，则仅当对应插件 loaded=true 时该项才显示。
   requiresPlugin?: string
 }
@@ -34,6 +34,9 @@ export const consoleNavItems: ConsoleNavItem[] = [
   { path: '/plugins/autochat/settings', name: 'plugins-autochat-settings', label: '设置', subtitle: 'Persona / Triggers / Groups', icon: 'settings', section: 'autochat', requiresPlugin: 'autochat' },
   { path: '/plugins/autochat/memory', name: 'plugins-autochat-memory', label: '记忆管理', subtitle: 'Memory', icon: 'logs', section: 'autochat', requiresPlugin: 'autochat' },
 
+  // Gallery 插件命名空间
+  { path: '/plugins/gallery', name: 'plugins-gallery', label: '画廊管理', subtitle: 'Galleries & Pics', icon: 'gallery', section: 'gallery', requiresPlugin: 'gallery' },
+
   // 通用管理
   { path: '/groups', name: 'groups', label: '群组', subtitle: 'Groups', icon: 'groups', section: 'manage' },
   { path: '/users', name: 'users', label: '用户', subtitle: 'Users', icon: 'users', section: 'manage' },
@@ -48,6 +51,7 @@ export const navSectionLabels: Record<ConsoleNavItem['section'], string> = {
   plugins: '插件框架',
   moesekai: 'MoeSekai 插件',
   autochat: 'AutoChat 插件',
+  gallery: 'Gallery 插件',
   manage: '通用管理',
   system: '系统',
 }
@@ -117,6 +121,11 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     title: 'AutoChat · 记忆管理',
     subtitle: '检索向量库中的用户画像与对话总结，支持语义搜索与单条删除。',
     eyebrow: 'Plugin · AutoChat',
+  },
+  'plugins-gallery': {
+    title: 'Gallery · 画廊管理',
+    subtitle: '创建/管理图片画廊，浏览缩略图、上传与删除图片。',
+    eyebrow: 'Plugin · Gallery',
   },
   groups: {
     title: '群组',

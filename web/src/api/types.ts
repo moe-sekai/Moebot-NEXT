@@ -848,3 +848,22 @@ export interface FilterImportYAMLResponse {
 	updated: number;
 	total: number;
 }
+
+// --- Gallery ---
+
+export interface GalleryDTO {
+	name: string;
+	mode: string;
+	aliases: string[];
+	cover_pid: number;
+	pic_count: number;
+}
+
+export interface GalleryPic {
+	PID: number;
+	GallName: string;
+	Path: string;
+	Hash1: string;
+	Hash2: string;
+	ThumbPath: string;
+}

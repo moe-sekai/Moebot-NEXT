@@ -148,6 +148,10 @@ const icons = {
     viewBox: '0 0 24 24',
     paths: ['M3 7h18l-1.5 4H4.5z', 'M5 11v9h14v-9', 'M9 16h6'],
   },
+  gallery: {
+    viewBox: '0 0 24 24',
+    paths: ['M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z', 'M7 16l3.2-3.2a1.2 1.2 0 0 1 1.7 0l1.1 1.1 1.9-1.9a1.2 1.2 0 0 1 1.7 0L20 15.4', 'M8.5 8.5h.01'],
+  },
 } as const satisfies Record<string, IconDef>
 
 export type IconName = keyof typeof icons

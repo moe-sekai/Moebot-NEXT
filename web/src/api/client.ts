@@ -18,6 +18,8 @@ import type {
 	FilterRegexTestPayload,
 	FilterRegexTestResponse,
 	FilterStatus,
+	GalleryDTO,
+	GalleryPic,
 	GroupRecentCommandsResponse,
 	GroupRow,
 	HealthResponse,
@@ -859,4 +861,58 @@ function parseHeaderNumber(value: unknown) {
 	if (raw === undefined || raw === null || raw === "") return null;
 	const numberValue = Number(raw);
 	return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+// --- Gallery 插件 ---
+
+export async function listGalleries() {
+	const { data } = await api.get<{ galleries: GalleryDTO[] }>('/plugins/gallery/galleries')
+	return data.galleries
+}
+
+export async function createGallery(name: string) {
+	const { data } = await api.post<{ ok: boolean; name: string }>('/plugins/gallery/galleries', { name })
+	return data
+}
+
+export async function deleteGallery(name: string) {
+	const { data } = await api.delete<{ ok: boolean }>(`/plugins/gallery/galleries/${encodeURIComponent(name)}`)
+	return data
+}
+
+export async function updateGallery(name: string, payload: { mode?: string; add_alias?: string; del_alias?: string; cover_pid?: number }) {
+	const { data } = await api.put<{ ok: boolean }>(`/plugins/gallery/galleries/${encodeURIComponent(name)}`, payload)
+	return data
+}
+
+export async function listGalleryPics(name: string, offset = 0, limit = 100) {
+	const { data } = await api.get<{ pics: GalleryPic[]; total: number }>(`/plugins/gallery/galleries/${encodeURIComponent(name)}/pics`, {
+		params: { offset, limit },
+	})
+	return data
+}
+
+export async function deleteGalleryPic(pid: number) {
+	const { data } = await api.delete<{ ok: boolean }>(`/plugins/gallery/pics/${pid}`)
+	return data
+}
+
+export async function uploadGalleryPic(galleryName: string, file: File, checkDup = true) {
+	const form = new FormData()
+	form.append('gallery', galleryName)
+	form.append('file', file)
+	form.append('check_dup', String(checkDup))
+	const { data } = await api.post<{ ok: boolean; pid: number }>('/plugins/gallery/upload', form, {
+		headers: { 'Content-Type': 'multipart/form-data' },
+		timeout: 60_000,
+	})
+	return data
+}
+
+export function galleryPicThumbUrl(pid: number) {
+	return `/api/plugins/gallery/pics/${pid}/thumb`
+}
+
+export function galleryPicImageUrl(pid: number) {
+	return `/api/plugins/gallery/pics/${pid}/image`
 }

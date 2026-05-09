@@ -5,9 +5,11 @@ go 1.25.5
 require (
 	github.com/FloatTech/zbputils v1.7.1
 	github.com/asg017/sqlite-vec-go-bindings v0.1.6
+	github.com/disintegration/imaging v1.6.2
 	github.com/dlclark/regexp2 v1.11.5
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/gorilla/websocket v1.5.3
+	github.com/ncruces/go-sqlite3/gormlite v0.21.0
 	github.com/rs/zerolog v1.35.1
 	github.com/valyala/fasthttp v1.51.0
 	github.com/wdvxdr1123/ZeroBot v1.8.2
@@ -26,7 +28,6 @@ require (
 	github.com/RomiChan/syncx v0.0.0-20240418144900-b7402ffdebc7 // indirect
 	github.com/RomiChan/websocket v1.4.3-0.20251002072000-d3eb41798438 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
-	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ericpauley/go-quantize v0.0.0-20200331213906-ae555eb2afa4 // indirect
 	github.com/fumiama/cron v1.3.0 // indirect
@@ -48,7 +49,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/ncruces/go-sqlite3 v0.21.3 // indirect
 	github.com/ncruces/go-sqlite3-wasm/v2 v2.1.35300 // indirect
-	github.com/ncruces/go-sqlite3/gormlite v0.21.0 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
