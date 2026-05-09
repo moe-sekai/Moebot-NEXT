@@ -753,6 +753,7 @@ export interface FilterAppPayload {
 	access_token: string;
 	enabled: boolean;
 	builtin: boolean;
+	internal: boolean;
 	sort_order: number;
 	template_id: number | null;
 	user_id_rules: FilterIDRule;

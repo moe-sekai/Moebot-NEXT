@@ -59,7 +59,10 @@ type FilterApp struct {
 	AccessToken string `json:"access_token"`
 	Enabled     bool   `gorm:"default:true" json:"enabled"`
 	Builtin     bool   `gorm:"default:false" json:"builtin"` // true for the Moebot built-in plugin row
-	SortOrder   int    `gorm:"default:0" json:"sort_order"`
+	// Internal=true 表示该 App 不开 WS 客户端，仅作为规则容器供插件查询
+	// （插件级独立模板）。URI/AccessToken 字段对内部 App 无意义。
+	Internal  bool `gorm:"default:false" json:"internal"`
+	SortOrder int  `gorm:"default:0" json:"sort_order"`
 
 	// TemplateID points to a FilterTemplate; when set, the rule fields below are ignored.
 	TemplateID *uint `gorm:"index" json:"template_id,omitempty"`

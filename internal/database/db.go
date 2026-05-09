@@ -8,10 +8,14 @@ import (
 	"moebot-next/internal/config"
 	"moebot-next/internal/models"
 
-	"github.com/glebarez/sqlite"
+	"github.com/ncruces/go-sqlite3/gormlite"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	// 注册 sqlite-vec 扩展到所有 ncruces/go-sqlite3 连接，autochat 等
+	// 插件需要 vec0 虚拟表做向量近邻检索。ncruces 走 WASM，无需 CGo。
+	_ "github.com/asg017/sqlite-vec-go-bindings/ncruces"
 )
 
 // DB wraps the GORM database connection.
@@ -27,7 +31,7 @@ func New(cfg config.DatabaseConfig) (*DB, error) {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
 
-	db, err := gorm.Open(sqlite.Open(cfg.Path), &gorm.Config{
+	db, err := gorm.Open(gormlite.Open(cfg.Path), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {

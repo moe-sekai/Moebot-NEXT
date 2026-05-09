@@ -53,3 +53,6 @@ plugins:
   data_dir: ./data/plugins
   enabled:
     - moesekai
+    # autochat 默认不启用：需先在控制台「插件 → autochat」配置好
+    # OpenAI 兼容 / Anthropic 的 API Key 后再启用，避免空 key 触发请求失败。
+    # 配置文件：data/plugins/autochat.yml

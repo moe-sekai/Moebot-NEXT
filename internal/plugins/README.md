@@ -125,6 +125,19 @@ webroutes.RegisterRendererCache(api, deps)
 为了让上述未迁的 status / publicConfig handlers 能直接读取 PJSK 状态。
 当 publicConfig 完成 schema 注入式重构后，这些字段可一并撤掉。
 
+## 内置插件 · autochat
+
+`internal/plugins/autochat` 提供 LLM 群聊：
+
+- 支持 OpenAI 兼容 endpoint（OpenAI / Azure / SiliconFlow / Ollama / OpenRouter ...）
+- 支持 Anthropic Messages API（Claude 系列）
+- 模型字符串形如 `openai:gpt-4o-mini` 或 `anthropic:claude-3-5-haiku-20241022`
+- 记忆 RAG 基于 SQLite + sqlite-vec（ncruces 纯 Go WASM 驱动，无 CGo）
+- 子配置：`data/plugins/autochat.yml`
+- 运行期数据：`data/plugins/autochat/{db.json, memory/*.json}`
+
+控制台路径：`/plugins/autochat`，5 项常用设置（OpenAI base_url/api_key、Anthropic api_key、首选模型、默认 system prompt）通过 `plugin.Configurable` 即时生效；其余高级字段用 YAML 编辑器写。
+
 ## 兼容旧 config.yml
 
 为了平滑迁移，moesekai 插件支持两种配置来源：

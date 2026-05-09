@@ -9,6 +9,7 @@ import (
 
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
+	"moebot-next/internal/filter"
 	"moebot-next/internal/plugin"
 	"moebot-next/internal/plugins/moesekai/assets"
 	"moebot-next/internal/plugins/moesekai/b30"
@@ -119,6 +120,17 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 	db, _ := ctx.DB.(*database.DB)
 	rendererClient, _ := ctx.Renderer.(*renderer.Client)
 	webServer, _ := ctx.Web.(*web.Server)
+	filterMgr, _ := ctx.Filter.(*filter.Manager)
+
+	// 在 Filter 网关中 seed 本插件对应的 internal app；让控制台「Filter」
+	// 页面能为 PJSK 业务独立分配模板/规则（与 autochat 解耦）。
+	if db != nil {
+		if err := filter.SeedInternalApp(db, PluginName, "MoeSekai"); err != nil {
+			log.Warn().Err(err).Msg("moesekai: 创建 internal filter app 失败")
+		} else if filterMgr != nil && filterMgr.IsRunning() {
+			_ = filterMgr.Reload(ctx.Ctx)
+		}
+	}
 
 	// 1) Load and merge sub-config (missing file falls back to core defaults).
 	var sub Config

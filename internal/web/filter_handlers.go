@@ -26,6 +26,7 @@ type filterAppPayload struct {
 	AccessToken         string             `json:"access_token"`
 	Enabled             bool               `json:"enabled"`
 	Builtin             bool               `json:"builtin"`
+	Internal            bool               `json:"internal"`
 	SortOrder           int                `json:"sort_order"`
 	TemplateID          *uint              `json:"template_id"`
 	UserIDRules         filter.IDRule      `json:"user_id_rules"`
@@ -62,7 +63,7 @@ func computeEffectiveRules(a *models.FilterApp, tplByID map[uint]*models.FilterT
 func appToPayload(a *models.FilterApp, tplByID map[uint]*models.FilterTemplate) filterAppPayload {
 	return filterAppPayload{
 		ID: a.ID, Name: a.Name, URI: a.URI, AccessToken: a.AccessToken,
-		Enabled: a.Enabled, Builtin: a.Builtin, SortOrder: a.SortOrder,
+		Enabled: a.Enabled, Builtin: a.Builtin, Internal: a.Internal, SortOrder: a.SortOrder,
 		TemplateID:          a.TemplateID,
 		UserIDRules:         filter.DecodeIDRule(a.UserIDRules),
 		GroupIDRules:        filter.DecodeIDRule(a.GroupIDRules),

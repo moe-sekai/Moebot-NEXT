@@ -8,7 +8,7 @@ export interface ConsoleNavItem {
   label: string
   subtitle: string
   icon: ConsoleIconName
-  section: 'main' | 'plugins' | 'moesekai' | 'manage' | 'system'
+  section: 'main' | 'plugins' | 'moesekai' | 'autochat' | 'manage' | 'system'
   // 若设置，则仅当对应插件 loaded=true 时该项才显示。
   requiresPlugin?: string
 }
@@ -42,6 +42,7 @@ export const navSectionLabels: Record<ConsoleNavItem['section'], string> = {
   main: '控制台',
   plugins: '插件框架',
   moesekai: 'MoeSekai 插件',
+  autochat: 'AutoChat 插件',
   manage: '通用管理',
   system: '系统',
 }
@@ -96,6 +97,11 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     title: 'MoeSekai · 指令解析',
     subtitle: '测试 Project Sekai 业务指令的解析、别名触发与渲染预览。',
     eyebrow: 'Plugin · MoeSekai',
+  },
+  'plugins-autochat': {
+    title: 'AutoChat · 设置',
+    subtitle: '配置 OpenAI 兼容 / Anthropic 端点、模型与系统提示词。',
+    eyebrow: 'Plugin · AutoChat',
   },
   groups: {
     title: '群组',

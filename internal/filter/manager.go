@@ -329,11 +329,56 @@ func (m *Manager) startClientsLocked(ctx context.Context) error {
 		})
 		f.SetPublisher(m.bus.Publish)
 		m.filters[app.Name] = f
+		// Internal apps 仅作为规则容器，不需要 ws 下游客户端。
+		if app.Internal {
+			continue
+		}
 		c := newWsClient(app.Name, app.URI, app.AccessToken, f, m.debug, m.bus.Publish)
 		m.clients[app.Name] = c
 		go c.run(ctx, m.server, snap)
 	}
 	return nil
+}
+
+// AllowMessage 让插件按 filter app 的规则过滤消息事件。
+// 适用于"内部 app"——插件自身处理消息，但希望复用控制台的 group_id /
+// user_id / 文本规则做白名单/黑名单/前缀/正则等过滤。
+//
+// 规则的命中口径与下游 ws 客户端完全一致（共用同一份 Filter.Allow）。
+//
+// 找不到对应名字的 app（未启用 / 未 seed）时返回 true，让插件按默认行为
+// 走自己的逻辑——插件应当在调用前自检 IsAppEnabled。
+func (m *Manager) AllowMessage(appName string, groupID, userID int64, isPrivate bool, raw string) bool {
+	m.mu.Lock()
+	f := m.filters[appName]
+	m.mu.Unlock()
+	if f == nil {
+		return true
+	}
+	mt := MessageTypeGroup
+	if isPrivate {
+		mt = MessageTypePrivate
+	}
+	probe := &OneBotMessage{
+		Partial: OneBotMessagePartial{
+			MessageType:   mt,
+			MessageFormat: MessageFormatString,
+			MessageString: raw,
+			RawMessage:    raw,
+			UserID:        userID,
+			GroupID:       groupID,
+		},
+	}
+	return f.Allow(probe, m.debug)
+}
+
+// IsAppEnabled 报告 filter 网关是否已为某个 app 编译了规则。
+// 当 app 不存在 / 未启用 / 网关未运行时返回 false。
+func (m *Manager) IsAppEnabled(appName string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.filters[appName]
+	return ok
 }
 
 // appOrTemplateRules returns the five rule values that should be used to compile

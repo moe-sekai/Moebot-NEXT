@@ -11,6 +11,7 @@ import Logs from '../views/Logs.vue'
 import Plugins from '../views/Plugins.vue'
 import PluginMarket from '../views/PluginMarket.vue'
 import MoesekaiSettings from '../views/MoesekaiSettings.vue'
+import AutochatSettings from '../views/AutochatSettings.vue'
 
 export default createRouter({
   history: createWebHistory(),
@@ -40,6 +41,9 @@ export default createRouter({
     { path: '/plugins/moesekai', name: 'plugins-moesekai', component: MoesekaiSettings },
     { path: '/plugins/moesekai/advanced', name: 'plugins-moesekai-advanced', component: Settings },
     { path: '/plugins/moesekai/commands', name: 'plugins-moesekai-commands', component: CommandParser },
+
+    // AutoChat 插件命名空间
+    { path: '/plugins/autochat', name: 'plugins-autochat', component: AutochatSettings },
 
     // 旧路径重定向（保持外链兼容）
     { path: '/bot', redirect: '/settings' },
