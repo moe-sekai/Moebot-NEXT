@@ -1,5 +1,6 @@
 import { fetchRemoteBytes, chartSvgRequestHeadersFor, hydrateSvgAssets, svgAssetFetcherForBase } from './svg-assets'
 import { renderSvgToPngWithTrace } from './engine'
+import { FONT_FAMILY, fontPreferences } from './fonts'
 export interface ChartSvgRenderOptions {
   url?: string
   svg?: string
@@ -76,7 +77,38 @@ async function chartSource(options: ChartSvgRenderOptions): Promise<{ svg: strin
   }
 }
 export function prepareChartSvgForResvg(svg: string): string {
-  return removeChartNoteSymbols(inlineChartNoteUsesWithAssets(normalizeChartSvgPaints(svg), extractChartNoteAssets(svg)))
+  return rewriteChartSvgFontFamilies(
+    removeChartNoteSymbols(inlineChartNoteUsesWithAssets(normalizeChartSvgPaints(svg), extractChartNoteAssets(svg))),
+  )
+}
+
+// Upstream chart SVGs ship with hard-coded font-family values such as
+// `ヒラギノ角ゴシック` (Hiragino Kaku Gothic), `FOT-RodinNTLG Pro DB` and
+// `Avenir`. None of these are available in the renderer's bundled font
+// directory or inside the Alpine docker runtime, so resvg falls back to a
+// font with no glyphs and the song title silently disappears. Rewrite every
+// font-family declaration to the renderer's preferred CJK body font instead.
+export function rewriteChartSvgFontFamilies(svg: string): string {
+  const family = chartFallbackFontFamily()
+  // Replace `font-family: ...;` inside <style> blocks (CSS rules).
+  let out = svg.replace(/font-family\s*:\s*[^;}\n\r]+/gi, `font-family: ${family}`)
+  // Replace `font-family="..."` / `font-family='...'` attributes on shapes.
+  out = out.replace(/font-family\s*=\s*("([^"]*)"|'([^']*)')/gi, `font-family="${family}"`)
+  return out
+}
+
+function chartFallbackFontFamily(): string {
+  const primary = (fontPreferences.body || FONT_FAMILY.body).trim() || FONT_FAMILY.body
+  const fallbacks = [FONT_FAMILY.bodyFallback, 'Noto Sans SC', 'sans-serif']
+  const families: string[] = []
+  const seen = new Set<string>()
+  for (const part of [primary, ...fallbacks]) {
+    const trimmed = part.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    families.push(/\s/.test(trimmed) ? `'${trimmed.replace(/'/g, "\\'")}'` : trimmed)
+  }
+  return families.join(', ')
 }
 
 function normalizeChartSvgPaints(svg: string): string {

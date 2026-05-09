@@ -1,8 +1,29 @@
 import satori from 'satori'
 import { Resvg } from '@resvg/resvg-js'
+import { join } from 'path'
 import { type ImageHydrationStats } from './asset-cache'
 import { hydrateCachedImages } from './hydrate-images'
-import { loadFonts, type FontData } from './fonts'
+import { loadFonts, type FontData, FONT_FAMILY, fontPreferences } from './fonts'
+
+// Resvg renders raw SVG strings (e.g. game chart SVGs that go through
+// renderSvgToPngWithTrace) without going through Satori first, so it cannot
+// rely on Satori's text-to-path conversion. We must point resvg at our
+// bundled font directory so chart text such as the song title can render.
+const RESVG_FONT_DIR = join(process.cwd(), 'assets', 'fonts')
+
+function resvgFontConfig() {
+  const primaryFamily = fontPreferences.body || FONT_FAMILY.body
+  return {
+    fontDirs: [RESVG_FONT_DIR],
+    loadSystemFonts: true,
+    defaultFontFamily: primaryFamily,
+    serifFamily: primaryFamily,
+    sansSerifFamily: primaryFamily,
+    cursiveFamily: primaryFamily,
+    fantasyFamily: primaryFamily,
+    monospaceFamily: primaryFamily,
+  }
+}
 
 export interface RenderOptions {
   width?: number
@@ -78,7 +99,10 @@ export async function renderSvgToPngWithTrace(svg: string, options: RenderOption
   const width = typeof options.width === 'number' && Number.isFinite(options.width) && options.width > 0
     ? Math.max(1, Math.round(options.width * precision))
     : 0
-  const resvg = new Resvg(svg, width > 0 ? { fitTo: { mode: 'width', value: width } } : {})
+  const resvg = new Resvg(svg, {
+    font: resvgFontConfig(),
+    ...(width > 0 ? { fitTo: { mode: 'width' as const, value: width } } : {}),
+  })
   const png = Buffer.from(resvg.render().asPng())
   const resvgMs = Date.now() - resvgStart
   return {
