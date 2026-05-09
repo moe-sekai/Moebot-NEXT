@@ -68,11 +68,34 @@ func ExtractAtQQ(msg message.Message) []int64 {
 		}
 	}
 	if len(qqs) == 0 {
+		// 兜底：部分 OneBot 适配器把整条消息塞进单个 text 段、CQ 码未被结构化。
+		// 直接在 text 段原文上匹配，避免 msg.String() 把 '[' ']' 转义成 &#91;&#93;。
 		re := regexp.MustCompile(`\[CQ:at,qq=(\d+)[^\]]*\]`)
-		for _, m := range re.FindAllStringSubmatch(msg.String(), -1) {
-			if id, err := strconv.ParseInt(m[1], 10, 64); err == nil {
-				qqs = append(qqs, id)
+		for _, seg := range msg {
+			if seg.Type != "text" {
+				continue
 			}
+			for _, m := range re.FindAllStringSubmatch(seg.Data["text"], -1) {
+				if id, err := strconv.ParseInt(m[1], 10, 64); err == nil {
+					qqs = append(qqs, id)
+				}
+			}
+		}
+	}
+	return qqs
+}
+
+// ExtractAtQQFromRaw 从原始 RawMessage（CQ 字符串）里提取 @ QQ 列表，作为
+// 结构化解析失败时的最终兜底。
+func ExtractAtQQFromRaw(raw string) []int64 {
+	if raw == "" {
+		return nil
+	}
+	re := regexp.MustCompile(`\[CQ:at,qq=(\d+)[^\]]*\]`)
+	var qqs []int64
+	for _, m := range re.FindAllStringSubmatch(raw, -1) {
+		if id, err := strconv.ParseInt(m[1], 10, 64); err == nil {
+			qqs = append(qqs, id)
 		}
 	}
 	return qqs

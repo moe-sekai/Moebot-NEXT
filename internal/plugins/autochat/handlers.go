@@ -113,25 +113,17 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 	delta := 0.0
 	isDirect := false
 	hitReason := ""
-	atIDs := ExtractAtQQ(msg)
-	rawHasAt := strings.Contains(ctx.Event.RawMessage, "[CQ:at,qq=")
-	// 诊断：原始消息里出现了 [CQ:at,qq=..] 但解析结果为空，说明 seg 解析或
-	// 正则兜底都失败了，需要排查 ZeroBot/OneBot 适配。
-	if rawHasAt && len(atIDs) == 0 {
-		log.Info().Int64("self_id", ctx.Event.SelfID).
-			Str("raw", ctx.Event.RawMessage).
-			Int("seg_count", len(msg)).
-			Msg("[autochat] 原始消息含 CQ:at 但解析为空 — 检查适配层")
-	}
-	if HasAt(msg, ctx.Event.SelfID) {
+	// ZeroBot 在 preprocessMessageEvent 阶段会扫描 at 段、对比 SelfID 后置位
+	// IsToMe，并默认把 at-bot 段从 Message 里剥离（KeepAtMeMessage=false）。
+	// 因此判定是否被 @ 必须直接读 IsToMe，自己再去 msg 里找 at 段是徒劳的。
+	if ctx.Event.IsToMe {
 		delta = cfg.Chat.Willing.AtDelta
 		isDirect = true
 		hitReason = "at"
-	} else if len(atIDs) > 0 {
-		// 消息里有 @ 段但都不是 bot：可能是用户 @ 别人 (正常忽略)，也可能是
-		// OneBot 实现没正确下发 event.self_id。打一条 Info 方便排查。
-		log.Info().Int64("self_id", ctx.Event.SelfID).Ints64("at_ids", atIDs).
-			Msg("[autochat] 检测到 @ 段但未命中 bot 自身")
+	} else if otherAts := ExtractAtQQ(msg); len(otherAts) > 0 {
+		// 消息里有 @ 段但都不是 bot：用户 @ 别人，正常忽略，仅 Debug 记录。
+		log.Debug().Int64("self_id", ctx.Event.SelfID).Ints64("at_ids", otherAts).
+			Msg("[autochat] 检测到 @ 段但未命中 bot")
 	}
 	if !isDirect {
 		if !p.autoWhiteList.Check(groupID) {
