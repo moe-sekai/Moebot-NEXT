@@ -68,6 +68,13 @@ type providersPayload struct {
 		Timeout   int    `json:"timeout"`
 		MaxTokens int    `json:"max_tokens"`
 	} `json:"rag_summary"`
+	FormatRepair struct {
+		Enabled   bool   `json:"enabled"`
+		Model     string `json:"model"`
+		Timeout   int    `json:"timeout"`
+		MaxTokens int    `json:"max_tokens"`
+		Prompt    string `json:"prompt"`
+	} `json:"format_repair"`
 }
 
 func buildProvidersPayload(c *Config) providersPayload {
@@ -111,6 +118,11 @@ func buildProvidersPayload(c *Config) providersPayload {
 	p.RAGSummary.Model = c.RAGSummary.Model
 	p.RAGSummary.Timeout = c.RAGSummary.Timeout
 	p.RAGSummary.MaxTokens = c.RAGSummary.MaxTokens
+	p.FormatRepair.Enabled = c.FormatRepair.Enabled
+	p.FormatRepair.Model = c.FormatRepair.Model
+	p.FormatRepair.Timeout = c.FormatRepair.Timeout
+	p.FormatRepair.MaxTokens = c.FormatRepair.MaxTokens
+	p.FormatRepair.Prompt = c.FormatRepair.Prompt
 	return p
 }
 
@@ -185,6 +197,11 @@ func (p *pluginImpl) handlePutProviders(c *fiber.Ctx) error {
 	cfg.RAGSummary.Model = body.RAGSummary.Model
 	cfg.RAGSummary.Timeout = body.RAGSummary.Timeout
 	cfg.RAGSummary.MaxTokens = body.RAGSummary.MaxTokens
+	cfg.FormatRepair.Enabled = body.FormatRepair.Enabled
+	cfg.FormatRepair.Model = body.FormatRepair.Model
+	cfg.FormatRepair.Timeout = body.FormatRepair.Timeout
+	cfg.FormatRepair.MaxTokens = body.FormatRepair.MaxTokens
+	cfg.FormatRepair.Prompt = body.FormatRepair.Prompt
 	applyDefaults(cfg)
 
 	if err := plugin.WriteYAMLFrom(p.configPath, cfg); err != nil {

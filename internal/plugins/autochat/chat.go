@@ -45,6 +45,20 @@ func extractXMLBlock(raw string) string {
 	return s
 }
 
+// repairFormat 调用低成本模型将格式不正确的 LLM 输出转换为标准 XML。
+func (p *pluginImpl) repairFormat(raw string, cfg *Config) (string, error) {
+	prompt := strings.ReplaceAll(cfg.FormatRepair.Prompt, "{raw}", raw)
+	sess := NewChatSession("")
+	sess.AppendUserContent(prompt, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.FormatRepair.Timeout)*time.Second)
+	defer cancel()
+	resp, err := UniversalChat(ctx, sess, cfg.FormatRepair.Model, cfg.FormatRepair.MaxTokens)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(resp.Result), nil
+}
+
 // processChat 处理一次对话：拼 system prompt → 调 LLM → 解析 XML → 发送回复 + 更新记忆。
 func (p *pluginImpl) processChat(ctx *zero.Ctx, groupID, userID int64, queryText string, allowTargetSelection bool) {
 	cfg := GetConfig()
@@ -141,9 +155,24 @@ func (p *pluginImpl) processChat(ctx *zero.Ctx, groupID, userID int64, queryText
 
 	var llmResp AutoChatXMLResponse
 	if err := xml.Unmarshal([]byte(clean), &llmResp); err != nil {
-		log.Warn().Err(err).Str("raw", truncate(clean, 200)).Msg("[autochat] XML 解析失败，丢弃")
+		// 格式修复：调用低成本模型尝试将原始输出转为标准 XML
+		if cfg.FormatRepair.Enabled && cfg.FormatRepair.Model != "" {
+			repaired, repairErr := p.repairFormat(resp.Result, cfg)
+			if repairErr == nil {
+				cleanRepaired := extractXMLBlock(repaired)
+				if xmlErr := xml.Unmarshal([]byte(cleanRepaired), &llmResp); xmlErr == nil {
+					log.Info().Str("raw", truncate(clean, 120)).
+						Msg("[autochat] 格式修复成功")
+					goto formatOK
+				}
+			}
+			log.Warn().Err(err).Str("raw", truncate(clean, 200)).Msg("[autochat] 格式修复也失败，丢弃")
+		} else {
+			log.Warn().Err(err).Str("raw", truncate(clean, 200)).Msg("[autochat] XML 解析失败，丢弃")
+		}
 		return
 	}
+formatOK:
 
 	finalReplies := make([]string, 0, len(llmResp.Replies))
 	for _, r := range llmResp.Replies {
