@@ -10,10 +10,11 @@ import (
 	"moebot-next/internal/models"
 	"moebot-next/internal/renderer"
 
+	"moebot-next/internal/plugins/moesekai/renderpayloads"
+
 	zero "github.com/wdvxdr1123/ZeroBot"
 	"github.com/wdvxdr1123/ZeroBot/message"
 	"gorm.io/gorm"
-	"moebot-next/internal/plugins/moesekai/renderpayloads"
 )
 
 // isPlausibleGameID checks that the input looks like a PJSK numeric long ID.
@@ -179,6 +180,7 @@ func registerProfileInfoCommands(deps *Deps) {
 				return
 			}
 
+			sekaiErr := error(nil)
 			if runtime.Sekai != nil && runtime.Sekai.Enabled() {
 				profile, err := runtime.Sekai.GetProfile(user.GameID)
 				if err == nil {
@@ -195,10 +197,19 @@ func registerProfileInfoCommands(deps *Deps) {
 					bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 					return
 				}
+				sekaiErr = err
 			}
 
-			ctx.SendChain(message.Text(fmt.Sprintf("👤 个人信息\n服务器: %s (%s)\n游戏 ID: %s\n绑定时间: %s",
-				runtime.Label, strings.ToUpper(runtime.Region), user.GameID, user.CreatedAt.Format("2006-01-02 15:04"))))
+			lines := []string{
+				"👤 个人信息",
+				fmt.Sprintf("服务器: %s (%s)", runtime.Label, strings.ToUpper(runtime.Region)),
+				fmt.Sprintf("游戏 ID: %s", user.GameID),
+				fmt.Sprintf("绑定时间: %s", user.CreatedAt.Format("2006-01-02 15:04")),
+			}
+			if sekaiErr != nil {
+				lines = append(lines, "", "⚠️ 访问 SEKAI-API 失败，请联系管理员检查配置")
+			}
+			ctx.SendChain(message.Text(strings.Join(lines, "\n")))
 			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
 		})
 	}

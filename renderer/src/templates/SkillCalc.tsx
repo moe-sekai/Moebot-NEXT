@@ -75,17 +75,16 @@ export function SkillCalc(props: SkillCalcProps) {
           </div>
         </div>
 
-        {/* Result grid: 2x2 */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: theme.spacing.sm,
-          }}
-        >
-          {stats.map((stat) => (
-            <StatCell key={stat.label} label={stat.label} value={stat.value} tone={stat.tone} />
-          ))}
+        {/* Result grid: 2x2 (flex rows; satori doesn't support display:grid) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
+          <div style={{ display: 'flex', gap: theme.spacing.sm }}>
+            <StatCell label={stats[0].label} value={stats[0].value} tone={stats[0].tone} />
+            <StatCell label={stats[1].label} value={stats[1].value} tone={stats[1].tone} />
+          </div>
+          <div style={{ display: 'flex', gap: theme.spacing.sm }}>
+            <StatCell label={stats[2].label} value={stats[2].value} tone={stats[2].tone} />
+            <StatCell label={stats[3].label} value={stats[3].value} tone={stats[3].tone} />
+          </div>
         </div>
 
         {/* Formula hint */}
@@ -171,6 +170,7 @@ function StatCell({
       style={{
         display: 'flex',
         flexDirection: 'column',
+        flex: 1,
         gap: 4,
         padding: theme.spacing.md,
         backgroundColor: theme.colors.surface,
