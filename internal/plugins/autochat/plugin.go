@@ -309,6 +309,22 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 		_ = plugin.WriteYAMLFrom(ctx.PluginConfigPath, &c)
 	}
 	setConfig(&c)
+	// 启动期把和「触发」相关的关键参数都打印一次，方便排查
+	// 「关键词没生效 / @bot 没生效」这类配置 vs 代码路径问题。
+	log.Info().
+		Float64("threshold", c.Chat.Willing.Threshold).
+		Float64("at_delta", c.Chat.Willing.AtDelta).
+		Float64("keyword_delta", c.Chat.Willing.KeywordDelta).
+		Float64("random_delta_max", c.Chat.Willing.RandomDeltaMax).
+		Int("keywords", len(c.Chat.Keywords)).
+		Strs("keywords_preview", func() []string {
+			n := len(c.Chat.Keywords)
+			if n > 8 {
+				n = 8
+			}
+			return append([]string{}, c.Chat.Keywords[:n]...)
+		}()).
+		Msg("[autochat] 触发参数已加载")
 
 	p.mu.Lock()
 	p.configPath = ctx.PluginConfigPath

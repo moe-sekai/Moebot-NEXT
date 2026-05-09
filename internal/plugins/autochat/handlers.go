@@ -117,6 +117,11 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 		delta = cfg.Chat.Willing.AtDelta
 		isDirect = true
 		hitReason = "at"
+	} else if atIDs := ExtractAtQQ(msg); len(atIDs) > 0 {
+		// 消息里有 @ 段但都不是 bot：可能是用户 @ 别人 (正常忽略)，也可能是
+		// OneBot 实现没正确下发 event.self_id。打一条 Info 方便排查。
+		log.Info().Int64("self_id", ctx.Event.SelfID).Ints64("at_ids", atIDs).
+			Msg("[autochat] 检测到 @ 段但未命中 bot 自身")
 	}
 	if !isDirect {
 		if !p.autoWhiteList.Check(groupID) {
@@ -145,8 +150,15 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 		target = g
 	}
 	newVal := cur + delta
+	// 命中关键词 / 被 @ 这种「直接触发」即使最终被冷却拦截，也至少要让用户在
+	// INFO 级日志看到 delta 是不是被正确应用了；否则像「关键词不工作」这种问题
+	// 没法定位。普通的 random 累计仍然走 Debug，避免刷屏。
 	if delta > 0 {
-		log.Debug().Int64("group", groupID).Str("reason", hitReason).
+		evt := log.Debug()
+		if isDirect {
+			evt = log.Info()
+		}
+		evt.Int64("group", groupID).Str("reason", hitReason).
 			Float64("delta", delta).Float64("cur", cur).Float64("new", newVal).
 			Float64("target", target).Bool("direct", isDirect).
 			Msg("[autochat] 触发计分")
