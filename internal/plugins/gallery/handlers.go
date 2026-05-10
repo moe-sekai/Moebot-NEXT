@@ -540,7 +540,7 @@ func (p *pluginImpl) handleAdd(ctx *zero.Ctx) {
 		msg += fmt.Sprintf("\n提示：可使用 /上传 %s force 跳过去重强制上传", g.Name)
 	}
 	if len(okList) > 0 {
-		msg += fmt.Sprintf("\n⚠ 请勿上传违规内容，你的QQ号(%d)已被记录。如需撤回请发送 /取消上传", ctx.Event.UserID)
+		msg += fmt.Sprintf("\n⚠ 请勿上传违规内容，你的QQ号(%d)已被记录。上传违规内容将被联合通报拉黑。如需撤回请发送 /取消上传", ctx.Event.UserID)
 	}
 	ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(msg))
 }

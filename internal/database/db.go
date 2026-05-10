@@ -65,6 +65,8 @@ func New(cfg config.DatabaseConfig) (*DB, error) {
 		&models.FilterTemplate{},
 		&models.FilterApp{},
 		&models.PluginState{},
+		&models.AdminUser{},
+		&models.AppMeta{},
 	); err != nil {
 		return nil, fmt.Errorf("failed to auto-migrate: %w", err)
 	}

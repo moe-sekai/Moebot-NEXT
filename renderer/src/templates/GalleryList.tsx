@@ -34,7 +34,6 @@ export function GalleryList({
 			subtitle={sub}
 			width={totalW}
 			accentColor={theme.colors.accent}
-			footer="Moebot NEXT · Gallery"
 		>
 			<div
 				style={{

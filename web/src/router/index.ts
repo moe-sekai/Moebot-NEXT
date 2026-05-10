@@ -1,5 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import Dashboard from '../views/Dashboard.vue'
+import Login from '../views/Login.vue'
+import Setup from '../views/Setup.vue'
 import Groups from '../views/Groups.vue'
 import Users from '../views/Users.vue'
 import Settings from '../views/Settings.vue'
@@ -16,7 +19,7 @@ import AutochatSettings from '../views/AutochatSettings.vue'
 import AutochatMemory from '../views/AutochatMemory.vue'
 import GalleryOverview from '../views/GalleryOverview.vue'
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(),
   scrollBehavior(to, _from, savedPosition) {
     if (savedPosition) return savedPosition
@@ -26,6 +29,10 @@ export default createRouter({
     return { left: 0, top: 0 }
   },
   routes: [
+    // 鉴权 / 首启
+    { path: '/login', name: 'login', component: Login, meta: { public: true } },
+    { path: '/setup', name: 'setup', component: Setup, meta: { public: true } },
+
     // 核心控制台
     { path: '/', name: 'dashboard', component: Dashboard },
     { path: '/status', name: 'status', component: Status },
@@ -64,3 +71,36 @@ export default createRouter({
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
+
+// 全局守卫：
+// 1) 拉取一次 /api/auth/status，根据 initialized 引导首启或登录。
+// 2) 已登录访问 /login 或 /setup 自动重定向回 /。
+//
+// 注意：失败时（例如后端宕机）我们 silently 放行，让页面自身的 axios 拦截器
+// 兜底处理 401 / 网络错误。
+router.beforeEach(async (to) => {
+  const auth = useAuthStore()
+  if (auth.initialized === null) {
+    try {
+      await auth.refreshStatus()
+    } catch {
+      // 后端不可达；放行，让用户至少能看到错误页
+      return true
+    }
+  }
+  const isPublic = Boolean(to.meta?.public)
+  if (auth.initialized === false) {
+    if (to.path !== '/setup') return { path: '/setup' }
+    return true
+  }
+  if (!auth.isLoggedIn) {
+    if (isPublic) return true
+    return { path: '/login', query: to.fullPath !== '/' ? { redirect: to.fullPath } : undefined }
+  }
+  if (auth.isLoggedIn && (to.path === '/login' || to.path === '/setup')) {
+    return { path: '/' }
+  }
+  return true
+})
+
+export default router

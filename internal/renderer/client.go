@@ -480,6 +480,19 @@ func (c *Client) GetFonts() (*FontsResponse, error) {
 	return &result, nil
 }
 
+// SetDeployer 同步部署者昵称给 Bun 渲染服务，使其在所有 Satori 卡片
+// 底部 footer 渲染为 "Moebot NEXT (deployed by <nickname>)"。
+// 传入空字符串则回退为 "Moebot NEXT"。
+func (c *Client) SetDeployer(nickname string) error {
+	var result struct {
+		OK bool `json:"ok"`
+	}
+	if err := c.postJSON("/config", map[string]string{"deployer": nickname}, &result); err != nil {
+		return err
+	}
+	return nil
+}
+
 // BaseURL returns the renderer service base URL.
 func (c *Client) BaseURL() string {
 	return c.baseURL

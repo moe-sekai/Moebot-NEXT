@@ -122,6 +122,32 @@
           </div>
           <div class="actions">
             <UiButton variant="outline" size="sm" @click="triggerUpload">上传图片</UiButton>
+            <UiButton
+              variant="outline"
+              size="sm"
+              :disabled="!picTotal || zipBusy"
+              :loading="zipBusy"
+              @click="downloadZipForCurrent"
+            >下载压缩包</UiButton>
+          </div>
+        </div>
+
+        <!-- 浏览器端打包进度 -->
+        <div v-if="zipBusy || zipMsg" class="zip-progress">
+          <div class="zip-progress-bar">
+            <div
+              class="zip-progress-fill"
+              :style="{ width: zipPercent + '%' }"
+            ></div>
+          </div>
+          <div class="zip-progress-text">
+            {{ zipMsg }}
+            <UiButton
+              v-if="zipBusy"
+              variant="ghost"
+              size="sm"
+              @click="cancelZip"
+            >取消</UiButton>
           </div>
         </div>
 
@@ -306,6 +332,7 @@ import {
   listGalleryUploadRecords, revertGalleryUploadRecord,
   galleryPicThumbUrl, galleryPicImageUrl,
 } from '../api/client'
+import { downloadGalleryAsZip, type DownloadProgress } from '../api/galleryDownload'
 
 const loading = ref(false)
 const error = ref('')
@@ -330,6 +357,12 @@ const newAlias = ref('')
 const savingAlias = ref(false)
 const newCoverPid = ref<number | string>('')
 const savingCover = ref(false)
+
+// 浏览器端 zip 下载
+const zipBusy = ref(false)
+const zipMsg = ref('')
+const zipPercent = ref(0)
+let zipAbort: AbortController | null = null
 
 // 上传记录
 const uploadRecords = ref<GalleryUploadRecord[]>([])
@@ -608,6 +641,66 @@ function triggerUpload() {
   fileInput.value?.click()
 }
 
+async function downloadZipForCurrent() {
+  if (!selectedGallery.value || zipBusy.value) return
+  const name = selectedGallery.value.name
+  zipBusy.value = true
+  zipMsg.value = '正在准备...'
+  zipPercent.value = 0
+  zipAbort = new AbortController()
+  error.value = ''
+  try {
+    await downloadGalleryAsZip({
+      galleryName: name,
+      concurrency: 4,
+      signal: zipAbort.signal,
+      onProgress: (p: DownloadProgress) => {
+        switch (p.phase) {
+          case 'listing':
+            zipMsg.value = '获取图片列表...'
+            zipPercent.value = 0
+            break
+          case 'fetching': {
+            const pct = p.total ? Math.floor((p.fetched / p.total) * 95) : 0
+            zipPercent.value = pct
+            zipMsg.value = `下载图片 ${p.fetched}/${p.total}` +
+              (p.failed ? `（失败 ${p.failed}）` : '')
+            break
+          }
+          case 'writing':
+            zipPercent.value = 97
+            zipMsg.value = '打包写盘中...'
+            break
+          case 'done':
+            zipPercent.value = 100
+            zipMsg.value = `已下载 ${p.total - p.failed}/${p.total} 张` +
+              (p.failed ? `（失败 ${p.failed}）` : '')
+            break
+        }
+      },
+    })
+    flash(`画廊"${name}"已下载`)
+  } catch (e: any) {
+    if (e?.name === 'AbortError') {
+      zipMsg.value = '已取消'
+    } else {
+      error.value = e?.message || String(e)
+      zipMsg.value = '下载失败：' + (e?.message || String(e))
+    }
+  } finally {
+    zipBusy.value = false
+    zipAbort = null
+    // 5 秒后自动清掉提示
+    setTimeout(() => {
+      if (!zipBusy.value) zipMsg.value = ''
+    }, 5000)
+  }
+}
+
+function cancelZip() {
+  zipAbort?.abort()
+}
+
 async function handleUpload(e: Event) {
   const input = e.target as HTMLInputElement
   const files = input.files
@@ -775,6 +868,35 @@ async function handleUpload(e: Event) {
 .cover-hint {
   font-size: 0.8rem;
   color: var(--text-tertiary);
+}
+
+/* zip 下载进度 */
+.zip-progress {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg-tertiary, rgba(0,0,0,0.03));
+}
+.zip-progress-bar {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.zip-progress-fill {
+  height: 100%;
+  background: var(--accent, #3b82f6);
+  transition: width 0.2s ease;
+}
+.zip-progress-text {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
 }
 
 .pic-grid {

@@ -56,6 +56,32 @@
       </div>
     </UiCard>
 
+    <!-- 控制台账号 / 修改密码 -->
+    <UiCard>
+      <div class="card-heading">
+        <div>
+          <h2>控制台账号</h2>
+          <p>账号与昵称在初始化时创建后<strong>无法更改</strong>；昵称会显示在所有 Satori 渲染卡片底部 <code>Moebot NEXT (deployed by 昵称)</code>。</p>
+        </div>
+      </div>
+      <dl class="info-list">
+        <div><dt>账号</dt><dd>{{ auth.username || '-' }}</dd></div>
+        <div><dt>昵称</dt><dd>{{ auth.nickname || '-' }}</dd></div>
+      </dl>
+      <div class="pwd-form">
+        <h3 class="pwd-title">修改密码</h3>
+        <UiAlert v-if="pwdError" variant="destructive" title="修改失败">{{ pwdError }}</UiAlert>
+        <UiAlert v-if="pwdSuccess" variant="info" title="已更新">密码修改成功，下次登录请使用新密码。</UiAlert>
+        <label class="pwd-row"><span>旧密码</span><input v-model="pwdForm.old_password" type="password" class="ui-textarea" /></label>
+        <label class="pwd-row"><span>新密码（至少 8 位）</span><input v-model="pwdForm.new_password" type="password" class="ui-textarea" /></label>
+        <label class="pwd-row"><span>确认新密码</span><input v-model="pwdForm.new_password_confirm" type="password" class="ui-textarea" /></label>
+        <div class="super-foot">
+          <span class="hint">两次密码需要保持一致</span>
+          <UiButton variant="default" size="sm" :loading="pwdSaving" :disabled="!pwdReady" @click="onSavePassword">提交</UiButton>
+        </div>
+      </div>
+    </UiCard>
+
     <UiAlert variant="info" title="业务配置已下沉到插件">
       原“区服 / Masterdata / Assets / Sekai API”等设置属于
       <strong>MoeSekai</strong> 插件，已迁移至
@@ -125,7 +151,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import {
   getPublicConfig,
@@ -134,6 +160,7 @@ import {
   updatePublicConfig,
   type PluginListItem,
 } from '../api/client'
+import { useAuthStore } from '../stores/auth'
 import type { RuntimeStatus } from '../api/types'
 import PageHeader from '../components/PageHeader.vue'
 import UiAlert from '../components/ui/UiAlert.vue'
@@ -236,6 +263,43 @@ async function load() {
   }
 }
 
+// 控制台账号 / 修改密码
+const auth = useAuthStore()
+const pwdForm = reactive({
+  old_password: '',
+  new_password: '',
+  new_password_confirm: '',
+})
+const pwdSaving = ref(false)
+const pwdError = ref('')
+const pwdSuccess = ref(false)
+const pwdReady = computed(() =>
+  pwdForm.old_password.length > 0 &&
+  pwdForm.new_password.length >= 8 &&
+  pwdForm.new_password === pwdForm.new_password_confirm,
+)
+
+async function onSavePassword() {
+  pwdError.value = ''
+  pwdSuccess.value = false
+  pwdSaving.value = true
+  try {
+    await auth.changePassword({
+      old_password: pwdForm.old_password,
+      new_password: pwdForm.new_password,
+      new_password_confirm: pwdForm.new_password_confirm,
+    })
+    pwdForm.old_password = ''
+    pwdForm.new_password = ''
+    pwdForm.new_password_confirm = ''
+    pwdSuccess.value = true
+  } catch (err: any) {
+    pwdError.value = err?.response?.data?.message || (err instanceof Error ? err.message : '修改失败')
+  } finally {
+    pwdSaving.value = false
+  }
+}
+
 function categoryLabel(c: PluginListItem['category']) {
   switch (c) {
     case 'official':
@@ -281,4 +345,13 @@ function categoryLabel(c: PluginListItem['category']) {
 .ui-textarea:focus { outline: none; border-color: var(--accent, #5fd49a); }
 .super-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .super-foot .hint { font-size: 12px; color: var(--text-muted); }
+
+/* ---- 修改密码表单 ---- */
+.pwd-form { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.pwd-title { margin: 0; font-size: 14px; font-weight: 600; }
+.pwd-row { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.pwd-row input { min-height: 36px; }
+.info-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; margin: 8px 0 0; padding: 0; }
+.info-list dt { font-size: 12px; color: var(--text-muted); }
+.info-list dd { margin: 0; font-size: 14px; }
 </style>

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { theme } from '../styles/theme'
 import { getMoebotLogoDataUri } from '../styles/logo'
 import { defaultFontFamily } from '../fonts'
+import { getFooterText } from '../deployer'
 
 interface BaseCardProps {
   title?: string
@@ -9,10 +10,14 @@ interface BaseCardProps {
   children: ReactNode
   width?: number
   accentColor?: string
+  /**
+   * @deprecated 卡片底部 footer 已统一由全局 deployer 决定（"Moebot NEXT (deployed by X)"）。
+   * 该参数保留是为了向后兼容旧调用点签名，但渲染时会被忽略。
+   */
   footer?: string
 }
 
-export function BaseCard({ title, subtitle, children, width, accentColor, footer }: BaseCardProps) {
+export function BaseCard({ title, subtitle, children, width, accentColor, footer: _ignoredFooter }: BaseCardProps) {
   const w = width ?? theme.cardWidth
   const accent = accentColor ?? theme.colors.accent
   const logo = getMoebotLogoDataUri(accent)
@@ -110,7 +115,7 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
           color: theme.colors.textMuted,
         }}
       >
-        <span style={{ display: 'flex' }}>{footer ?? 'Moebot NEXT'}</span>
+        <span style={{ display: 'flex' }}>{getFooterText()}</span>
       </div>
     </div>
   )

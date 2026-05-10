@@ -2,6 +2,7 @@ import { getAssetBaseUrl } from "../shared";
 import { rendererAssetCache } from "./asset-cache";
 import { getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, startCardThumbnailCompositePreload, statusForCardThumbnailComposites, type CardThumbnailCompositeLayer, type CardThumbnailCompositeRequest } from "./card-thumbnail-composites";
 import { calculateDeckRecommend } from "./deck-recommend/calculate";
+import { setDeployer, getDeployer } from "./deployer";
 import { renderWithTrace } from "./engine";
 import { loadFonts, FONT_FAMILY, defaultFontFamily, scoreFontFamily, setFontPreferences, fontPreferences } from "./fonts";
 import { renderChartSvg } from "./chart-svg-renderer";
@@ -1174,6 +1175,20 @@ Bun.serve({
 						message: error instanceof Error ? error.message : String(error),
 					},
 					{ status: 500 },
+				);
+			}
+		}
+
+		if (url.pathname === "/config" && request.method === "POST") {
+			try {
+				const body = (await request.json()) as { deployer?: string | null };
+				const next = typeof body.deployer === "string" ? body.deployer.trim() : "";
+				setDeployer(next);
+				return Response.json({ ok: true, deployer: getDeployer() });
+			} catch (error) {
+				return Response.json(
+					{ error: true, message: error instanceof Error ? error.message : String(error) },
+					{ status: 400 },
 				);
 			}
 		}

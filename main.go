@@ -146,6 +146,19 @@ func runOnce(cfgPath string) bool {
 	// 重定向到主页。
 	webServer.SetupStaticFiles(webUI)
 
+	// 启动时同步控制台部署者昵称给 Bun 渲染服务，让所有 Satori 卡片底部
+	// 显示 "Moebot NEXT (deployed by <nickname>)"。首启尚无管理员时传空，
+	// 渲染端回退为 "Moebot NEXT"；setup 完成后由 handleSetup 主动再次推送。
+	go func() {
+		nickname := ""
+		if u, err := db.GetAdminUser(); err == nil && u != nil {
+			nickname = u.Nickname
+		}
+		if err := rendererClient.SetDeployer(nickname); err != nil {
+			log.Warn().Err(err).Msg("Failed to push deployer nickname to renderer")
+		}
+	}()
+
 	go func() {
 		if err := webServer.Start(); err != nil {
 			log.Error().Err(err).Msg("Web server stopped")

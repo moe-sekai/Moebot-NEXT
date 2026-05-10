@@ -83,10 +83,25 @@ func New(cfg *config.Config, db *database.DB, store *masterdata.Store, rendererC
 
 // registerRoutes sets up all API endpoints.
 func (s *Server) registerRoutes() {
+	// 在 App 层注册鉴权中间件，按 path 白名单放行；这样插件后续通过
+	// `app.Group("/api")` 注册的路由也会被同一个中间件保护。Fiber v2 的
+	// 子 Group `Use` 不会影响其他独立 Group，因此必须挂在 App 上。
+	s.App.Use("/api", s.authMiddleware)
+
 	api := s.App.Group("/api")
 
-	// Health and runtime status
+	// --- Public auth & setup endpoints (无需登录) ---
+	api.Get("/auth/status", s.handleAuthStatus)
+	api.Post("/auth/login", s.handleLogin)
+	api.Post("/setup", s.handleSetup)
+	api.Get("/deployer", s.handleDeployer)
+	// /api/health 同样在白名单中（authMiddleware 内判断），保留外部探活能力。
 	api.Get("/health", s.handleHealth)
+
+	// 已登录账号相关
+	api.Get("/auth/me", s.handleAuthMe)
+	api.Post("/auth/change-password", s.handleChangePassword)
+
 	api.Get("/status", s.handleStatus)
 	// /api/masterdata/summary is registered by the moesekai plugin.
 	api.Get("/renderer/health", s.handleRendererHealth)
@@ -153,7 +168,6 @@ func (s *Server) registerRoutes() {
 	api.Get("/plugins/:name/settings", s.handleGetPluginSettings)
 	api.Put("/plugins/:name/settings", s.handleUpdatePluginSettings)
 
-	// TODO: auth middleware, settings, renderer preview, WebSocket
 }
 
 // SetupStaticFiles configures serving the embedded Vue SPA.

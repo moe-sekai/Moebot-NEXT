@@ -50,14 +50,17 @@ export function DeckRecommend({
 		profile?.userId ? `UID ${maskUID(String(profile.userId))}` : undefined,
 		event?.name,
 	].filter(Boolean).join(" · ");
-	const footer = [
-		"功能移植并修改自 33Kit",
+	// 全局 footer 由 BaseCard 统一渲染为 "Moebot NEXT (deployed by X)"，
+	// 这里把"33Kit 致谢 / 算法 / 耗时"信息合并到副标题，确保不丢失。
+	const algoMeta = [
 		algorithm ? `${String(algorithm).toUpperCase()} 算法` : undefined,
 		Number.isFinite(Number(costMs)) ? `耗时 ${Math.round(Number(costMs))}ms` : undefined,
+		"功能移植并修改自 33Kit",
 	].filter(Boolean).join(" · ");
+	const finalSubtitle = [summary, algoMeta].filter(Boolean).join(" · ");
 
 	return (
-		<BaseCard title={title} subtitle={summary} accentColor={accentPink} footer={footer}>
+		<BaseCard title={title} subtitle={finalSubtitle} accentColor={accentPink}>
 			<div style={pageStyle}>
 				<ScenarioPanel event={event} music={music} options={options} />
 				<ResultTable decks={decks} source={assetSource} />

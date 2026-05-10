@@ -11,6 +11,7 @@
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",
     "axios": "^1.13.2",
+    "client-zip": "^2.5.0",
     "echarts": "^6.0.0",
     "katex": "^0.16.45",
     "naive-ui": "^2.43.4",

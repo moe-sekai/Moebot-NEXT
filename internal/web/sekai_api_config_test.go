@@ -25,7 +25,9 @@ func TestPublicConfigMasksSekaiAPISensitiveFields(t *testing.T) {
 	defer db.Close()
 	server := New(cfg, db, nil, nil, "", nil)
 
-	resp, err := server.App.Test(httptestRequest(http.MethodGet, "/api/config/public", nil), -1)
+	req := httptestRequest(http.MethodGet, "/api/config/public", nil)
+	mustAuthorizeRequest(t, server, req)
+	resp, err := server.App.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +88,9 @@ func TestUpdatePublicConfigSavesSekaiAPISettings(t *testing.T) {
 			}
 		}
 	}`)
-	resp, err := server.App.Test(httptestRequest(http.MethodPut, "/api/config/public", bytes.NewReader(payload)), -1)
+	req := httptestRequest(http.MethodPut, "/api/config/public", bytes.NewReader(payload))
+	mustAuthorizeRequest(t, server, req)
+	resp, err := server.App.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}

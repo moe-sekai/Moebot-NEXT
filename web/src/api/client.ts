@@ -51,6 +51,104 @@ export const api = axios.create({
 	timeout: 10_000,
 });
 
+// localStorage 中保存的 JWT，由 stores/auth.ts 写入。
+const AUTH_TOKEN_KEY = "moebot.auth.token";
+
+export function getStoredAuthToken(): string {
+	try {
+		return localStorage.getItem(AUTH_TOKEN_KEY) ?? "";
+	} catch {
+		return "";
+	}
+}
+
+export function setStoredAuthToken(token: string): void {
+	try {
+		if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+		else localStorage.removeItem(AUTH_TOKEN_KEY);
+	} catch {}
+}
+
+api.interceptors.request.use((config) => {
+	const token = getStoredAuthToken();
+	if (token) {
+		config.headers = config.headers ?? {};
+		(config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+	}
+	return config;
+});
+
+// 401: 清 token + 跳 /login。
+// 409 (setup_required): 跳 /setup —— 后端在首启无管理员时返回。
+// 这里通过 window.location 而非 router.push，避免在非组件上下文里循环依赖。
+api.interceptors.response.use(
+	(resp) => resp,
+	(error) => {
+		const status = error?.response?.status as number | undefined;
+		const code = error?.response?.data?.code as string | undefined;
+		const path = typeof window !== "undefined" ? window.location.pathname : "";
+		if (status === 401 && path !== "/login" && path !== "/setup") {
+			setStoredAuthToken("");
+			window.location.assign("/login");
+		} else if (status === 409 && code === "setup_required" && path !== "/setup") {
+			window.location.assign("/setup");
+		}
+		return Promise.reject(error);
+	},
+);
+
+// --- Auth & setup ---
+
+export interface AuthStatus {
+	initialized: boolean;
+	username?: string;
+	nickname?: string;
+}
+
+export async function getAuthStatus(): Promise<AuthStatus> {
+	const { data } = await api.get<AuthStatus>("/auth/status");
+	return data;
+}
+
+export interface AuthSession {
+	token: string;
+	username: string;
+	nickname: string;
+}
+
+export async function loginAdmin(username: string, password: string): Promise<AuthSession> {
+	const { data } = await api.post<AuthSession>("/auth/login", { username, password });
+	return data;
+}
+
+export async function setupAdmin(payload: {
+	username: string;
+	nickname: string;
+	password: string;
+	password_confirm: string;
+}): Promise<AuthSession> {
+	const { data } = await api.post<AuthSession>("/setup", payload);
+	return data;
+}
+
+export async function getCurrentAdmin(): Promise<{ username: string; nickname: string }> {
+	const { data } = await api.get<{ username: string; nickname: string }>("/auth/me");
+	return data;
+}
+
+export async function changeAdminPassword(payload: {
+	old_password: string;
+	new_password: string;
+	new_password_confirm: string;
+}): Promise<void> {
+	await api.post("/auth/change-password", payload);
+}
+
+export async function getDeployer(): Promise<{ nickname: string }> {
+	const { data } = await api.get<{ nickname: string }>("/deployer");
+	return data;
+}
+
 export type { DashboardData } from "./types";
 
 export async function getHealth() {
