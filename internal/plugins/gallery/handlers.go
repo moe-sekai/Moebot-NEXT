@@ -42,6 +42,23 @@ func textRegexRule(pattern string) zero.Rule {
 	}
 }
 
+// picFileURI 把图片磁盘路径转成 OneBot 客户端可解析的 file:// URI。
+// 在 Windows 上必须用正斜杠，否则部分 OneBot 实现 (LLOnebot/NapCat) 会报
+// "路径不存在"。同时检查文件是否真实存在，缺失时返回空串供调用方降级。
+func picFileURI(p string) string {
+	if p == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		abs = p
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return ""
+	}
+	return "file:///" + filepath.ToSlash(abs)
+}
+
 // gate 包装一个 handler：在调用前先咨询 filter 网关；未放行则静默丢弃，
 // 让控制台 /filter 页面对画廊插件的群/用户/正则规则真正生效。
 func (p *pluginImpl) gate(h func(*zero.Ctx)) func(*zero.Ctx) {
@@ -133,8 +150,12 @@ func (p *pluginImpl) handlePick(ctx *zero.Ctx) {
 				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("图片pid=%d不存在", pid)))
 				return
 			}
-			absPath, _ := filepath.Abs(pic.Path)
-			msgs = append(msgs, message.Image("file:///"+absPath))
+			uri := picFileURI(pic.Path)
+			if uri == "" {
+				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("图片pid=%d文件丢失: %q", pic.PID, pic.Path)))
+				return
+			}
+			msgs = append(msgs, message.Image(uri))
 		}
 		ctx.SendChain(msgs...)
 		return
@@ -165,8 +186,12 @@ func (p *pluginImpl) handlePick(ctx *zero.Ctx) {
 				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(err.Error()))
 				return
 			}
-			absPath, _ := filepath.Abs(pic.Path)
-			ctx.SendChain(message.Image("file:///" + absPath))
+			uri := picFileURI(pic.Path)
+			if uri == "" {
+				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("图片pid=%d文件丢失: %q", pic.PID, pic.Path)))
+				return
+			}
+			ctx.SendChain(message.Image(uri))
 			return
 		}
 	}
@@ -201,9 +226,21 @@ func (p *pluginImpl) handlePick(ctx *zero.Ctx) {
 		return
 	}
 	var msgs []message.Segment
+	var missing []string
 	for _, pic := range pics {
-		absPath, _ := filepath.Abs(pic.Path)
-		msgs = append(msgs, message.Image("file:///"+absPath))
+		uri := picFileURI(pic.Path)
+		if uri == "" {
+			missing = append(missing, fmt.Sprintf("pid=%d (%q)", pic.PID, pic.Path))
+			continue
+		}
+		msgs = append(msgs, message.Image(uri))
+	}
+	if len(msgs) == 0 {
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text("画廊\""+g.Name+"\"中所有图片文件丢失:\n"+strings.Join(missing, "\n")))
+		return
+	}
+	if len(missing) > 0 {
+		msgs = append(msgs, message.Text(fmt.Sprintf("\n[警告] %d 张图片文件丢失", len(missing))))
 	}
 	ctx.SendChain(msgs...)
 }

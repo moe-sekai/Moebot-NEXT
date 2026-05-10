@@ -130,10 +130,10 @@
         <div v-if="!pics.length && !loading" class="empty">该画廊暂无图片。</div>
 
         <div class="pic-grid">
-          <div v-for="pic in pics" :key="pic.PID" class="pic-item">
-            <img :src="thumbUrl(pic.PID)" :alt="'PID ' + pic.PID" loading="lazy" @click="previewPic = pic" />
-            <div class="pic-pid">{{ pic.PID }}</div>
-            <button class="pic-del" title="删除" @click="removePic(pic.PID)">&times;</button>
+          <div v-for="pic in pics" :key="pic.pid" class="pic-item">
+            <img :src="thumbUrl(pic.pid)" :alt="'PID ' + pic.pid" loading="lazy" @click="previewPic = pic" />
+            <div class="pic-pid">{{ pic.pid }}</div>
+            <button class="pic-del" title="删除" @click="removePic(pic.pid)">&times;</button>
           </div>
         </div>
 
@@ -238,8 +238,8 @@
     <!-- 图片预览弹窗 -->
     <div v-if="previewPic" class="dialog-overlay" @click.self="previewPic = null">
       <div class="preview-dialog">
-        <img :src="imageUrl(previewPic.PID)" :alt="'PID ' + previewPic.PID" />
-        <div class="preview-info">PID: {{ previewPic.PID }}</div>
+        <img :src="imageUrl(previewPic.pid)" :alt="'PID ' + previewPic.pid" />
+        <div class="preview-info">PID: {{ previewPic.pid }}</div>
       </div>
     </div>
   </main>

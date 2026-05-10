@@ -861,12 +861,10 @@ export interface GalleryDTO {
 }
 
 export interface GalleryPic {
-	PID: number;
-	GallName: string;
-	Path: string;
-	Hash1: string;
-	Hash2: string;
-	ThumbPath: string;
+	pid: number;
+	gall_name: string;
+	path: string;
+	thumb_path: string;
 }
 
 export interface GalleryUploadRecord {

@@ -76,7 +76,16 @@ func (m *GalleryManager) DeleteGallery(nameOrAlias string) error {
 	if err != nil {
 		return fmt.Errorf("画廊\"%s\"不存在", nameOrAlias)
 	}
+	// 删除该画廊所有图片文件（不只是 db 行），避免磁盘残留。
+	var pics []GalleryPic
+	m.db.Where("gall_name = ?", g.Name).Find(&pics)
+	for _, pic := range pics {
+		removeFileQuiet(pic.Path)
+		removeFileQuiet(pic.ThumbPath)
+	}
 	m.db.Where("gall_name = ?", g.Name).Delete(&GalleryPic{})
+	// 一并删除归属于该画廊的上传记录，避免重建画廊后历史记录残留。
+	m.db.Where("gall_name = ?", g.Name).Delete(&GalleryUploadRecord{})
 	return m.db.Delete(g).Error
 }
 
@@ -312,7 +321,18 @@ func (m *GalleryManager) AddPic(gallName, srcPath string, checkDup bool) (uint, 
 	if thumbErr == nil {
 		pic.ThumbPath = thumbPath
 	}
-	m.db.Save(&pic)
+	// 显式 Updates 比 Save 更稳：仅写需要的列，避免 schema/zero-value 混淆，
+	// 同时把任何错误反馈出来（之前 Save 错误被吞掉，导致 Path 列为空）。
+	if err := m.db.Model(&GalleryPic{}).Where("pid = ?", pic.PID).Updates(map[string]interface{}{
+		"path":       pic.Path,
+		"thumb_path": pic.ThumbPath,
+	}).Error; err != nil {
+		log.Error().Err(err).Uint("pid", pic.PID).Str("path", dstPath).Msg("[gallery] 更新图片路径失败，文件已写入但 db 记录无 path")
+		removeFileQuiet(dstPath)
+		removeFileQuiet(thumbPath)
+		m.db.Delete(&pic)
+		return 0, fmt.Errorf("数据库更新图片路径失败: %w", err)
+	}
 
 	return pic.PID, nil
 }
