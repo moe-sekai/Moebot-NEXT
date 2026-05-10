@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"moebot-next/internal/database"
+	"moebot-next/internal/filter"
 	"moebot-next/internal/plugin"
 	"moebot-next/internal/web"
 
@@ -21,6 +22,19 @@ type pluginImpl struct {
 	configPath string
 	mgr        *GalleryManager
 	engine     *zero.Engine
+	filterMgr  *filter.Manager // 用于查询本插件的 internal FilterApp 规则
+}
+
+// filterAppName 返回本插件在 filter 网关中的 internal app 名字。
+func (p *pluginImpl) filterAppName() string { return filter.InternalAppName(PluginName) }
+
+// allowedByFilter 查询 filter 网关：当前消息是否被本插件的 internal app 放行。
+// 当 filter 未启用 / 该 app 未 seed 时返回 true（不阻塞）。
+func (p *pluginImpl) allowedByFilter(groupID, userID int64, isPrivate bool, raw string) bool {
+	if p.filterMgr == nil {
+		return true
+	}
+	return p.filterMgr.AllowMessage(p.filterAppName(), groupID, userID, isPrivate, raw)
 }
 
 func (p *pluginImpl) Manifest() plugin.Manifest {
@@ -110,6 +124,15 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 	if db == nil || db.DB == nil {
 		return errors.New("gallery: database not available")
 	}
+	filterMgr, _ := ctx.Filter.(*filter.Manager)
+
+	// 在 Filter 网关中 seed 本插件对应的 internal app；让控制台「Filter」
+	// 页面能够独立分配模板/规则。已存在时不覆盖用户配置。
+	if err := filter.SeedInternalApp(db, PluginName, "Gallery (图片画廊)"); err != nil {
+		log.Warn().Err(err).Msg("[gallery] 创建 internal filter app 失败")
+	} else if filterMgr != nil && filterMgr.IsRunning() {
+		_ = filterMgr.Reload(ctx.Ctx)
+	}
 
 	// AutoMigrate 画廊表
 	if err := db.DB.AutoMigrate(&GalleryInfo{}, &GalleryPic{}, &GalleryUploadRecord{}); err != nil {
@@ -135,6 +158,11 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 
 	// 创建 Manager
 	p.mgr = NewGalleryManager(db.DB, &c)
+
+	// 保存 filter manager 引用，用于消息处理时查询规则
+	p.mu.Lock()
+	p.filterMgr = filterMgr
+	p.mu.Unlock()
 
 	// 注册 ZeroBot 命令
 	p.engine = p.registerHandlers()

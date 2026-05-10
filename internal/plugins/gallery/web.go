@@ -3,12 +3,27 @@ package gallery
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 )
+
+// paramName 从路径参数中取出名称并做 URL 解码。
+// fiber 的 c.Params 不会自动 URL 解码，因此中文等非 ASCII 名称会
+// 以百分号编码形式传到 handler，需要显式解码。
+func paramName(c *fiber.Ctx) string {
+	raw := c.Params("name")
+	if raw == "" {
+		return raw
+	}
+	if decoded, err := url.PathUnescape(raw); err == nil {
+		return decoded
+	}
+	return raw
+}
 
 func (p *pluginImpl) registerWebRoutes(api fiber.Router) {
 	g := api.Group("/plugins/" + PluginName)
@@ -65,7 +80,7 @@ func (p *pluginImpl) webCreateGallery(c *fiber.Ctx) error {
 }
 
 func (p *pluginImpl) webDeleteGallery(c *fiber.Ctx) error {
-	name := c.Params("name")
+	name := paramName(c)
 	if err := p.mgr.DeleteGallery(name); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
@@ -73,7 +88,7 @@ func (p *pluginImpl) webDeleteGallery(c *fiber.Ctx) error {
 }
 
 func (p *pluginImpl) webUpdateGallery(c *fiber.Ctx) error {
-	name := c.Params("name")
+	name := paramName(c)
 	var body struct {
 		Mode     *string `json:"mode,omitempty"`
 		AddAlias *string `json:"add_alias,omitempty"`
@@ -107,7 +122,7 @@ func (p *pluginImpl) webUpdateGallery(c *fiber.Ctx) error {
 }
 
 func (p *pluginImpl) webListPics(c *fiber.Ctx) error {
-	name := c.Params("name")
+	name := paramName(c)
 	g, err := p.mgr.FindGallery(name)
 	if err != nil {
 		return fiber.NewError(fiber.StatusNotFound, fmt.Sprintf("画廊\"%s\"不存在", name))

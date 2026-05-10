@@ -13,8 +13,62 @@
     <UiAlert v-if="error" variant="destructive" title="操作失败">{{ error }}</UiAlert>
     <UiAlert v-if="successMsg" variant="info" title="成功">{{ successMsg }}</UiAlert>
 
-    <!-- 画廊列表模式 -->
+    <!-- 指令说明 -->
     <template v-if="!selectedGallery">
+      <UiCard>
+        <div class="card-heading">
+          <div>
+            <h2>指令说明</h2>
+            <p>在 QQ 群聊中使用以下指令操作画廊</p>
+          </div>
+          <div class="actions">
+            <UiButton variant="ghost" size="sm" @click="showCommands = !showCommands">
+              {{ showCommands ? '收起' : '展开' }}
+            </UiButton>
+          </div>
+        </div>
+
+        <div v-if="showCommands" class="commands">
+          <div class="cmd-section">
+            <h3>常用指令</h3>
+            <ul class="cmd-list">
+              <li><code>/看 画廊名</code><span>随机查看一张图片</span></li>
+              <li><code>/看 画廊名 x3</code><span>随机查看 3 张图片（不超过单次上限）</span></li>
+              <li><code>/看 画廊名 -1</code><span>查看画廊倒数第 1 张</span></li>
+              <li><code>/看 1 2 3</code><span>按 PID 查看图片（支持多个）</span></li>
+              <li><code>/看所有</code> / <code>/看全部</code><span>列出所有画廊；带画廊名时列出该画廊的全部 PID</span></li>
+              <li><code>/上传 画廊名</code><span>上传图片（消息附带图片或回复带图消息），加 <code>force</code> 跳过去重</span></li>
+              <li><code>/取消上传</code><span>撤销自己最近一次上传（默认 24 小时内）</span></li>
+              <li><code>/上传记录 记录ID</code><span>查看某条上传记录</span></li>
+            </ul>
+            <div class="cmd-aliases">
+              别名：<code>/gall pick</code> · <code>/gall list</code> · <code>/gall add</code> · <code>/gall cancel</code> · <code>/gall record</code>
+            </div>
+          </div>
+
+          <div class="cmd-section">
+            <h3>管理指令<span class="badge">仅超级用户</span></h3>
+            <ul class="cmd-list">
+              <li><code>/gall open 画廊名</code><span>新建画廊</span></li>
+              <li><code>/gall close 画廊名</code><span>删除画廊（连同其中所有图片）</span></li>
+              <li><code>/gall mode 画廊名 [edit|view|off]</code><span>设置画廊模式；不带模式参数则查看当前模式</span></li>
+              <li><code>/gall del 123 456</code> / <code>/gall del 100-119</code><span>按 PID 删除图片（范围最多 20 张）</span></li>
+              <li><code>/gall replace pid</code><span>替换指定 PID 的图片，可加 <code>force</code> 跳过去重</span></li>
+              <li><code>/gall reload 画廊名</code><span>扫描磁盘目录，同步新增/失效的图片</span></li>
+              <li><code>/gall alias add 画廊名 别名</code><span>添加画廊别名</span></li>
+              <li><code>/gall alias del 画廊名 别名</code><span>删除画廊别名</span></li>
+              <li><code>/gall cover 画廊名 PID</code><span>设置画廊封面</span></li>
+              <li><code>/gall check [画廊名|all] [rehash]</code><span>检查重复图片，<code>rehash</code> 为先重算哈希</span></li>
+              <li><code>/取消上传 记录ID</code><span>撤销指定上传记录</span></li>
+            </ul>
+          </div>
+
+          <div class="cmd-tip">
+            画廊有三种模式：<code>edit</code> 可上传可查看 · <code>view</code> 仅查看 · <code>off</code> 关闭。
+          </div>
+        </div>
+      </UiCard>
+
       <UiCard>
         <div class="card-heading">
           <div>
@@ -136,6 +190,7 @@ const showCreateDialog = ref(false)
 const newGalleryName = ref('')
 const previewPic = ref<GalleryPic | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const showCommands = ref(true)
 
 const thumbUrl = galleryPicThumbUrl
 const imageUrl = galleryPicImageUrl
@@ -526,5 +581,75 @@ async function handleUpload(e: Event) {
   padding: 2rem;
   text-align: center;
   color: var(--text-tertiary);
+}
+
+.commands {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+@media (max-width: 720px) {
+  .commands { grid-template-columns: 1fr; }
+}
+.cmd-section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.cmd-section .badge {
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.cmd-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.cmd-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.4rem;
+  background: var(--bg-secondary, #f8fafc);
+}
+.cmd-list code,
+.cmd-aliases code,
+.cmd-tip code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  background: var(--bg-tertiary, #eef2f7);
+  color: var(--text-primary);
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+}
+.cmd-list span {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.cmd-aliases {
+  margin-top: 0.6rem;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  line-height: 1.6;
+}
+.cmd-tip {
+  grid-column: 1 / -1;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--primary, #ec4899);
+  background: var(--bg-secondary, #f8fafc);
+  border-radius: 0 0.4rem 0.4rem 0;
 }
 </style>

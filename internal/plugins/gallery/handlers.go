@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -16,27 +17,69 @@ import (
 	"github.com/wdvxdr1123/ZeroBot/message"
 )
 
+// textRegexRule 仅对消息中的文本段（type == "text"）做正则匹配，
+// 忽略消息开头的 [CQ:image]、[CQ:reply] 等非文本段。
+// 这样即使用户把图片或 reply 段放在指令前面，也能正确解析指令。
+func textRegexRule(pattern string) zero.Rule {
+	re := regexp.MustCompile(pattern)
+	return func(ctx *zero.Ctx) bool {
+		var sb strings.Builder
+		for _, seg := range ctx.Event.Message {
+			if seg.Type == "text" {
+				sb.WriteString(seg.Data["text"])
+			}
+		}
+		text := strings.TrimSpace(sb.String())
+		if text == "" {
+			return false
+		}
+		matched := re.FindStringSubmatch(text)
+		if matched == nil {
+			return false
+		}
+		ctx.State["regex_matched"] = matched
+		return true
+	}
+}
+
+// gate 包装一个 handler：在调用前先咨询 filter 网关；未放行则静默丢弃，
+// 让控制台 /filter 页面对画廊插件的群/用户/正则规则真正生效。
+func (p *pluginImpl) gate(h func(*zero.Ctx)) func(*zero.Ctx) {
+	return func(ctx *zero.Ctx) {
+		ev := ctx.Event
+		if ev == nil {
+			h(ctx)
+			return
+		}
+		isPrivate := ev.MessageType == "private" || ev.DetailType == "private"
+		if !p.allowedByFilter(ev.GroupID, ev.UserID, isPrivate, ev.RawMessage) {
+			return
+		}
+		h(ctx)
+	}
+}
+
 func (p *pluginImpl) registerHandlers() *zero.Engine {
 	engine := zero.New()
 
 	// 普通命令
-	engine.OnRegex(`^/(看|gall pick)\s*(.*)`, zero.OnlyGroup).SetBlock(true).Handle(p.handlePick)
-	engine.OnRegex(`^/(看所有|看全部|gall list)\s*(.*)`, zero.OnlyGroup).SetBlock(true).Handle(p.handleList)
-	engine.OnRegex(`^/(上传|添加|gall add|gall upload)\s*(.*)`, zero.OnlyGroup).SetBlock(true).Handle(p.handleAdd)
-	engine.OnRegex(`^/(取消上传|撤销上传|回退上传|gall cancel|gall revert)\s*(.*)`, zero.OnlyGroup).SetBlock(true).Handle(p.handleCancel)
-	engine.OnRegex(`^/(上传记录|gall record)\s*(.*)`, zero.OnlyGroup).SetBlock(true).Handle(p.handleRecord)
+	engine.OnMessage(textRegexRule(`^/(看|gall pick)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handlePick))
+	engine.OnMessage(textRegexRule(`^/(看所有|看全部|gall list)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleList))
+	engine.OnMessage(textRegexRule(`^/(上传|添加|gall add|gall upload)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleAdd))
+	engine.OnMessage(textRegexRule(`^/(取消上传|撤销上传|回退上传|gall cancel|gall revert)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleCancel))
+	engine.OnMessage(textRegexRule(`^/(上传记录|gall record)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleRecord))
 
 	// 管理命令
-	engine.OnRegex(`^/gall open\s+(.+)`, zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.handleOpen)
-	engine.OnRegex(`^/gall close\s+(.+)`, zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.handleClose)
-	engine.OnRegex(`^/gall mode\s+(.+)`, zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.handleMode)
-	engine.OnRegex(`^/gall (del|remove)\s+(.+)`, zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.handleDel)
-	engine.OnRegex(`^/gall replace\s+(.+)`, zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.handleReplace)
-	engine.OnRegex(`^/gall (reload|update)\s+(.+)`, zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.handleReload)
-	engine.OnRegex(`^/gall alias add\s+(.+)`, zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.handleAliasAdd)
-	engine.OnRegex(`^/gall alias del\s+(.+)`, zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.handleAliasDel)
-	engine.OnRegex(`^/gall cover\s+(.+)`, zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.handleCover)
-	engine.OnRegex(`^/gall check\s*(.*)`, zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.handleCheck)
+	engine.OnMessage(textRegexRule(`^/gall open\s+(.+)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleOpen))
+	engine.OnMessage(textRegexRule(`^/gall close\s+(.+)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleClose))
+	engine.OnMessage(textRegexRule(`^/gall mode\s+(.+)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleMode))
+	engine.OnMessage(textRegexRule(`^/gall (del|remove)\s+(.+)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleDel))
+	engine.OnMessage(textRegexRule(`^/gall replace\s+(.+)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleReplace))
+	engine.OnMessage(textRegexRule(`^/gall (reload|update)\s+(.+)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleReload))
+	engine.OnMessage(textRegexRule(`^/gall alias add\s+(.+)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleAliasAdd))
+	engine.OnMessage(textRegexRule(`^/gall alias del\s+(.+)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleAliasDel))
+	engine.OnMessage(textRegexRule(`^/gall cover\s+(.+)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleCover))
+	engine.OnMessage(textRegexRule(`^/gall check\s*(.*)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleCheck))
 
 	return engine
 }
