@@ -22,6 +22,7 @@ import {
 	GachaInfo,
 	GachaList,
 	GalleryGrid,
+	GalleryList,
 	HelpCard,
 	SkillCalc,
 	MemoryCard,
@@ -878,6 +879,9 @@ async function createElement(req: RenderRequest) {
 		case "gallery_grid":
 		case "gallery":
 			return <GalleryGrid {...(data ?? { title: "画廊", pics: [] })} />;
+		case "gallery_list":
+		case "galleries":
+			return <GalleryList {...(data ?? { galleries: [] })} />;
 		case "virtual_live_list":
 		case "virtual-lives":
 		case "vlive":

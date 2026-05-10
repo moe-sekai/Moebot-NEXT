@@ -37,6 +37,7 @@ export function GalleryGrid({
 			subtitle={sub}
 			width={COLS * CELL + (COLS + 1) * GAP + 32}
 			accentColor={theme.colors.accent}
+			footer="Moebot NEXT · Gallery"
 		>
 			<div
 				style={{

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -49,7 +50,11 @@ type galleryDTO struct {
 	GroupModes map[string]string `json:"group_modes"` // 前端用 string key 方便 JSON 处理
 	Aliases    []string          `json:"aliases"`
 	CoverPID   uint              `json:"cover_pid"`
-	PicCount   int64             `json:"pic_count"`
+	// CoverThumbPID 是用于在控制台显示缩略图的真实 PID。
+	// 当用户已用 /gall cover 设置过 → 等于 CoverPID；
+	// 否则后端回退到该画廊"最新一张图"的 PID，让卡片立即有缩略图。
+	CoverThumbPID uint  `json:"cover_thumb_pid"`
+	PicCount      int64 `json:"pic_count"`
 }
 
 func toGroupModesDTO(s string) map[string]string {
@@ -68,13 +73,22 @@ func (p *pluginImpl) webListGalleries(c *fiber.Ctx) error {
 	}
 	out := make([]galleryDTO, 0, len(galleries))
 	for _, g := range galleries {
+		thumbPID := g.CoverPID
+		if thumbPID == 0 {
+			// 用户没设过封面：回退到最新一张图，直接给卡片一个能显示的缩略图
+			var latest GalleryPic
+			if err := p.mgr.db.Where("gall_name = ?", g.Name).Order("pid DESC").Limit(1).Take(&latest).Error; err == nil {
+				thumbPID = latest.PID
+			}
+		}
 		out = append(out, galleryDTO{
-			Name:       g.Name,
-			Mode:       g.Mode,
-			GroupModes: toGroupModesDTO(g.GroupModes),
-			Aliases:    parseAliases(g.Aliases),
-			CoverPID:   g.CoverPID,
-			PicCount:   p.mgr.PicCount(g.Name),
+			Name:          g.Name,
+			Mode:          g.Mode,
+			GroupModes:    toGroupModesDTO(g.GroupModes),
+			Aliases:       parseAliases(g.Aliases),
+			CoverPID:      g.CoverPID,
+			CoverThumbPID: thumbPID,
+			PicCount:      p.mgr.PicCount(g.Name),
 		})
 	}
 	return c.JSON(fiber.Map{"galleries": out})
@@ -251,7 +265,12 @@ func (p *pluginImpl) webUploadPic(c *fiber.Ctx) error {
 
 	pid, err := p.mgr.AddPic(g.Name, tmpFile.Name(), checkDup)
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		// 去重冲突：附带 hint，前端可以提示用户"取消勾选去重后重试"。
+		msg := err.Error()
+		if checkDup && strings.Contains(msg, "相似图片") {
+			msg += `（可在上传时取消勾选"去重"或使用 force 强制上传）`
+		}
+		return fiber.NewError(fiber.StatusBadRequest, msg)
 	}
 	return c.JSON(fiber.Map{"ok": true, "pid": pid})
 }

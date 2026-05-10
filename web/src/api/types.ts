@@ -857,6 +857,10 @@ export interface GalleryDTO {
 	group_modes: Record<string, string>; // {"<groupID>": "edit|view|off"}
 	aliases: string[];
 	cover_pid: number;
+	// cover_thumb_pid 是后端实际用于显示缩略图的 PID：
+	// 用户已用 /gall cover 设置 → 等于 cover_pid；
+	// 否则后端回退到该画廊"最新一张图"的 PID。
+	cover_thumb_pid: number;
 	pic_count: number;
 }
 

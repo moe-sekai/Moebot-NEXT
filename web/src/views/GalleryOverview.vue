@@ -85,7 +85,7 @@
         <div class="gallery-grid">
           <div v-for="g in galleries" :key="g.name" class="gallery-card" @click="openGallery(g)">
             <div class="gallery-card-cover">
-              <img v-if="g.cover_pid" :src="thumbUrl(g.cover_pid)" alt="cover" loading="lazy" />
+              <img v-if="g.cover_thumb_pid" :src="thumbUrl(g.cover_thumb_pid)" alt="cover" loading="lazy" />
               <div v-else class="gallery-card-cover-empty">
                 <SvgIcon name="gallery" :size="32" />
               </div>
@@ -139,6 +139,53 @@
 
         <div v-if="picTotal > pics.length" class="load-more">
           <UiButton variant="outline" size="sm" :loading="loading" @click="loadMorePics">加载更多</UiButton>
+        </div>
+      </UiCard>
+
+      <!-- 别名 / 封面 管理 -->
+      <UiCard>
+        <div class="card-heading">
+          <div>
+            <h2>别名与封面</h2>
+            <p>别名可在群里像画廊名一样使用（例如 <code>/看 别名</code>）；封面用于控制台与 <code>/看全部</code> 渲染。</p>
+          </div>
+        </div>
+
+        <div class="alias-row">
+          <span class="alias-label">已有别名：</span>
+          <span v-if="!selectedGallery.aliases?.length" class="empty-inline">暂无别名</span>
+          <span
+            v-for="a in selectedGallery.aliases ?? []"
+            :key="a"
+            class="alias-chip"
+          >
+            {{ a }}
+            <button class="alias-chip-x" title="删除别名" @click="doDelAlias(a)">&times;</button>
+          </span>
+        </div>
+
+        <div class="alias-add">
+          <input
+            v-model="newAlias"
+            type="text"
+            placeholder="新别名（不含空格）"
+            @keydown.enter="doAddAlias"
+          />
+          <UiButton variant="default" size="sm" :loading="savingAlias" @click="doAddAlias">添加别名</UiButton>
+        </div>
+
+        <div class="cover-row">
+          <span class="alias-label">封面 PID：</span>
+          <input
+            v-model="newCoverPid"
+            type="number"
+            min="0"
+            :placeholder="selectedGallery.cover_pid ? String(selectedGallery.cover_pid) : '未设置（使用最新一张）'"
+          />
+          <UiButton variant="outline" size="sm" :loading="savingCover" @click="doSetCover">设为封面</UiButton>
+          <UiButton variant="ghost" size="sm" :disabled="!selectedGallery.cover_pid" @click="doClearCover">清除</UiButton>
+          <span v-if="selectedGallery.cover_pid" class="cover-hint">当前封面 PID：{{ selectedGallery.cover_pid }}</span>
+          <span v-else class="cover-hint">未设置，控制台显示最新一张</span>
         </div>
       </UiCard>
 
@@ -278,6 +325,12 @@ interface GroupModeRow { gid: string; mode: string }
 const groupModeRows = ref<GroupModeRow[]>([])
 const savingGroupModes = ref(false)
 
+// 别名 / 封面
+const newAlias = ref('')
+const savingAlias = ref(false)
+const newCoverPid = ref<number | string>('')
+const savingCover = ref(false)
+
 // 上传记录
 const uploadRecords = ref<GalleryUploadRecord[]>([])
 const loadingRecords = ref(false)
@@ -402,6 +455,81 @@ async function saveGroupModes() {
     error.value = e.response?.data?.message || e.message
   } finally {
     savingGroupModes.value = false
+  }
+}
+
+async function doAddAlias() {
+  if (!selectedGallery.value) return
+  const alias = newAlias.value.trim()
+  if (!alias) return
+  if (/\s/.test(alias)) {
+    error.value = '别名不能包含空格'
+    return
+  }
+  savingAlias.value = true
+  error.value = ''
+  try {
+    await updateGallery(selectedGallery.value.name, { add_alias: alias })
+    selectedGallery.value.aliases = [...(selectedGallery.value.aliases ?? []), alias]
+    newAlias.value = ''
+    flash(`别名 "${alias}" 已添加`)
+  } catch (e: any) {
+    error.value = e.response?.data?.message || e.message
+  } finally {
+    savingAlias.value = false
+  }
+}
+
+async function doDelAlias(alias: string) {
+  if (!selectedGallery.value) return
+  if (!confirm(`确定要删除别名 "${alias}" 吗？`)) return
+  savingAlias.value = true
+  error.value = ''
+  try {
+    await updateGallery(selectedGallery.value.name, { del_alias: alias })
+    selectedGallery.value.aliases = (selectedGallery.value.aliases ?? []).filter(a => a !== alias)
+    flash(`别名 "${alias}" 已删除`)
+  } catch (e: any) {
+    error.value = e.response?.data?.message || e.message
+  } finally {
+    savingAlias.value = false
+  }
+}
+
+async function doSetCover() {
+  if (!selectedGallery.value) return
+  const n = Number(newCoverPid.value)
+  if (!Number.isFinite(n) || n <= 0) {
+    error.value = '请输入有效的 PID'
+    return
+  }
+  savingCover.value = true
+  error.value = ''
+  try {
+    await updateGallery(selectedGallery.value.name, { cover_pid: n })
+    selectedGallery.value.cover_pid = n
+    selectedGallery.value.cover_thumb_pid = n
+    newCoverPid.value = ''
+    flash(`封面已设为 PID=${n}`)
+  } catch (e: any) {
+    error.value = e.response?.data?.message || e.message
+  } finally {
+    savingCover.value = false
+  }
+}
+
+async function doClearCover() {
+  if (!selectedGallery.value || !selectedGallery.value.cover_pid) return
+  savingCover.value = true
+  error.value = ''
+  try {
+    await updateGallery(selectedGallery.value.name, { cover_pid: 0 })
+    selectedGallery.value.cover_pid = 0
+    flash('封面已清除（控制台将显示最新一张）')
+  } catch (e: any) {
+    error.value = e.response?.data?.message || e.message
+  } finally {
+    savingCover.value = false
   }
 }
 
@@ -578,6 +706,76 @@ async function handleUpload(e: Event) {
 .tag-edit { background: #dcfce7; color: #166534; }
 .tag-view { background: #dbeafe; color: #1e40af; }
 .tag-off  { background: #f3f4f6; color: #6b7280; }
+
+/* 别名 / 封面 管理 */
+.alias-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.alias-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.empty-inline {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+.alias-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem 0.2rem 0.6rem;
+  background: var(--bg-tertiary, #f3f4f6);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  font-size: 0.8rem;
+}
+.alias-chip-x {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--text-tertiary);
+  padding: 0 0.1rem;
+}
+.alias-chip-x:hover { color: #dc2626; }
+.alias-add {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+.alias-add input {
+  flex: 1;
+  max-width: 320px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg-input, transparent);
+}
+.cover-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.cover-row input {
+  width: 120px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg-input, transparent);
+}
+.cover-hint {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
 
 .pic-grid {
   display: grid;

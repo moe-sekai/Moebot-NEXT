@@ -45,6 +45,17 @@ func textRegexRule(pattern string) zero.Rule {
 	}
 }
 
+// containsDupError 判断 errMsgs 中是否包含"画廊中已存在相似图片"去重类错误。
+// 用于给用户提示可用 force 强制上传。
+func containsDupError(errMsgs []string) bool {
+	for _, m := range errMsgs {
+		if strings.Contains(m, "相似图片") {
+			return true
+		}
+	}
+	return false
+}
+
 // readPicBytes 读取图片字节，供 message.ImageBytes 使用。
 // 与 moesekai 等其它插件保持一致的发图方式：bot 与 OneBot 客户端常常
 // 不在同一文件系统（不同容器/不同机器），file:// 不可达；用字节流由
@@ -268,18 +279,7 @@ func (p *pluginImpl) handleList(ctx *zero.Ctx) {
 			ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text("当前没有任何画廊"))
 			return
 		}
-		var lines []string
-		lines = append(lines, fmt.Sprintf("共%d个画廊:", len(galleries)))
-		for _, g := range galleries {
-			count := p.mgr.PicCount(g.Name)
-			aliases := parseAliases(g.Aliases)
-			aliasStr := ""
-			if len(aliases) > 0 {
-				aliasStr = " 别名:" + strings.Join(aliases, ",")
-			}
-			lines = append(lines, fmt.Sprintf("· %s [%s] %d张%s", g.Name, g.Mode, count, aliasStr))
-		}
-		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(strings.Join(lines, "\n")))
+		p.sendGalleryListCard(ctx, galleries)
 		return
 	}
 
@@ -363,9 +363,13 @@ func (p *pluginImpl) sendGalleryGrid(ctx *zero.Ctx, gallName string, pics []Gall
 		return
 	}
 
+	subtitle := fmt.Sprintf("第 %d/%d 页 · 共 %d 张 · 本页 %d 张", page, totalPages, total, len(dtoPics))
+	if totalPages > 1 {
+		subtitle += fmt.Sprintf("　|　使用 /看所有 %s @N 切换页码", gallName)
+	}
 	payload := map[string]interface{}{
 		"title":      "画廊 " + gallName,
-		"subtitle":   fmt.Sprintf("第 %d/%d 页 · 共 %d 张 · 本页 %d 张", page, totalPages, total, len(dtoPics)),
+		"subtitle":   subtitle,
 		"pics":       dtoPics,
 		"page":       page,
 		"totalPages": totalPages,
@@ -387,6 +391,89 @@ func (p *pluginImpl) sendGalleryGrid(ctx *zero.Ctx, gallName string, pics []Gall
 		hint += "，使用 /看所有 " + gallName + " @N 切换页码"
 	}
 	ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(hint), message.ImageBytes(png))
+}
+
+// sendGalleryListCard 调用 satori 渲染所有画廊的总览卡片图（封面 + 名称 + 模式 + 张数 + 别名）。
+// 渲染失败或 renderer 不可用时回退为文本列表。
+func (p *pluginImpl) sendGalleryListCard(ctx *zero.Ctx, galleries []GalleryInfo) {
+	// 文本回退
+	buildTextFallback := func() string {
+		lines := []string{fmt.Sprintf("共%d个画廊:", len(galleries))}
+		for _, g := range galleries {
+			count := p.mgr.PicCount(g.Name)
+			aliases := parseAliases(g.Aliases)
+			aliasStr := ""
+			if len(aliases) > 0 {
+				aliasStr = " 别名:" + strings.Join(aliases, ",")
+			}
+			lines = append(lines, fmt.Sprintf("· %s [%s] %d张%s", g.Name, g.Mode, count, aliasStr))
+		}
+		lines = append(lines, "使用 /看所有 画廊名 查看该画廊全部图片")
+		return strings.Join(lines, "\n")
+	}
+
+	if p.rendererCl == nil || !p.rendererCl.Health() {
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(buildTextFallback()))
+		return
+	}
+
+	// 为每个画廊准备封面 data URI：优先用 CoverPID 对应图的 thumb，缺省回退到最新一张。
+	type dtoGallery struct {
+		Name         string   `json:"name"`
+		Mode         string   `json:"mode"`
+		PicCount     int64    `json:"picCount"`
+		Aliases      []string `json:"aliases,omitempty"`
+		CoverDataURI string   `json:"coverDataUri,omitempty"`
+	}
+	items := make([]dtoGallery, 0, len(galleries))
+	for _, g := range galleries {
+		item := dtoGallery{
+			Name:     g.Name,
+			Mode:     g.Mode,
+			PicCount: p.mgr.PicCount(g.Name),
+			Aliases:  parseAliases(g.Aliases),
+		}
+		// 选封面
+		var cover GalleryPic
+		found := false
+		if g.CoverPID > 0 {
+			if err := p.mgr.db.Where("pid = ?", g.CoverPID).Take(&cover).Error; err == nil {
+				found = true
+			}
+		}
+		if !found {
+			if err := p.mgr.db.Where("gall_name = ?", g.Name).Order("pid DESC").Limit(1).Take(&cover).Error; err == nil {
+				found = true
+			}
+		}
+		if found {
+			path := cover.ThumbPath
+			if path == "" {
+				path = cover.Path
+			}
+			if data, err := readPicBytes(path); err == nil {
+				mime := "image/jpeg"
+				if strings.HasSuffix(strings.ToLower(path), ".png") {
+					mime = "image/png"
+				}
+				item.CoverDataURI = "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
+			}
+		}
+		items = append(items, item)
+	}
+
+	payload := map[string]interface{}{
+		"title":     "画廊总览",
+		"subtitle":  fmt.Sprintf("共 %d 个画廊　|　使用 /看所有 画廊名 查看该画廊图片、/看所有 画廊名 @N 切换页码", len(galleries)),
+		"galleries": items,
+	}
+	png, err := p.rendererCl.Render(renderer.RenderRequest{Template: "gallery_list", Data: payload})
+	if err != nil {
+		log.Warn().Err(err).Msg("[gallery] satori 渲染画廊总览失败，回退文本")
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(buildTextFallback()))
+		return
+	}
+	ctx.SendChain(message.Reply(ctx.Event.MessageID), message.ImageBytes(png))
 }
 
 func (p *pluginImpl) handleAdd(ctx *zero.Ctx) {
@@ -447,6 +534,10 @@ func (p *pluginImpl) handleAdd(ctx *zero.Ctx) {
 	msg += fmt.Sprintf("成功上传%d/%d张图片到\"%s\"", len(okList), len(imageURLs), g.Name)
 	if len(errMsgs) > 0 {
 		msg += "\n" + strings.Join(errMsgs, "\n")
+	}
+	// 若本次因去重被拒，给出强制上传提示。
+	if checkDup && containsDupError(errMsgs) {
+		msg += fmt.Sprintf("\n提示：可使用 /上传 %s force 跳过去重强制上传", g.Name)
 	}
 	if len(okList) > 0 {
 		msg += fmt.Sprintf("\n⚠ 请勿上传违规内容，你的QQ号(%d)已被记录。如需撤回请发送 /取消上传", ctx.Event.UserID)

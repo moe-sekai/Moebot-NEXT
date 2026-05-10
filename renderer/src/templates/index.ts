@@ -35,6 +35,8 @@ export { DeckRecommend } from "./DeckRecommend";
 export type { DeckRecommendProps } from "./DeckRecommend";
 export { GalleryGrid } from "./GalleryGrid";
 export type { GalleryGridProps, GalleryGridPic } from "./GalleryGrid";
+export { GalleryList } from "./GalleryList";
+export type { GalleryListProps, GalleryListItem } from "./GalleryList";
 export {
 	SekaiCardThumbnail,
 	canUseTrainedArt,
