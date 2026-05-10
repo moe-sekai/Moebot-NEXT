@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"moebot-next/internal/plugins/moesekai/assets"
 	"moebot-next/internal/config"
-	"moebot-next/internal/plugins/moesekai/masterdata"
 	"moebot-next/internal/models"
+	"moebot-next/internal/plugins/moesekai/assets"
+	"moebot-next/internal/plugins/moesekai/masterdata"
 	"moebot-next/internal/plugins/moesekai/ranking"
 	"moebot-next/internal/plugins/moesekai/sekai"
 	"moebot-next/internal/plugins/moesekai/suite"
@@ -231,6 +231,50 @@ func (m *Manager) ForUser(user *models.User) *Runtime {
 		return m.Default()
 	}
 	return m.Get(user.ServerRegion)
+}
+
+// RefreshResult 描述一次 RefreshAll 中单个 region 的执行情况，主要用于
+// /update 管理员命令向群里反馈每个区服的更新状态。
+type RefreshResult struct {
+	Region      string
+	Label       string
+	Source      string
+	Skipped     bool
+	OldVersion  string
+	NewVersion  string
+	FilesLoaded int
+	Err         error
+}
+
+// RefreshAll 对所有启用的区服触发一次 masterdata 刷新；force=true 时跳过版本
+// 比较并强制重新下载所有文件。返回结果按 region 顺序排列。
+func (m *Manager) RefreshAll(force bool) []RefreshResult {
+	runtimes := m.EnabledRuntimes()
+	out := make([]RefreshResult, 0, len(runtimes))
+	for _, rt := range runtimes {
+		if rt.Loader == nil {
+			continue
+		}
+		res, err := rt.Loader.Refresh(force)
+		rr := RefreshResult{
+			Region:      rt.Region,
+			Label:       rt.Label,
+			Source:      res.Source,
+			Skipped:     res.Skipped,
+			OldVersion:  res.OldDataVersion,
+			NewVersion:  res.NewDataVersion,
+			FilesLoaded: res.FilesLoaded,
+			Err:         err,
+		}
+		if err == nil && !res.Skipped {
+			m.loadMusicAliases(rt)
+			rt.LoadError = nil
+		} else if err != nil {
+			rt.LoadError = err
+		}
+		out = append(out, rr)
+	}
+	return out
 }
 
 // Reload reloads masterdata for one region. Empty region reloads the default region.

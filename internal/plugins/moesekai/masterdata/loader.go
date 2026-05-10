@@ -99,19 +99,80 @@ func (l *Loader) configSnapshot() (config.MasterdataConfig, string) {
 
 // ---------- Full Load ------------------------------------------------------
 
+// LoadResult 报告一次 LoadAll/Refresh 的执行情况，用于 /update 命令反馈以及
+// 上层判断是否真正发生了文件级更新。
+type LoadResult struct {
+	Region         string // canonical region key
+	Source         string // resolved provider key (moesekai/haruki/...)
+	Skipped        bool   // true: 远端 dataVersion 与本地一致，未触发文件下载
+	VersionChecked bool   // true: 成功获取到远端版本（无论是否跳过）
+	OldDataVersion string // 本地缓存的旧 dataVersion，可能为空
+	NewDataVersion string // 远端最新 dataVersion，可能为空（探测失败时）
+	FilesLoaded    int    // 实际加载的文件数量；Skipped=true 时为 0
+}
+
 // LoadAll fetches every masterdata file and swaps the Store atomically.
+// 内部会在 Store 已加载且远端 dataVersion 与本地缓存一致时跳过实际拉取。
 // Errors on individual files are logged but do not abort the whole load;
 // an error is only returned if zero files could be loaded at all.
 func (l *Loader) LoadAll() error {
+	_, err := l.loadAllInternal(false)
+	return err
+}
+
+// Refresh 与 LoadAll 等价，但额外返回 LoadResult，并允许通过 force=true 强制
+// 跳过版本一致性检查（用于管理员手动 /update 触发的强制刷新场景）。
+func (l *Loader) Refresh(force bool) (LoadResult, error) {
+	return l.loadAllInternal(force)
+}
+
+func (l *Loader) loadAllInternal(force bool) (LoadResult, error) {
 	l.loadMu.Lock()
 	defer l.loadMu.Unlock()
 
 	cfg, defaultRegion := l.configSnapshot()
 	resolved, err := config.ResolveMasterdata(cfg, defaultRegion)
 	if err != nil {
-		return fmt.Errorf("masterdata: resolve source: %w", err)
+		return LoadResult{}, fmt.Errorf("masterdata: resolve source: %w", err)
 	}
 
+	result := LoadResult{
+		Region: resolved.Region,
+		Source: resolved.Source,
+	}
+	if stored := loadStoredVersion(resolved.LocalPath); stored != nil {
+		result.OldDataVersion = stored.DataVersion
+	}
+
+	// ---- 1) 探测远端版本（best-effort，失败时回退到全量拉取） ----
+	var remoteVersion *RemoteVersionInfo
+	if len(resolved.VersionURLs) > 0 {
+		if rv, src, verr := l.fetchRemoteVersion(resolved.VersionURLs); verr == nil {
+			remoteVersion = rv
+			result.VersionChecked = true
+			result.NewDataVersion = rv.DataVersion
+			log.Debug().
+				Str("region", resolved.Region).
+				Str("source", src).
+				Str("data_version", rv.DataVersion).
+				Msg("masterdata: remote version probed")
+		} else {
+			log.Debug().Err(verr).Str("region", resolved.Region).Msg("masterdata: version probe failed; will fall back to full fetch")
+		}
+	}
+
+	// ---- 2) 若版本一致且 Store 已加载，跳过文件下载 ----
+	if !force && remoteVersion != nil && result.OldDataVersion != "" &&
+		result.OldDataVersion == remoteVersion.DataVersion && l.store.IsLoaded() {
+		result.Skipped = true
+		log.Info().
+			Str("region", resolved.Region).
+			Str("data_version", remoteVersion.DataVersion).
+			Msg("masterdata: data version unchanged, skip refresh")
+		return result, nil
+	}
+
+	// ---- 3) 全量拉取 ----
 	data := &MasterData{}
 	loaded := 0
 
@@ -134,10 +195,11 @@ func (l *Loader) LoadAll() error {
 	}
 
 	if loaded == 0 {
-		return fmt.Errorf("masterdata: failed to load any files (tried remote endpoints and local cache)")
+		return result, fmt.Errorf("masterdata: failed to load any files (tried remote endpoints and local cache)")
 	}
 
 	l.store.SetAll(data)
+	result.FilesLoaded = loaded
 
 	// moe_costume.json is JP-only, hosted on the same MoeSekai/Exmeaning master mirror.
 	// All regions reuse the JP costume database for rendering, so we always fetch
@@ -150,9 +212,17 @@ func (l *Loader) LoadAll() error {
 		log.Debug().Str("source", source).Int("costumes", len(costumes)).Msg("Loaded moe_costume.json")
 	}
 
+	// ---- 4) 持久化最新版本（best-effort） ----
+	if remoteVersion != nil {
+		if err := saveStoredVersion(resolved.LocalPath, *remoteVersion); err != nil {
+			log.Debug().Err(err).Str("region", resolved.Region).Msg("masterdata: persist data_version.json failed")
+		}
+	}
+
 	log.Info().
 		Str("provider", resolved.Source).
 		Str("region", resolved.Region).
+		Str("data_version", result.NewDataVersion).
 		Int("files_loaded", loaded).
 		Int("total_files", len(masterFiles)).
 		Int("cards", len(data.Cards)).
@@ -162,7 +232,7 @@ func (l *Loader) LoadAll() error {
 		Int("virtual_lives", len(data.VirtualLives)).
 		Msg("Masterdata loaded into store")
 
-	return nil
+	return result, nil
 }
 
 // resetUnmarshalTarget clears a slice/map/etc. target after json.Unmarshal

@@ -26,10 +26,11 @@ const (
 	DefaultChartSourceURL  = "https://charts-new.unipjsk.com/moe/svg/{id}/{difficulty}.svg"
 	DefaultB30ConstantsURL = "https://moe.exmeaning.com/data/pjskb30/merged_chart.csv"
 
-	MasterdataSourceMoeSekai = "moesekai"
-	MasterdataSourceHaruki   = "haruki"
-	MasterdataSource8823     = "8823"
-	MasterdataSourceCustom   = "custom"
+	MasterdataSourceMoeSekai  = "moesekai"
+	MasterdataSourceHaruki    = "haruki"
+	MasterdataSource8823      = "8823"
+	MasterdataSourceSekaiBest = "sekai_best"
+	MasterdataSourceCustom    = "custom"
 
 	AssetSourceMoeSekai  = "moesekai"
 	AssetSourceSekaiBest = "sekai_best"
@@ -69,6 +70,10 @@ type ResolvedMasterdata struct {
 	LocalPath         string             `json:"local_path"`
 	RefreshInterval   int                `json:"refresh_interval"`
 	Endpoints         []ResolvedEndpoint `json:"endpoints"`
+	// VersionURLs lists known endpoints for current_version.json (or equivalent
+	// versions.json for snake_case sources). Empty slice means no version probe
+	// is available; loader falls back to always-fetch.
+	VersionURLs []string `json:"version_urls,omitempty"`
 }
 
 // ResolvedAssets contains the effective asset CDN settings.
@@ -88,6 +93,10 @@ type ResolvedAssets struct {
 type masterdataPreset struct {
 	URL         string
 	FallbackURL string
+	// VersionURL points to the source's current_version.json (camelCase) or
+	// versions.json (snake_case). Empty means no version probe.
+	VersionURL         string
+	FallbackVersionURL string
 }
 
 type assetMirrorPreset struct {
@@ -106,6 +115,7 @@ var masterdataSourceOptions = []PublicOption{
 	{Key: MasterdataSourceMoeSekai, Label: "MoeSekai", Description: "MoeSekai / Exmeaning masterdata 镜像", Regions: []string{RegionJP, RegionCN}},
 	{Key: MasterdataSourceHaruki, Label: "Haruki GitHub", Description: "Team-Haruki 的全服 masterdata 仓库", Regions: []string{RegionJP, RegionCN, RegionTW, RegionKR, RegionEN}},
 	{Key: MasterdataSource8823, Label: "8823 GitHub", Description: "kotori8823 的 JP/CN/TW masterdata 仓库", Regions: []string{RegionJP, RegionCN, RegionTW}},
+	{Key: MasterdataSourceSekaiBest, Label: "sekai.best GitHub", Description: "Sekai-World 的全服 masterdata 仓库", Regions: []string{RegionJP, RegionCN, RegionTW, RegionKR, RegionEN}},
 	{Key: MasterdataSourceCustom, Label: "自定义", Description: "填写包含 cards.json 等文件的目录 URL", Regions: []string{RegionJP, RegionCN, RegionTW, RegionKR, RegionEN}},
 }
 
@@ -124,20 +134,76 @@ var assetMirrorOptions = []PublicOption{
 
 var masterdataPresets = map[string]map[string]masterdataPreset{
 	MasterdataSourceMoeSekai: {
-		RegionJP: {URL: "https://sk.exmeaning.com/master", FallbackURL: "https://sekaimaster.exmeaning.com/master"},
-		RegionCN: {URL: "https://sk-cn.exmeaning.com/master", FallbackURL: "https://sekaimaster-cn.exmeaning.com/master"},
+		RegionJP: {
+			URL:                "https://sk.exmeaning.com/master",
+			FallbackURL:        "https://sekaimaster.exmeaning.com/master",
+			VersionURL:         "https://sk.exmeaning.com/versions/current_version.json",
+			FallbackVersionURL: "https://sekaimaster.exmeaning.com/versions/current_version.json",
+		},
+		RegionCN: {
+			URL:                "https://sk-cn.exmeaning.com/master",
+			FallbackURL:        "https://sekaimaster-cn.exmeaning.com/master",
+			VersionURL:         "https://sk-cn.exmeaning.com/versions/current_version.json",
+			FallbackVersionURL: "https://sekaimaster-cn.exmeaning.com/versions/current_version.json",
+		},
 	},
 	MasterdataSourceHaruki: {
-		RegionJP: {URL: "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-master/main/master"},
-		RegionCN: {URL: "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-sc-master/main/master"},
-		RegionTW: {URL: "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-tc-master/main/master"},
-		RegionKR: {URL: "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-kr-master/main/master"},
-		RegionEN: {URL: "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-en-master/main/master"},
+		RegionJP: {
+			URL:        "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-master/main/master",
+			VersionURL: "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-master/main/versions/current_version.json",
+		},
+		RegionCN: {
+			URL:        "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-sc-master/main/master",
+			VersionURL: "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-sc-master/main/versions/current_version.json",
+		},
+		RegionTW: {
+			URL:        "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-tc-master/main/master",
+			VersionURL: "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-tc-master/main/versions/current_version.json",
+		},
+		RegionKR: {
+			URL:        "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-kr-master/main/master",
+			VersionURL: "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-kr-master/main/versions/current_version.json",
+		},
+		RegionEN: {
+			URL:        "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-en-master/main/master",
+			VersionURL: "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-en-master/main/versions/current_version.json",
+		},
 	},
 	MasterdataSource8823: {
-		RegionJP: {URL: "https://raw.githubusercontent.com/kotori8823/sekai-master-db/master"},
-		RegionCN: {URL: "https://raw.githubusercontent.com/kotori8823/sekai-sc-master-db/master"},
-		RegionTW: {URL: "https://raw.githubusercontent.com/kotori8823/sekai-tc-master-db/master"},
+		RegionJP: {
+			URL:        "https://raw.githubusercontent.com/kotori8823/sekai-master-db/master",
+			VersionURL: "https://raw.githubusercontent.com/kotori8823/sekai-master-db/master/versions.json",
+		},
+		RegionCN: {
+			URL:        "https://raw.githubusercontent.com/kotori8823/sekai-sc-master-db/master",
+			VersionURL: "https://raw.githubusercontent.com/kotori8823/sekai-sc-master-db/master/versions.json",
+		},
+		RegionTW: {
+			URL:        "https://raw.githubusercontent.com/kotori8823/sekai-tc-master-db/master",
+			VersionURL: "https://raw.githubusercontent.com/kotori8823/sekai-tc-master-db/master/versions.json",
+		},
+	},
+	MasterdataSourceSekaiBest: {
+		RegionJP: {
+			URL:        "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-diff/main",
+			VersionURL: "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-diff/main/versions.json",
+		},
+		RegionCN: {
+			URL:        "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-cn-diff/main",
+			VersionURL: "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-cn-diff/main/versions.json",
+		},
+		RegionTW: {
+			URL:        "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-tc-diff/main",
+			VersionURL: "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-tc-diff/main/versions.json",
+		},
+		RegionKR: {
+			URL:        "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-kr-diff/main",
+			VersionURL: "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-kr-diff/main/versions.json",
+		},
+		RegionEN: {
+			URL:        "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-en-diff/main",
+			VersionURL: "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-en-diff/main/versions.json",
+		},
 	},
 }
 
@@ -216,6 +282,8 @@ func NormalizeMasterdataSource(source string) string {
 		return MasterdataSourceHaruki
 	case "8823", "kotori8823", "kotori", "github_8823", "8823_github":
 		return MasterdataSource8823
+	case "sekai_best", "sekai-best", "sekai.best", "sekaibest", "sekai-world", "sekai_world", "sekaiworld":
+		return MasterdataSourceSekaiBest
 	case "custom", "url", "manual":
 		return MasterdataSourceCustom
 	default:
@@ -329,6 +397,12 @@ func ResolveMasterdata(cfg MasterdataConfig, defaultRegion string) (ResolvedMast
 	if resolved.FallbackURL != "" {
 		resolved.Endpoints = append(resolved.Endpoints, ResolvedEndpoint{Key: "fallback", Label: "备用 URL", URL: resolved.FallbackURL})
 	}
+	if strings.TrimSpace(preset.VersionURL) != "" {
+		resolved.VersionURLs = append(resolved.VersionURLs, strings.TrimSpace(preset.VersionURL))
+	}
+	if strings.TrimSpace(preset.FallbackVersionURL) != "" {
+		resolved.VersionURLs = append(resolved.VersionURLs, strings.TrimSpace(preset.FallbackVersionURL))
+	}
 	return resolved, nil
 }
 
@@ -418,6 +492,9 @@ func inferMasterdataSource(cfg MasterdataConfig, region string) string {
 	if strings.Contains(primary, "kotori8823") {
 		return MasterdataSource8823
 	}
+	if strings.Contains(primary, "Sekai-World") || strings.Contains(primary, "sekai-world") || strings.Contains(primary, "sekai-master-db-diff") || strings.Contains(primary, "sekai-master-db-cn-diff") || strings.Contains(primary, "sekai-master-db-tc-diff") || strings.Contains(primary, "sekai-master-db-kr-diff") || strings.Contains(primary, "sekai-master-db-en-diff") {
+		return MasterdataSourceSekaiBest
+	}
 	if strings.Contains(primary, "exmeaning.com/master") || strings.Contains(primary, "exmeaning.com") {
 		if _, ok := masterdataPresets[MasterdataSourceMoeSekai][region]; ok {
 			return MasterdataSourceMoeSekai
@@ -428,16 +505,16 @@ func inferMasterdataSource(cfg MasterdataConfig, region string) string {
 
 func inferMasterdataRegion(cfg MasterdataConfig) string {
 	primary := normalizeBaseURL(firstNonEmpty(cfg.CustomURL, cfg.URL))
-	if strings.Contains(primary, "sk-cn.exmeaning.com") || strings.Contains(primary, "sekaimaster-cn.exmeaning.com") || strings.Contains(primary, "haruki-sekai-sc-master") || strings.Contains(primary, "sekai-sc-master-db") {
+	if strings.Contains(primary, "sk-cn.exmeaning.com") || strings.Contains(primary, "sekaimaster-cn.exmeaning.com") || strings.Contains(primary, "haruki-sekai-sc-master") || strings.Contains(primary, "sekai-sc-master-db") || strings.Contains(primary, "sekai-master-db-cn-diff") {
 		return RegionCN
 	}
-	if strings.Contains(primary, "haruki-sekai-tc-master") || strings.Contains(primary, "sekai-tc-master-db") {
+	if strings.Contains(primary, "haruki-sekai-tc-master") || strings.Contains(primary, "sekai-tc-master-db") || strings.Contains(primary, "sekai-master-db-tc-diff") {
 		return RegionTW
 	}
-	if strings.Contains(primary, "haruki-sekai-kr-master") {
+	if strings.Contains(primary, "haruki-sekai-kr-master") || strings.Contains(primary, "sekai-master-db-kr-diff") {
 		return RegionKR
 	}
-	if strings.Contains(primary, "haruki-sekai-en-master") {
+	if strings.Contains(primary, "haruki-sekai-en-master") || strings.Contains(primary, "sekai-master-db-en-diff") {
 		return RegionEN
 	}
 	if primary != "" {
