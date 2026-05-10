@@ -1,7 +1,52 @@
+import type { ReactNode } from 'react'
 import { getCardFullUrl, getCardThumbnailUrl, getEventBannerUrl, type AssetSourceType } from '../../shared'
 import { BaseCard } from './base'
+import { getLocalIconAssetDataUri, getSekaiCardUiAssetDataUri } from '../styles/assets'
 import { theme } from '../styles/theme'
 import { SekaiCardThumbnail, canUseTrainedArt, getAttributeColor } from './SekaiCardThumbnail'
+
+// Mirrors the attribute icon mapping used in SekaiCardThumbnail (assets/icon
+// uses lowercase for `cute`, capitalized first letter for the rest).
+const ATTRIBUTE_ICON_FILES: Record<string, string> = {
+  cute: 'cute.png',
+  cool: 'Cool.png',
+  pure: 'Pure.png',
+  happy: 'Happy.png',
+  mysterious: 'Mysterious.png',
+}
+
+function attrIconUrl(attr: string): string | undefined {
+  const file = ATTRIBUTE_ICON_FILES[attr]
+  return (file && getLocalIconAssetDataUri(file)) || getSekaiCardUiAssetDataUri(`attr_${attr}.png`)
+}
+
+function starIconUrl(birthday: boolean): string | undefined {
+  return getLocalIconAssetDataUri(birthday ? 'birthday.png' : 'star.png')
+    ?? getSekaiCardUiAssetDataUri(birthday ? 'rare_birthday.png' : 'rare_star_normal.png')
+}
+
+function rarityStarCount(rarity: string): number {
+  if (rarity === 'rarity_birthday') return 1
+  const m = /rarity[_-]?(\d+)/.exec(rarity)
+  return m ? Number(m[1]) : 0
+}
+
+interface CardSkill {
+  id?: number
+  level?: number
+  description?: string
+  spriteName?: string
+}
+
+interface CardCostume {
+  costumeNumber?: number
+  name?: string
+  rarity?: string
+  source?: string
+  designer?: string
+  partTypes?: string[]
+  thumbnailUrls?: string[]
+}
 
 interface CardDetailProps {
   card: {
@@ -21,6 +66,9 @@ interface CardDetailProps {
     assetSource?: AssetSourceType | string
     power?: number
     skillName?: string
+    skill?: CardSkill
+    trainedSkill?: CardSkill
+    costumes?: CardCostume[]
     gachaPhrase?: string
     supplyType?: string
     trained?: boolean
@@ -58,14 +106,19 @@ export function CardDetail({ card }: CardDetailProps) {
     ?? trainedThumbnailUrl
   const showTrained = canRenderTrained && Boolean(trainedFullUrl)
 
+  const hasSkill = !!(card.skill?.description || card.trainedSkill?.description)
+  const hasCostumes = !!(card.costumes && card.costumes.length > 0)
+  const hasEvents = !!(card.events && card.events.length > 0)
+
   return (
     <BaseCard
       title={card.prefix}
       subtitle={`${card.characterName} · ID: ${card.id} · ${rarity}`}
       accentColor={attrColor}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
-        <div style={{ display: 'flex', gap: theme.spacing.md }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
+        {/* ── Hero: two art panels ── */}
+        <div style={{ display: 'flex', gap: theme.spacing.sm }}>
           <ArtPanel imageUrl={normalFullUrl} accentColor={attrColor} />
           <ArtPanel
             imageUrl={showTrained ? trainedFullUrl : normalFullUrl}
@@ -74,8 +127,9 @@ export function CardDetail({ card }: CardDetailProps) {
           />
         </div>
 
-        <div style={{ display: 'flex', gap: theme.spacing.md, alignItems: 'stretch' }}>
-          <div style={{ display: 'flex', gap: theme.spacing.sm, flexShrink: 0 }}>
+        {/* ── Info strip: thumbnails + metadata grid ── */}
+        <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'stretch' }}>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             <SekaiCardThumbnail
               imageUrl={normalThumbnailUrl}
               compositeLayers={card.normalCompositeLayers ?? card.compositeLayers}
@@ -84,7 +138,7 @@ export function CardDetail({ card }: CardDetailProps) {
               isTrained={false}
               characterName={card.characterName}
               supplyType={card.supplyType}
-              size={128}
+              size={116}
             />
             {showTrained && (
               <SekaiCardThumbnail
@@ -95,7 +149,7 @@ export function CardDetail({ card }: CardDetailProps) {
                 isTrained
                 characterName={card.characterName}
                 supplyType={card.supplyType}
-                size={128}
+                size={116}
               />
             )}
           </div>
@@ -104,130 +158,83 @@ export function CardDetail({ card }: CardDetailProps) {
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: theme.spacing.sm,
+              justifyContent: 'center',
+              gap: 6,
               flex: 1,
               backgroundColor: theme.colors.surface,
               border: `1px solid ${theme.colors.border}`,
-              borderRadius: theme.borderRadius.lg,
-              padding: theme.spacing.md,
+              borderRadius: theme.borderRadius.md,
+              padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
             }}
           >
-            <InfoRow label="属性" value={card.attr} color={attrColor} />
-            <InfoRow label="稀有度" value={rarity} />
-            <InfoRow label="卡面资源" value={card.assetbundleName ? `${card.assetbundleName}_{normal|after_training}` : 'mock/offline'} />
-            {card.power && <InfoRow label="综合力" value={card.power.toLocaleString()} />}
+            <InfoRow label="属性" value={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                {attrIconUrl(card.attr) && (
+                  <img src={attrIconUrl(card.attr)} width={16} height={16} style={{ objectFit: 'contain' }} />
+                )}
+                <span style={{ display: 'flex', color: attrColor, fontWeight: 800, fontSize: theme.fontSize.sm }}>{card.attr}</span>
+              </span>
+            } />
+            <InfoRow label="稀有度" value={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                {(() => {
+                  const birthday = rarity === 'rarity_birthday'
+                  const count = birthday ? 1 : rarityStarCount(rarity)
+                  const url = starIconUrl(birthday)
+                  if (!url || count <= 0) return <span style={{ display: 'flex', color: theme.colors.text, fontWeight: 800, fontSize: theme.fontSize.sm }}>{rarity}</span>
+                  return Array.from({ length: count }).map((_, i) => (
+                    <img key={i} src={url} width={14} height={14} style={{ objectFit: 'contain' }} />
+                  ))
+                })()}
+              </span>
+            } />
+            {card.power != null && card.power > 0 && <InfoRow label="综合力" value={card.power.toLocaleString()} />}
             {card.skillName && <InfoRow label="技能" value={card.skillName} />}
             {card.supplyType && <InfoRow label="获取类型" value={card.supplyType} />}
           </div>
         </div>
 
+        {/* ── Skill description (full width, compact) ── */}
+        {hasSkill && (
+          <SkillSection
+            accentColor={attrColor}
+            skillName={card.skillName}
+            normal={card.skill}
+            trained={card.trainedSkill}
+          />
+        )}
+
+        {/* ── Bottom row: costumes (left) + events (right) ── */}
+        {(hasCostumes || hasEvents) && (
+          <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'stretch' }}>
+            {hasCostumes && (
+              <div style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+                <CostumeSection costumes={card.costumes!} accentColor={attrColor} />
+              </div>
+            )}
+            {hasEvents && (
+              <div style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+                <EventSection events={card.events!} accentColor={attrColor} source={source} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Gacha phrase footer ── */}
         {card.gachaPhrase && (
           <div
             style={{
               display: 'flex',
-              padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
-              borderRadius: theme.borderRadius.lg,
+              alignItems: 'center',
+              padding: `6px ${theme.spacing.md}px`,
+              borderRadius: theme.borderRadius.md,
               backgroundColor: theme.colors.surfaceAccent,
               border: `1px solid ${theme.colors.borderStrong}`,
-              color: theme.colors.textSecondary,
-              fontSize: theme.fontSize.sm,
-              lineHeight: 1.5,
             }}
           >
-            “{card.gachaPhrase}”
-          </div>
-        )}
-
-        {card.events && card.events.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: theme.spacing.sm,
-              borderRadius: theme.borderRadius.lg,
-              backgroundColor: theme.colors.surface,
-              border: `1px solid ${theme.colors.border}`,
-              padding: theme.spacing.md,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
-                <div style={{ display: 'flex', width: 6, height: 18, borderRadius: theme.borderRadius.round, backgroundColor: attrColor }} />
-                <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: 900 }}>关联活动</span>
-              </div>
-              <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: theme.fontSize.xs, fontWeight: 700 }}>共 {card.events.length} 个</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
-              {card.events.slice(0, 3).map((event) => {
-                const bannerUrl = event.assetbundleName ? getEventBannerUrl(event.assetbundleName, source) : undefined
-                const eventTypeLabel = event.eventType === 'marathon' ? '马拉松'
-                  : event.eventType === 'cheerful_carnival' ? '欢乐嘉年华'
-                  : event.eventType === 'world_bloom' ? '世界绽放'
-                  : event.eventType ?? 'event'
-                return (
-                  <div
-                    key={event.id}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      borderRadius: theme.borderRadius.lg,
-                      overflow: 'hidden',
-                      border: `1px solid ${theme.colors.border}`,
-                      backgroundColor: theme.colors.background,
-                    }}
-                  >
-                    {bannerUrl ? (
-                      <div style={{ display: 'flex', position: 'relative', width: '100%', height: 168, overflow: 'hidden' }}>
-                        <img
-                          src={bannerUrl}
-                          width={1024}
-                          height={168}
-                          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
-                        />
-                        <div style={{ display: 'flex', position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.15) 55%, transparent 100%)' }} />
-                        <div
-                          style={{
-                            display: 'flex',
-                            position: 'absolute',
-                            top: theme.spacing.sm,
-                            right: theme.spacing.sm,
-                            padding: '4px 10px',
-                            borderRadius: theme.borderRadius.round,
-                            backgroundColor: 'rgba(0,0,0,0.55)',
-                            color: '#ffffff',
-                            fontSize: 11,
-                            fontWeight: 800,
-                            letterSpacing: 0.4,
-                          }}
-                        >
-                          {eventTypeLabel}
-                        </div>
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            position: 'absolute',
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
-                            gap: 2,
-                          }}
-                        >
-                          <span style={{ display: 'flex', color: 'rgba(255,255,255,0.78)', fontSize: 11, fontWeight: 700, letterSpacing: 0.6 }}>EVENT #{event.id}</span>
-                          <span style={{ display: 'flex', color: '#ffffff', fontSize: theme.fontSize.lg, fontWeight: 900, textShadow: '0 1px 6px rgba(0,0,0,0.65)' }}>{event.name}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: `${theme.spacing.sm}px ${theme.spacing.md}px` }}>
-                        <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: 800 }}>#{event.id} {event.name}</span>
-                        <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: theme.fontSize.xs }}>{eventTypeLabel}</span>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 1.4 }}>
+              "{card.gachaPhrase}"
+            </span>
           </div>
         )}
       </div>
@@ -249,10 +256,9 @@ function ArtPanel({
       style={{
         display: 'flex',
         position: 'relative',
-        flexDirection: 'column',
-        width: 360,
-        height: 214,
-        borderRadius: theme.borderRadius.lg,
+        flex: 1,
+        height: 216,
+        borderRadius: theme.borderRadius.md,
         overflow: 'hidden',
         backgroundColor: theme.colors.surface,
         border: `1px solid ${muted ? theme.colors.border : accentColor}`,
@@ -260,26 +266,28 @@ function ArtPanel({
     >
       <img
         src={imageUrl ?? panelPlaceholder(accentColor)}
-        width={360}
-        height={214}
-        style={{ objectFit: 'cover', objectPosition: 'center top', opacity: muted ? 0.72 : 1 }}
+        width={364}
+        height={216}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', opacity: muted ? 0.72 : 1 }}
       />
     </div>
   )
 }
 
-function InfoRow({ label, value, color }: { label: string; value: string; color?: string }) {
+function InfoRow({ label, value, color }: { label: string; value: ReactNode; color?: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: theme.spacing.md }}>
-      <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: theme.fontSize.sm }}>{label}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: theme.spacing.sm }}>
+      <span style={{ display: 'flex', color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, flexShrink: 0 }}>{label}</span>
       <span
         style={{
           display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
           color: color ?? theme.colors.text,
-          fontSize: theme.fontSize.sm,
+          fontSize: theme.fontSize.xs,
           fontWeight: 800,
           textAlign: 'right',
-          maxWidth: 330,
+          maxWidth: 320,
         }}
       >
         {value}
@@ -294,6 +302,222 @@ function resolveCardThumbnail(assetbundleName: string | undefined, trained: bool
 
 function resolveCardFull(assetbundleName: string | undefined, trained: boolean, source: AssetSourceType | string): string | undefined {
   return assetbundleName ? getCardFullUrl(assetbundleName, trained, source, 'png') : undefined
+}
+
+function SectionHeader({ title, badge, accentColor }: { title: string; badge?: string; accentColor: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', width: 4, height: 14, borderRadius: theme.borderRadius.round, backgroundColor: accentColor }} />
+        <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: 900 }}>{title}</span>
+      </div>
+      {badge && <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: 11, fontWeight: 700 }}>{badge}</span>}
+    </div>
+  )
+}
+
+function SkillSection({
+  accentColor,
+  skillName,
+  normal,
+  trained,
+}: {
+  accentColor: string
+  skillName?: string
+  normal?: CardSkill
+  trained?: CardSkill
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surface,
+        border: `1px solid ${theme.colors.border}`,
+        padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', width: 4, height: 14, borderRadius: theme.borderRadius.round, backgroundColor: accentColor }} />
+          <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: 900 }}>技能描述</span>
+          {skillName && (
+            <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: 11, fontWeight: 700 }}>{skillName}</span>
+          )}
+        </div>
+        <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: 11, fontWeight: 700 }}>
+          Lv.{normal?.level ?? trained?.level ?? 4}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {normal?.description && (
+          <SkillDescriptionRow label="开花前" description={normal.description} accentColor={theme.colors.textMuted} />
+        )}
+        {trained?.description && (
+          <SkillDescriptionRow label="开花后" description={trained.description} accentColor={accentColor} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SkillDescriptionRow({ label, description, accentColor }: { label: string; description: string; accentColor: string }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: theme.spacing.sm,
+        alignItems: 'baseline',
+        padding: `4px ${theme.spacing.sm}px`,
+        borderRadius: theme.borderRadius.sm,
+        backgroundColor: theme.colors.background,
+        borderLeft: `3px solid ${accentColor}`,
+      }}
+    >
+      <span style={{ display: 'flex', color: accentColor, fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{label}</span>
+      <span style={{ display: 'flex', color: theme.colors.text, fontSize: theme.fontSize.xs, lineHeight: 1.5 }}>{description}</span>
+    </div>
+  )
+}
+
+function CostumeSection({ costumes, accentColor }: { costumes: CardCostume[]; accentColor: string }) {
+  const visible = costumes.slice(0, 3)
+  const overflow = costumes.length - visible.length
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        gap: 6,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surface,
+        border: `1px solid ${theme.colors.border}`,
+        padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+      }}
+    >
+      <SectionHeader title="关联服装" badge={`共 ${costumes.length} 套`} accentColor={accentColor} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {visible.map((costume, idx) => {
+          const thumbs = (costume.thumbnailUrls ?? []).slice(0, 2)
+          const partsLabel = (costume.partTypes ?? []).map(p => COSTUME_PART_LABELS[p] ?? p).join('/')
+          return (
+            <div
+              key={`${costume.costumeNumber ?? idx}-${idx}`}
+              style={{
+                display: 'flex',
+                gap: theme.spacing.sm,
+                alignItems: 'center',
+                padding: `4px ${theme.spacing.sm}px`,
+                borderRadius: theme.borderRadius.sm,
+                backgroundColor: theme.colors.background,
+              }}
+            >
+              <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                {thumbs.length > 0 ? thumbs.map((url, i) => (
+                  <div key={i} style={{ display: 'flex', width: 36, height: 36, borderRadius: 4, overflow: 'hidden', backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.border}` }}>
+                    <img src={url} width={36} height={36} style={{ objectFit: 'cover' }} />
+                  </div>
+                )) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 4, backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.border}`, color: theme.colors.textMuted, fontSize: 9, fontWeight: 800 }}>N/A</div>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 1 }}>
+                <span style={{ display: 'flex', color: theme.colors.text, fontSize: 11, fontWeight: 800, lineHeight: 1.2 }}>
+                  {costume.name ?? `#${costume.costumeNumber ?? ''}`}
+                </span>
+                {(partsLabel || costume.rarity) && (
+                  <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: 10, fontWeight: 700 }}>
+                    {[partsLabel, costume.rarity ? COSTUME_RARITY_LABELS[costume.rarity] ?? costume.rarity : ''].filter(Boolean).join(' · ')}
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+        {overflow > 0 && (
+          <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: 11, fontWeight: 700, paddingLeft: theme.spacing.sm }}>+{overflow} 套</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EventSection({
+  events,
+  accentColor,
+  source,
+}: {
+  events: NonNullable<CardDetailProps['card']['events']>
+  accentColor: string
+  source: AssetSourceType | string
+}) {
+  const visible = events.slice(0, 3)
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        gap: 6,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surface,
+        border: `1px solid ${theme.colors.border}`,
+        padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+      }}
+    >
+      <SectionHeader title="关联活动" badge={`共 ${events.length} 个`} accentColor={accentColor} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {visible.map((event) => {
+          const bannerUrl = event.assetbundleName ? getEventBannerUrl(event.assetbundleName, source) : undefined
+          const typeLabel = EVENT_TYPE_LABELS[event.eventType ?? ''] ?? event.eventType ?? ''
+          return (
+            <div
+              key={event.id}
+              style={{
+                display: 'flex',
+                gap: theme.spacing.sm,
+                alignItems: 'center',
+                borderRadius: theme.borderRadius.sm,
+                backgroundColor: theme.colors.background,
+                overflow: 'hidden',
+              }}
+            >
+              {bannerUrl && (
+                <div style={{ display: 'flex', width: 100, height: 44, flexShrink: 0, overflow: 'hidden' }}>
+                  <img src={bannerUrl} width={200} height={44} style={{ width: 100, height: 44, objectFit: 'cover', objectPosition: 'center' }} />
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 1, padding: `4px ${bannerUrl ? 0 : theme.spacing.sm}px 4px ${bannerUrl ? 0 : theme.spacing.sm}px` }}>
+                <span style={{ display: 'flex', color: theme.colors.text, fontSize: 11, fontWeight: 800, lineHeight: 1.2 }}>{event.name}</span>
+                <span style={{ display: 'flex', color: theme.colors.textMuted, fontSize: 10, fontWeight: 700 }}>#{event.id}{typeLabel ? ` · ${typeLabel}` : ''}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  marathon: '马拉松',
+  cheerful_carnival: '欢乐嘉年华',
+  world_bloom: '世界绽放',
+}
+
+const COSTUME_PART_LABELS: Record<string, string> = {
+  head: '发饰',
+  hair: '发型',
+  body: '服装',
+}
+
+const COSTUME_RARITY_LABELS: Record<string, string> = {
+  rare: '稀有',
+  normal: '普通',
 }
 
 function panelPlaceholder(color: string): string {

@@ -74,6 +74,15 @@ func (r *Resolver) GetCardFullURL(assetBundleName string, trained bool) string {
 	return fmt.Sprintf("%s/character/member/%s/card_%s.png", r.base(), assetBundleName, trainingSuffix(trained))
 }
 
+// GetCostumeThumbnailURL returns the costume thumbnail URL.
+// Costume thumbnails are JP-only assets shared across all regions, so we
+// normalize the base URL to JP just like card thumbnails.
+//
+//	thumbnail/costume/{assetbundleName}.png
+func (r *Resolver) GetCostumeThumbnailURL(assetBundleName string) string {
+	return fmt.Sprintf("%s/thumbnail/costume/%s.png", cardThumbnailBase(r.base()), assetBundleName)
+}
+
 // GetMusicJacketURL returns the jacket (cover art) URL for a music track.
 func (r *Resolver) GetMusicJacketURL(assetBundleName string) string {
 	return fmt.Sprintf("%s/music/jacket/%s/%s.png", r.base(), assetBundleName, assetBundleName)

@@ -2,13 +2,15 @@ package renderpayloads
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"moebot-next/internal/config"
 	"moebot-next/internal/plugins/moesekai/assets"
 	"moebot-next/internal/plugins/moesekai/b30"
-	"moebot-next/internal/config"
 	"moebot-next/internal/plugins/moesekai/masterdata"
 	"moebot-next/internal/plugins/moesekai/ranking"
 	"moebot-next/internal/plugins/moesekai/sekai"
@@ -21,25 +23,48 @@ func defaultAssetResolver() *assets.Resolver {
 
 // CardDetailPayload is the normalized data contract consumed by CardDetail.tsx.
 type CardDetailPayload struct {
-	ID               int                `json:"id"`
-	Prefix           string             `json:"prefix"`
-	CharacterName    string             `json:"characterName"`
-	Rarity           string             `json:"rarity"`
-	CardRarityType   string             `json:"cardRarityType"`
-	Attr             string             `json:"attr"`
-	AssetbundleName  string             `json:"assetbundleName,omitempty"`
-	CharacterID      int                `json:"characterId,omitempty"`
-	Power            int                `json:"power,omitempty"`
-	SkillName        string             `json:"skillName,omitempty"`
-	GachaPhrase      string             `json:"gachaPhrase,omitempty"`
-	SupplyType       string             `json:"supplyType,omitempty"`
-	CardSupplyID     int                `json:"cardSupplyId,omitempty"`
-	Events           []CardEventPayload `json:"events,omitempty"`
-	AssetSource      string             `json:"assetSource,omitempty"`
-	NormalFullURL    string             `json:"normalFullUrl,omitempty"`
-	TrainedFullURL   string             `json:"trainedFullUrl,omitempty"`
-	ThumbnailURL     string             `json:"thumbnailUrl,omitempty"`
-	TrainedThumbnail string             `json:"trainedThumbnailUrl,omitempty"`
+	ID               int                  `json:"id"`
+	Prefix           string               `json:"prefix"`
+	CharacterName    string               `json:"characterName"`
+	Rarity           string               `json:"rarity"`
+	CardRarityType   string               `json:"cardRarityType"`
+	Attr             string               `json:"attr"`
+	AssetbundleName  string               `json:"assetbundleName,omitempty"`
+	CharacterID      int                  `json:"characterId,omitempty"`
+	Power            int                  `json:"power,omitempty"`
+	SkillName        string               `json:"skillName,omitempty"`
+	Skill            *CardSkillPayload    `json:"skill,omitempty"`
+	TrainedSkill     *CardSkillPayload    `json:"trainedSkill,omitempty"`
+	Costumes         []CardCostumePayload `json:"costumes,omitempty"`
+	GachaPhrase      string               `json:"gachaPhrase,omitempty"`
+	SupplyType       string               `json:"supplyType,omitempty"`
+	CardSupplyID     int                  `json:"cardSupplyId,omitempty"`
+	Events           []CardEventPayload   `json:"events,omitempty"`
+	AssetSource      string               `json:"assetSource,omitempty"`
+	NormalFullURL    string               `json:"normalFullUrl,omitempty"`
+	TrainedFullURL   string               `json:"trainedFullUrl,omitempty"`
+	ThumbnailURL     string               `json:"thumbnailUrl,omitempty"`
+	TrainedThumbnail string               `json:"trainedThumbnailUrl,omitempty"`
+}
+
+// CardSkillPayload is a pre-formatted skill description rendered server-side.
+type CardSkillPayload struct {
+	ID          int    `json:"id"`
+	Level       int    `json:"level"`
+	SpriteName  string `json:"spriteName,omitempty"`
+	Description string `json:"description"`
+}
+
+// CardCostumePayload describes one outfit + its thumbnail asset names so the
+// renderer can compose preview tiles.
+type CardCostumePayload struct {
+	CostumeNumber int      `json:"costumeNumber"`
+	Name          string   `json:"name"`
+	Rarity        string   `json:"rarity,omitempty"`
+	Source        string   `json:"source,omitempty"`
+	Designer      string   `json:"designer,omitempty"`
+	PartTypes     []string `json:"partTypes,omitempty"`
+	ThumbnailURLs []string `json:"thumbnailUrls,omitempty"`
 }
 
 type CardEventPayload struct {
@@ -1444,9 +1469,179 @@ func BuildCardDetailPayloadWithAssets(store *masterdata.Store, card masterdata.C
 
 	if store != nil {
 		payload.Events = buildCardEvents(store, card.ID)
+		payload.Skill = buildCardSkill(store, card.SkillID, card)
+		if card.SpecialTrainingSkillID > 0 && card.SpecialTrainingSkillID != card.SkillID {
+			payload.TrainedSkill = buildCardSkill(store, card.SpecialTrainingSkillID, card)
+		}
+		payload.Costumes = buildCardCostumes(store, card.ID, assetResolver)
 	}
 
 	return payload
+}
+
+// defaultSkillDisplayLevel is the level we render skill descriptions at.
+// Most decks display level 4 (max) which matches sekai.best behaviour.
+const defaultSkillDisplayLevel = 4
+
+// buildCardSkill renders a skill description with the placeholder substitution
+// rules used by sekai.best / Snowy_Viewer at the maximum displayable level.
+func buildCardSkill(store *masterdata.Store, skillID int, card masterdata.CardInfo) *CardSkillPayload {
+	if store == nil || skillID <= 0 {
+		return nil
+	}
+	skill := store.GetSkill(skillID)
+	if skill == nil {
+		return nil
+	}
+	return &CardSkillPayload{
+		ID:          skill.ID,
+		Level:       defaultSkillDisplayLevel,
+		SpriteName:  skill.DescriptionSpriteName,
+		Description: formatSkillDescription(*skill, defaultSkillDisplayLevel, card),
+	}
+}
+
+// formatSkillDescription replaces {{id;type}} / {{id1,id2;type}} placeholders in
+// the skill description with effect values at the requested level. The format
+// matches sekai.best's replaceSkillValue() logic.
+func formatSkillDescription(skill masterdata.SkillInfo, level int, card masterdata.CardInfo) string {
+	if skill.Description == "" {
+		return ""
+	}
+
+	desc := skill.Description
+
+	single := regexp.MustCompile(`\{\{(\d+);(\w+)\}\}`)
+	desc = single.ReplaceAllStringFunc(desc, func(match string) string {
+		m := single.FindStringSubmatch(match)
+		id, _ := strconv.Atoi(m[1])
+		typ := m[2]
+		if typ == "c" {
+			if name := characterName(card.CharacterID); name != "" {
+				return name
+			}
+			return match
+		}
+		effect := findSkillEffect(skill.SkillEffects, id)
+		if effect == nil {
+			return match
+		}
+		detail := findSkillDetail(effect.SkillEffectDetails, level)
+		if detail == nil {
+			return match
+		}
+		switch typ {
+		case "d":
+			return formatFloat(detail.ActivateEffectDuration)
+		case "v":
+			return strconv.Itoa(detail.ActivateEffectValue)
+		default:
+			return match
+		}
+	})
+
+	double := regexp.MustCompile(`\{\{(\d+),(\d+);(\w+)\}\}`)
+	desc = double.ReplaceAllStringFunc(desc, func(match string) string {
+		m := double.FindStringSubmatch(match)
+		id1, _ := strconv.Atoi(m[1])
+		id2, _ := strconv.Atoi(m[2])
+		typ := m[3]
+		val := func(id int) int {
+			effect := findSkillEffect(skill.SkillEffects, id)
+			if effect == nil {
+				return 0
+			}
+			detail := findSkillDetail(effect.SkillEffectDetails, level)
+			if detail == nil {
+				return 0
+			}
+			return detail.ActivateEffectValue
+		}
+		v1, v2 := val(id1), val(id2)
+		switch typ {
+		case "u", "o", "s", "v":
+			return strconv.Itoa(v1 + v2)
+		case "r":
+			if v2 > 0 {
+				return strconv.Itoa(v2)
+			}
+			return strconv.Itoa(v1)
+		default:
+			return match
+		}
+	})
+
+	return desc
+}
+
+func findSkillEffect(effects []masterdata.SkillEffect, id int) *masterdata.SkillEffect {
+	for i := range effects {
+		if effects[i].ID == id {
+			return &effects[i]
+		}
+	}
+	return nil
+}
+
+func findSkillDetail(details []masterdata.SkillEffectDetail, level int) *masterdata.SkillEffectDetail {
+	for i := range details {
+		if details[i].Level == level {
+			return &details[i]
+		}
+	}
+	if len(details) > 0 {
+		return &details[len(details)-1]
+	}
+	return nil
+}
+
+func formatFloat(v float64) string {
+	if v == float64(int64(v)) {
+		return strconv.FormatInt(int64(v), 10)
+	}
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// buildCardCostumes lists every outfit linked to the card via cardIds and
+// resolves a few thumbnail URLs (one per shared part variant + character-specific
+// extras) for the renderer. Avoids over-fetching by capping at the first color
+// of each part group.
+func buildCardCostumes(store *masterdata.Store, cardID int, resolver *assets.Resolver) []CardCostumePayload {
+	if store == nil || cardID <= 0 {
+		return nil
+	}
+	costumes := store.GetMoeCostumesByCardID(cardID)
+	if len(costumes) == 0 {
+		return nil
+	}
+	out := make([]CardCostumePayload, 0, len(costumes))
+	for _, c := range costumes {
+		item := CardCostumePayload{
+			CostumeNumber: c.CostumeNumber,
+			Name:          c.Name,
+			Rarity:        c.Costume3dRarity,
+			Source:        c.Source,
+			Designer:      c.Designer,
+			PartTypes:     append([]string(nil), c.PartTypes...),
+		}
+		// Shared parts: one assetbundle per part type (first color variant).
+		for _, partType := range []string{"body", "hair", "head"} {
+			variants, ok := c.Parts[partType]
+			if !ok || len(variants) == 0 {
+				continue
+			}
+			item.ThumbnailURLs = append(item.ThumbnailURLs, resolver.GetCostumeThumbnailURL(variants[0].AssetbundleName))
+		}
+		// Character-specific extras (cap to 3 to avoid bloating renderer payloads).
+		for i, extra := range c.ExtraParts {
+			if i >= 3 || len(extra.Variants) == 0 {
+				break
+			}
+			item.ThumbnailURLs = append(item.ThumbnailURLs, resolver.GetCostumeThumbnailURL(extra.Variants[0].AssetbundleName))
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 // BuildMusicDetailPayload adapts a masterdata music row into MusicDetail renderer props.

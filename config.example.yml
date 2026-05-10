@@ -31,7 +31,7 @@ database:
 
 renderer:
   host: "127.0.0.1"
-  port: 3001
+  port: 13001
   precision: 1.5
   chart_precision: 4
   cache:

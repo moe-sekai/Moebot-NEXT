@@ -471,6 +471,47 @@ export interface RendererFontsResponse {
 	message?: string;
 }
 
+export interface RenderCacheLimits {
+	minMaxBytes: number;
+	hardMaxBytes: number;
+	minMaxEntries: number;
+	hardMaxEntries: number;
+}
+
+export interface RenderCacheTiers {
+	detailMs: number;
+	listMs: number;
+	userMs: number;
+	dynamicMs: number;
+}
+
+export interface RenderCacheStats {
+	size: number;
+	bytes: number;
+	maxBytes: number;
+	byteUsageRatio: number;
+	maxEntries: number;
+	limits: RenderCacheLimits;
+	hits: number;
+	misses: number;
+	hitRate: number;
+	evictions: number;
+	defaultTtlMs: number;
+	tiers: RenderCacheTiers;
+	blacklist: string[];
+}
+
+export interface RenderCacheActionResponse {
+	ok: boolean;
+	message: string;
+	stats: RenderCacheStats;
+}
+
+export interface RenderCacheConfigUpdatePayload {
+	maxBytes?: number;
+	maxEntries?: number;
+}
+
 export type CommandMatchSource =
 	| "primary"
 	| "preset_alias"
@@ -675,6 +716,16 @@ export interface CommandStatsPlatformPoint {
 	count: number;
 }
 
+export interface CommandStatsGroupPoint {
+	group_id: string;
+	count: number;
+}
+
+export interface CommandStatsUserPoint {
+	user_id: string;
+	count: number;
+}
+
 export interface CommandStatsResponse {
 	data: CommandStatRow[];
 	since: string;
@@ -682,6 +733,8 @@ export interface CommandStatsResponse {
 	totals: CommandStatsTotals;
 	trend: CommandStatsTrendPoint[];
 	by_platform: CommandStatsPlatformPoint[];
+	by_group: CommandStatsGroupPoint[];
+	by_user: CommandStatsUserPoint[];
 }
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";

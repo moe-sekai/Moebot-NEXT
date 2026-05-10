@@ -38,6 +38,9 @@ import type {
 	RendererHealth,
 	RendererCardThumbnailCacheStatus,
 	RendererPreviewImageResult,
+	RenderCacheStats,
+	RenderCacheActionResponse,
+	RenderCacheConfigUpdatePayload,
 	RuntimeStatus,
 	SearchResponse,
 	SearchType,
@@ -194,6 +197,28 @@ export async function preloadRendererCardThumbnails(region?: string) {
 		"/renderer/cache/card-thumbnails/preload",
 		null,
 		{ params: region ? { region } : undefined, timeout: 0 },
+	);
+	return data;
+}
+
+export async function getRenderCacheStats() {
+	const { data } = await api.get<RenderCacheStats>("/renderer/cache/render");
+	return data;
+}
+
+export async function clearRenderCache() {
+	const { data } = await api.delete<RenderCacheActionResponse>(
+		"/renderer/cache/render",
+	);
+	return data;
+}
+
+export async function updateRenderCacheConfig(
+	payload: RenderCacheConfigUpdatePayload,
+) {
+	const { data } = await api.put<RenderCacheActionResponse>(
+		"/renderer/cache/render/config",
+		payload,
 	);
 	return data;
 }
@@ -387,9 +412,9 @@ export async function getUsers(page = 1, limit = 20) {
 	return data;
 }
 
-export async function getCommandStats(days = 7) {
+export async function getCommandStats(days = 7, top = 10) {
 	const { data } = await api.get<CommandStatsResponse>("/stats/commands", {
-		params: { days },
+		params: { days, top },
 	});
 	return data;
 }

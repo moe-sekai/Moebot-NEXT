@@ -42,6 +42,7 @@ export const consoleNavItems: ConsoleNavItem[] = [
   { path: '/users', name: 'users', label: '用户', subtitle: 'Users', icon: 'users', section: 'manage' },
 
   // 系统
+  { path: '/stats', name: 'stats', label: '调用统计', subtitle: 'Command Stats', icon: 'stats', section: 'system' },
   { path: '/logs', name: 'logs', label: '日志', subtitle: 'Logs', icon: 'logs', section: 'system' },
   { path: '/about', name: 'about', label: '关于', subtitle: 'About', icon: 'about', section: 'system' },
 ]
@@ -136,6 +137,11 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     title: '用户',
     subtitle: '查看平台用户与 PJSK 游戏账号绑定关系。',
     eyebrow: 'Users',
+  },
+  stats: {
+    title: '调用统计',
+    subtitle: '查看指令调用次数、响应耗时、活跃群组与用户分布。',
+    eyebrow: 'Command Stats',
   },
   logs: {
     title: '日志',

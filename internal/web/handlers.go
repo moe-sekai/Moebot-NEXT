@@ -156,6 +156,49 @@ func (s *Server) handleRendererFonts(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
+// handleRenderCacheStats returns render-cache statistics from the renderer service.
+func (s *Server) handleRenderCacheStats(c *fiber.Ctx) error {
+	if s.Renderer == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "Renderer client is not configured")
+	}
+	stats, err := s.Renderer.GetRenderCacheStats()
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadGateway, err.Error())
+	}
+	return c.JSON(stats)
+}
+
+// handleRenderCacheClear clears the renderer-side render cache.
+func (s *Server) handleRenderCacheClear(c *fiber.Ctx) error {
+	if s.Renderer == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "Renderer client is not configured")
+	}
+	stats, err := s.Renderer.ClearRenderCache()
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadGateway, err.Error())
+	}
+	return c.JSON(fiber.Map{"ok": true, "message": "渲染缓存已清空", "stats": stats})
+}
+
+// handleRenderCacheConfig updates render-cache size limits at runtime.
+func (s *Server) handleRenderCacheConfig(c *fiber.Ctx) error {
+	if s.Renderer == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "Renderer client is not configured")
+	}
+	var payload renderer.RenderCacheConfigUpdate
+	if err := c.BodyParser(&payload); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid payload: "+err.Error())
+	}
+	if payload.MaxBytes == nil && payload.MaxEntries == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "至少需要提供 maxBytes 或 maxEntries")
+	}
+	stats, err := s.Renderer.UpdateRenderCacheConfig(payload)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadGateway, err.Error())
+	}
+	return c.JSON(fiber.Map{"ok": true, "message": "渲染缓存配置已更新", "stats": stats})
+}
+
 // handleRendererPreviews returns Satori preview metadata through the Go admin API.
 func (s *Server) handleRendererPreviews(c *fiber.Ctx) error {
 	if s.Renderer == nil {
@@ -1178,6 +1221,18 @@ func (s *Server) handleCommandStats(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats by platform")
 	}
+	topN, _ := strconv.Atoi(c.Query("top", "10"))
+	if topN <= 0 {
+		topN = 10
+	}
+	byGroup, err := s.DB.GetCommandStatsByGroup(since, topN)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats by group")
+	}
+	byUser, err := s.DB.GetCommandStatsByUser(since, topN)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats by user")
+	}
 
 	return c.JSON(fiber.Map{
 		"data":        stats,
@@ -1186,6 +1241,8 @@ func (s *Server) handleCommandStats(c *fiber.Ctx) error {
 		"totals":      totals,
 		"trend":       trend,
 		"by_platform": byPlatform,
+		"by_group":    byGroup,
+		"by_user":     byUser,
 	})
 }
 

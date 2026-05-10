@@ -273,6 +273,57 @@ func (d *DB) GetCommandStatsByPlatform(since time.Time) ([]CommandStatsPlatformP
 	return results, err
 }
 
+// CommandStatsGroupPoint counts calls per group.
+type CommandStatsGroupPoint struct {
+	GroupID string `json:"group_id"`
+	Count   int64  `json:"count"`
+}
+
+// GetCommandStatsByGroup returns top groups by call count since a cutoff.
+// Empty group IDs (private chat) are aggregated under the "private" bucket.
+func (d *DB) GetCommandStatsByGroup(since time.Time, limit int) ([]CommandStatsGroupPoint, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	var results []CommandStatsGroupPoint
+	err := d.Model(&models.CommandStat{}).
+		Select("COALESCE(NULLIF(group_id, ''), 'private') as group_id, COUNT(*) as count").
+		Where("created_at > ?", since).
+		Group("group_id").
+		Order("count DESC").
+		Limit(limit).
+		Find(&results).Error
+	return results, err
+}
+
+// CommandStatsUserPoint counts calls per user.
+type CommandStatsUserPoint struct {
+	UserID string `json:"user_id"`
+	Count  int64  `json:"count"`
+}
+
+// GetCommandStatsByUser returns top users by call count since a cutoff.
+func (d *DB) GetCommandStatsByUser(since time.Time, limit int) ([]CommandStatsUserPoint, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	var results []CommandStatsUserPoint
+	err := d.Model(&models.CommandStat{}).
+		Select("COALESCE(NULLIF(user_id, ''), 'unknown') as user_id, COUNT(*) as count").
+		Where("created_at > ?", since).
+		Group("user_id").
+		Order("count DESC").
+		Limit(limit).
+		Find(&results).Error
+	return results, err
+}
+
 // ListRecentCommands returns the latest command invocation records.
 func (d *DB) ListRecentCommands(limit int) ([]models.CommandStat, error) {
 	if limit <= 0 {

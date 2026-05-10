@@ -480,6 +480,106 @@ func (c *Client) GetFonts() (*FontsResponse, error) {
 	return &result, nil
 }
 
+// RenderCacheStats mirrors the renderer-side render cache statistics payload.
+type RenderCacheStats struct {
+	Size           int     `json:"size"`
+	Bytes          int64   `json:"bytes"`
+	MaxBytes       int64   `json:"maxBytes"`
+	ByteUsageRatio float64 `json:"byteUsageRatio"`
+	MaxEntries     int     `json:"maxEntries"`
+	Limits         struct {
+		MinMaxBytes    int64 `json:"minMaxBytes"`
+		HardMaxBytes   int64 `json:"hardMaxBytes"`
+		MinMaxEntries  int   `json:"minMaxEntries"`
+		HardMaxEntries int   `json:"hardMaxEntries"`
+	} `json:"limits"`
+	Hits         int64   `json:"hits"`
+	Misses       int64   `json:"misses"`
+	HitRate      float64 `json:"hitRate"`
+	Evictions    int64   `json:"evictions"`
+	DefaultTTLMs int64   `json:"defaultTtlMs"`
+	Tiers        struct {
+		DetailMs  int64 `json:"detailMs"`
+		ListMs    int64 `json:"listMs"`
+		UserMs    int64 `json:"userMs"`
+		DynamicMs int64 `json:"dynamicMs"`
+	} `json:"tiers"`
+	Blacklist []string `json:"blacklist"`
+}
+
+// RenderCacheConfigUpdate updates renderer-side render cache size limits at runtime.
+type RenderCacheConfigUpdate struct {
+	MaxBytes   *int64 `json:"maxBytes,omitempty"`
+	MaxEntries *int   `json:"maxEntries,omitempty"`
+}
+
+// GetRenderCacheStats fetches render cache statistics from the renderer service.
+func (c *Client) GetRenderCacheStats() (*RenderCacheStats, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/cache/render/stats")
+	if err != nil {
+		return nil, fmt.Errorf("render cache stats request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("renderer returned %d: %s", resp.StatusCode, string(errBody))
+	}
+	var result RenderCacheStats
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode render cache stats: %w", err)
+	}
+	return &result, nil
+}
+
+// ClearRenderCache clears the renderer-side render cache and returns the post-clear stats.
+func (c *Client) ClearRenderCache() (*RenderCacheStats, error) {
+	req, err := http.NewRequest(http.MethodDelete, c.baseURL+"/cache/render", nil)
+	if err != nil {
+		return nil, fmt.Errorf("build clear render cache request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("clear render cache request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("renderer returned %d: %s", resp.StatusCode, string(errBody))
+	}
+	var result RenderCacheStats
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode clear render cache response: %w", err)
+	}
+	return &result, nil
+}
+
+// UpdateRenderCacheConfig pushes new render cache size limits to the renderer service.
+func (c *Client) UpdateRenderCacheConfig(update RenderCacheConfigUpdate) (*RenderCacheStats, error) {
+	body, err := json.Marshal(update)
+	if err != nil {
+		return nil, fmt.Errorf("marshal render cache config: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPut, c.baseURL+"/cache/render/config", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build render cache config request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("render cache config request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("renderer returned %d: %s", resp.StatusCode, string(errBody))
+	}
+	var result RenderCacheStats
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode render cache config response: %w", err)
+	}
+	return &result, nil
+}
+
 // SetDeployer 同步部署者昵称给 Bun 渲染服务，使其在所有 Satori 卡片
 // 底部 footer 渲染为 "Moebot NEXT (deployed by <nickname>)"。
 // 传入空字符串则回退为 "Moebot NEXT"。

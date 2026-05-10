@@ -125,7 +125,7 @@ const rendererUrl = computed(() => {
 	return (
 		publicConfig.value?.renderer.base_url ||
 		status.value?.renderer.base_url ||
-		"http://127.0.0.1:3001"
+		"http://127.0.0.1:13001"
 	);
 });
 

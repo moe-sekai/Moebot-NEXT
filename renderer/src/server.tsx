@@ -4,6 +4,7 @@ import { getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, s
 import { calculateDeckRecommend } from "./deck-recommend/calculate";
 import { setDeployer, getDeployer } from "./deployer";
 import { renderWithTrace } from "./engine";
+import { getCachedRender, setCachedRender, renderCacheStats, clearRenderCache, updateRenderCacheConfig } from "./render-cache";
 import { loadFonts, FONT_FAMILY, defaultFontFamily, scoreFontFamily, setFontPreferences, fontPreferences } from "./fonts";
 import { renderChartSvg } from "./chart-svg-renderer";
 import { preloadFixedChartNoteAssets } from "./svg-assets";
@@ -59,7 +60,7 @@ interface ChartRenderRequest {
 	precision?: number;
 }
 
-const port = Number(process.env.PORT ?? 3001);
+const port = Number(process.env.PORT ?? 13001);
 const defaultPrecision = parsePositiveNumber(process.env.RENDER_PRECISION, 1.5);
 
 void preloadFixedChartNoteAssets().catch((error) => {
@@ -162,6 +163,9 @@ function normalizeCard(data: any) {
 		assetSource: data.assetSource ?? data.AssetSource,
 		power: data.power ?? data.Power,
 		skillName: data.skillName ?? data.SkillName,
+		skill: data.skill ?? data.Skill,
+		trainedSkill: data.trainedSkill ?? data.TrainedSkill,
+		costumes: data.costumes ?? data.Costumes ?? [],
 		gachaPhrase: data.gachaPhrase ?? data.GachaPhrase,
 		supplyType: data.supplyType ?? data.SupplyType,
 		compositeThumbnailUrl: data.compositeThumbnailUrl ?? data.CompositeThumbnailURL,
@@ -1084,6 +1088,31 @@ Bun.serve({
 			}
 		}
 
+		if (url.pathname === "/cache/render/stats" && request.method === "GET") {
+			return Response.json(renderCacheStats());
+		}
+
+		if (url.pathname === "/cache/render" && request.method === "DELETE") {
+			clearRenderCache();
+			return Response.json({ ok: true, ...renderCacheStats() });
+		}
+
+		if (url.pathname === "/cache/render/config" && request.method === "PUT") {
+			try {
+				const body = (await request.json()) as { maxBytes?: number; maxEntries?: number };
+				const applied = updateRenderCacheConfig({
+					maxBytes: typeof body.maxBytes === "number" ? body.maxBytes : undefined,
+					maxEntries: typeof body.maxEntries === "number" ? body.maxEntries : undefined,
+				});
+				return Response.json({ ok: true, applied, ...renderCacheStats() });
+			} catch (error) {
+				return Response.json(
+					{ ok: false, error: true, message: error instanceof Error ? error.message : String(error) },
+					{ status: 400 },
+				);
+			}
+		}
+
 		if (url.pathname === "/cache/card-thumbnails/preload" && request.method === "POST") {
 			try {
 				const body = (await request.json()) as CachePreloadRequest;
@@ -1196,27 +1225,45 @@ Bun.serve({
 		if (url.pathname === "/render" && request.method === "POST") {
 			try {
 				const body = (await request.json()) as RenderRequest;
+				const precision = parsePositiveNumber(body.precision, defaultPrecision);
+				const width = body.width ?? 800;
+				const height = body.height;
+
+				// 命中缓存则直接返回，省掉 createElement + satori + resvg 整条链路
+				const cached = getCachedRender(body.template, body.data, width, height, precision);
+				if (cached) {
+					return new Response(new Uint8Array(cached.png), {
+						headers: {
+							...cached.headers,
+							"x-render-cache": "hit",
+						},
+					});
+				}
+
 				const trace = await renderWithTrace(await createElement(body), {
-					width: body.width ?? 800,
-					height: body.height,
-					precision: parsePositiveNumber(body.precision, defaultPrecision),
+					width,
+					height,
+					precision,
 				});
-				return new Response(new Uint8Array(trace.png), {
-					headers: {
-						"content-type": "image/png",
-						"cache-control": "no-store",
-						"x-render-total-ms": String(trace.timings.totalMs),
-						"x-render-fonts-ms": String(trace.timings.fontsMs),
-						"x-render-images-ms": String(trace.timings.imagesMs),
-						"x-render-satori-ms": String(trace.timings.satoriMs),
-						"x-render-resvg-ms": String(trace.timings.resvgMs),
-						"x-render-size-bytes": String(trace.sizeBytes),
-						"x-render-image-total": String(trace.imageCache.total),
-						"x-render-image-remote": String(trace.imageCache.remote),
-						"x-render-image-cache-hits": String(trace.imageCache.hits),
-						"x-render-image-cache-misses": String(trace.imageCache.misses),
-						"x-render-image-cache-errors": String(trace.imageCache.errors),
-					},
+				const headers: Record<string, string> = {
+					"content-type": "image/png",
+					"cache-control": "no-store",
+					"x-render-total-ms": String(trace.timings.totalMs),
+					"x-render-fonts-ms": String(trace.timings.fontsMs),
+					"x-render-images-ms": String(trace.timings.imagesMs),
+					"x-render-satori-ms": String(trace.timings.satoriMs),
+					"x-render-resvg-ms": String(trace.timings.resvgMs),
+					"x-render-size-bytes": String(trace.sizeBytes),
+					"x-render-image-total": String(trace.imageCache.total),
+					"x-render-image-remote": String(trace.imageCache.remote),
+					"x-render-image-cache-hits": String(trace.imageCache.hits),
+					"x-render-image-cache-misses": String(trace.imageCache.misses),
+					"x-render-image-cache-errors": String(trace.imageCache.errors),
+				};
+				const png = Buffer.from(trace.png);
+				setCachedRender(body.template, body.data, width, height, precision, png, headers);
+				return new Response(new Uint8Array(png), {
+					headers: { ...headers, "x-render-cache": "miss" },
 				});
 			} catch (error) {
 				console.error("[renderer] render failed:", error);

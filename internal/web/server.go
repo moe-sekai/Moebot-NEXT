@@ -108,6 +108,9 @@ func (s *Server) registerRoutes() {
 	api.Get("/renderer/fonts", s.handleRendererFonts)
 	api.Get("/renderer/previews", s.handleRendererPreviews)
 	api.Get("/renderer/previews/:id/image", s.handleRendererPreviewImage)
+	api.Get("/renderer/cache/render", s.handleRenderCacheStats)
+	api.Delete("/renderer/cache/render", s.handleRenderCacheClear)
+	api.Put("/renderer/cache/render/config", s.handleRenderCacheConfig)
 	api.Get("/commands/recent", s.handleRecentCommands)
 	// /commands/definitions, /commands/parse{,/image}, /commands/aliases*,
 	// /renderer/cache/card-thumbnails* are registered by the moesekai plugin

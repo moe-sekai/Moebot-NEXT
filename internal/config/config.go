@@ -253,7 +253,7 @@ func DefaultConfig() *Config {
 		},
 		Renderer: RendererConfig{
 			Host:           "127.0.0.1",
-			Port:           3001,
+			Port:           13001,
 			Precision:      DefaultRendererPrecision,
 			ChartPrecision: DefaultChartRendererPrecision,
 			Cache: CacheConfig{

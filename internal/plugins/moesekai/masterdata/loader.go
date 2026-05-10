@@ -139,6 +139,17 @@ func (l *Loader) LoadAll() error {
 
 	l.store.SetAll(data)
 
+	// moe_costume.json is JP-only, hosted on the same MoeSekai/Exmeaning master mirror.
+	// All regions reuse the JP costume database for rendering, so we always fetch
+	// from the JP MoeSekai endpoints regardless of the configured region. Failures
+	// are non-fatal — costume info is purely cosmetic.
+	if costumes, source, err := l.fetchMoeCostumes(resolved.LocalPath); err != nil {
+		log.Debug().Err(err).Msg("masterdata: moe_costume.json not loaded (costume info unavailable)")
+	} else {
+		l.store.SetMoeCostumes(costumes)
+		log.Debug().Str("source", source).Int("costumes", len(costumes)).Msg("Loaded moe_costume.json")
+	}
+
 	log.Info().
 		Str("provider", resolved.Source).
 		Str("region", resolved.Region).
@@ -190,6 +201,60 @@ func (l *Loader) fetchFile(name string, resolved config.ResolvedMasterdata) ([]b
 	}
 
 	return nil, "", fmt.Errorf("all sources exhausted for %s: %w", filename, err)
+}
+
+// jpMoeCostumeEndpoints lists the JP-locked MoeSekai/Exmeaning master mirrors that
+// host moe_costume.json. Other regions still reuse the JP costume catalogue.
+var jpMoeCostumeEndpoints = []string{
+	"https://sk.exmeaning.com/master",
+	"https://sekaimaster.exmeaning.com/master",
+}
+
+// fetchMoeCostumes loads moe_costume.json from the JP MoeSekai mirrors,
+// caching the response under localPath/moe_costume.json. Falls back to the
+// local cache if all remote sources fail.
+func (l *Loader) fetchMoeCostumes(localPath string) ([]MoeCostumeInfo, string, error) {
+	const filename = "moe_costume.json"
+
+	for _, base := range jpMoeCostumeEndpoints {
+		url := strings.TrimRight(base, "/") + "/" + filename
+		raw, err := l.fetchRemote(url)
+		if err != nil {
+			log.Debug().Err(err).Str("url", url).Msg("moe_costume.json remote fetch failed")
+			continue
+		}
+		costumes, parseErr := parseMoeCostumes(raw)
+		if parseErr != nil {
+			log.Debug().Err(parseErr).Str("url", url).Msg("moe_costume.json parse failed")
+			continue
+		}
+		l.cacheLocally(filename, raw, localPath)
+		return costumes, "jp:" + base, nil
+	}
+
+	if raw, err := l.loadLocal(filename, localPath); err == nil {
+		costumes, parseErr := parseMoeCostumes(raw)
+		if parseErr != nil {
+			return nil, "", fmt.Errorf("local moe_costume.json parse: %w", parseErr)
+		}
+		return costumes, "local", nil
+	}
+
+	return nil, "", fmt.Errorf("all sources exhausted for %s", filename)
+}
+
+// parseMoeCostumes accepts both the wrapped {costumes:[…]} shape and a bare
+// array, mirroring the structure used by Snowy_Viewer's moe_costume.json.
+func parseMoeCostumes(raw []byte) ([]MoeCostumeInfo, error) {
+	var wrapped MoeCostumeData
+	if err := json.Unmarshal(raw, &wrapped); err == nil && wrapped.Costumes != nil {
+		return wrapped.Costumes, nil
+	}
+	var bare []MoeCostumeInfo
+	if err := json.Unmarshal(raw, &bare); err != nil {
+		return nil, err
+	}
+	return bare, nil
 }
 
 // fetchRemote GETs a URL and returns the response body bytes.

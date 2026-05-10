@@ -41,6 +41,7 @@ type Store struct {
 	resourceBoxes                     []ResourceBox
 	resourceBoxDetails                []ResourceBoxDetail
 	characterMissionV2ParameterGroups []CharacterMissionV2ParameterGroup
+	moeCostumes                       []MoeCostumeInfo
 
 	// ---- primary-key indexes (ID → *element inside slice) ----
 	cardByID           map[int]*CardInfo
@@ -68,6 +69,7 @@ type Store struct {
 	challengeRewardsByCharID map[int][]ChallengeLiveHighScoreReward
 	resourceBoxDetailsByKey  map[string][]ResourceBoxDetail
 	missionParamGroupsByID   map[int][]CharacterMissionV2ParameterGroup
+	moeCostumesByCardID      map[int][]MoeCostumeInfo
 }
 
 // NewStore creates an empty Store ready for use.
@@ -102,6 +104,7 @@ func (s *Store) initMaps() {
 	s.challengeRewardsByCharID = make(map[int][]ChallengeLiveHighScoreReward)
 	s.resourceBoxDetailsByKey = make(map[string][]ResourceBoxDetail)
 	s.missionParamGroupsByID = make(map[int][]CharacterMissionV2ParameterGroup)
+	s.moeCostumesByCardID = make(map[int][]MoeCostumeInfo)
 }
 
 // ---------- Atomic Data Swap -----------------------------------------------
@@ -135,6 +138,9 @@ func (s *Store) SetAll(data *MasterData) {
 	s.resourceBoxes = data.ResourceBoxes
 	s.resourceBoxDetails = data.ResourceBoxDetails
 	s.characterMissionV2ParameterGroups = data.CharacterMissionV2ParameterGroups
+	if data.MoeCostumes != nil {
+		s.moeCostumes = data.MoeCostumes
+	}
 
 	s.buildIndexes()
 }
@@ -222,6 +228,11 @@ func (s *Store) buildIndexes() {
 		groups := s.missionParamGroupsByID[id]
 		sort.SliceStable(groups, func(i, j int) bool { return groups[i].Seq < groups[j].Seq })
 		s.missionParamGroupsByID[id] = groups
+	}
+	for i := range s.moeCostumes {
+		for _, cardID := range s.moeCostumes[i].CardIDs {
+			s.moeCostumesByCardID[cardID] = append(s.moeCostumesByCardID[cardID], s.moeCostumes[i])
+		}
 	}
 }
 
@@ -403,6 +414,37 @@ func (s *Store) GetResourceBoxDetails(purpose string, id int) []ResourceBoxDetai
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]ResourceBoxDetail(nil), s.resourceBoxDetailsByKey[resourceBoxKey(purpose, id)]...)
+}
+
+// GetMoeCostumesByCardID returns all costumes that include the given card ID.
+func (s *Store) GetMoeCostumesByCardID(cardID int) []MoeCostumeInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]MoeCostumeInfo(nil), s.moeCostumesByCardID[cardID]...)
+}
+
+// AllMoeCostumes returns a copy of all loaded costumes.
+func (s *Store) AllMoeCostumes() []MoeCostumeInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]MoeCostumeInfo, len(s.moeCostumes))
+	copy(out, s.moeCostumes)
+	return out
+}
+
+// SetMoeCostumes atomically replaces the moe costume list and its index without
+// touching the rest of masterdata. It is used by the JP-locked side-loader for
+// moe_costume.json which is fetched independently of the regional masterdata.
+func (s *Store) SetMoeCostumes(costumes []MoeCostumeInfo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.moeCostumes = costumes
+	s.moeCostumesByCardID = make(map[int][]MoeCostumeInfo)
+	for i := range s.moeCostumes {
+		for _, cardID := range s.moeCostumes[i].CardIDs {
+			s.moeCostumesByCardID[cardID] = append(s.moeCostumesByCardID[cardID], s.moeCostumes[i])
+		}
+	}
 }
 
 // GetCharacterMissionV2ParameterGroups returns all mission parameter rows for a group ID.

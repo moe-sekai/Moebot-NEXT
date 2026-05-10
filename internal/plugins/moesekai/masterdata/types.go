@@ -38,6 +38,7 @@ type MasterData struct {
 	ResourceBoxes                     []ResourceBox                      `json:"resourceBoxes"`
 	ResourceBoxDetails                []ResourceBoxDetail                `json:"resourceBoxDetails"`
 	CharacterMissionV2ParameterGroups []CharacterMissionV2ParameterGroup `json:"characterMissionV2ParameterGroups"`
+	MoeCostumes                       []MoeCostumeInfo                   `json:"moeCostumes"`
 }
 
 // ----------------------------- Card types ----------------------------------
@@ -54,6 +55,7 @@ type CardInfo struct {
 	Attr                            string          `json:"attr"`        // cute, cool, pure, happy, mysterious
 	SupportUnit                     string          `json:"supportUnit"` // e.g. "piapro", "light_sound", ...
 	SkillID                         int             `json:"skillId"`
+	SpecialTrainingSkillID          int             `json:"specialTrainingSkillId"`
 	CardSkillName                   string          `json:"cardSkillName"`
 	Prefix                          string          `json:"prefix"` // card title / 称号
 	AssetbundleName                 string          `json:"assetbundleName"`
@@ -429,6 +431,53 @@ type SkillEffectDetail struct {
 	Level                  int     `json:"level"`
 	ActivateEffectDuration float64 `json:"activateEffectDuration"`
 	ActivateEffectValue    int     `json:"activateEffectValue"`
+}
+
+// ----------------------------- Moe Costume types --------------------------
+
+// MoeCostumePart is a color variant for a shared costume part (head/hair/body).
+type MoeCostumePart struct {
+	ColorID         int    `json:"colorId"`
+	ColorName       string `json:"colorName"`
+	AssetbundleName string `json:"assetbundleName"`
+}
+
+// MoeCostumeExtraPart is a character-specific part inside a costume group.
+type MoeCostumeExtraPart struct {
+	CharacterID int              `json:"characterId"`
+	PartType    string           `json:"partType"`
+	Variants    []MoeCostumePart `json:"variants"`
+}
+
+// MoeCostumeShopInfo describes how a costume can be obtained from the shop.
+type MoeCostumeShopInfo struct {
+	ShopItemID  int   `json:"shopItemId"`
+	ShopGroupID int   `json:"shopGroupId"`
+	StartAt     int64 `json:"startAt"`
+}
+
+// MoeCostumeInfo represents one outfit (group of costume parts) in moe_costume.json.
+type MoeCostumeInfo struct {
+	CostumeNumber      int                         `json:"costumeNumber"`
+	Name               string                      `json:"name"`
+	Costume3dType      string                      `json:"costume3dType"`
+	Costume3dRarity    string                      `json:"costume3dRarity"`
+	Designer           string                      `json:"designer"`
+	PartTypes          []string                    `json:"partTypes"`
+	CharacterIDs       []int                       `json:"characterIds"`
+	Gender             string                      `json:"gender"`
+	Parts              map[string][]MoeCostumePart `json:"parts"`
+	ExtraParts         []MoeCostumeExtraPart       `json:"extraParts"`
+	Source             string                      `json:"source"`
+	CardIDs            []int                       `json:"cardIds"`
+	ShopInfo           *MoeCostumeShopInfo         `json:"shopInfo"`
+	PublishedAt        int64                       `json:"publishedAt"`
+	ArchivePublishedAt int64                       `json:"archivePublishedAt"`
+}
+
+// MoeCostumeData is the top-level shape of moe_costume.json (only costumes is used).
+type MoeCostumeData struct {
+	Costumes []MoeCostumeInfo `json:"costumes"`
 }
 
 // ----------------------------- Challenge & Mission --------------------------

@@ -82,7 +82,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh /app/moebot \
 
 USER moebot
 
-# 8080: Web 控制台 / 6700: OneBot 反向 WS / 3001: 渲染器(默认仅本机访问)
+# 8080: Web 控制台 / 6700: OneBot 反向 WS / 13001: 渲染器(默认仅本机访问)
 EXPOSE 8080 6700
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

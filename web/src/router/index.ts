@@ -18,6 +18,7 @@ import AutochatOverview from '../views/AutochatOverview.vue'
 import AutochatSettings from '../views/AutochatSettings.vue'
 import AutochatMemory from '../views/AutochatMemory.vue'
 import GalleryOverview from '../views/GalleryOverview.vue'
+import Stats from '../views/Stats.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -41,6 +42,7 @@ const router = createRouter({
     { path: '/groups', name: 'groups', component: Groups },
     { path: '/users', name: 'users', component: Users },
     { path: '/logs', name: 'logs', component: Logs },
+    { path: '/stats', name: 'stats', component: Stats },
     { path: '/about', name: 'about', component: About },
 
     // 插件框架
@@ -64,7 +66,6 @@ const router = createRouter({
     { path: '/bot', redirect: '/settings' },
     { path: '/commands', redirect: '/plugins/moesekai/commands' },
     { path: '/masterdata', redirect: '/plugins/moesekai' },
-    { path: '/stats', redirect: '/plugins/moesekai' },
     { path: '/plugins/moesekai/masterdata', redirect: '/plugins/moesekai' },
     { path: '/plugins/moesekai/stats', redirect: '/plugins/moesekai' },
 

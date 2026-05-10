@@ -1,6 +1,34 @@
 import type { CardThumbnailCompositeLayer } from '../card-thumbnail-composites'
-import { getSekaiCardUiAssetDataUri } from '../styles/assets'
+import { getLocalIconAssetDataUri, getSekaiCardUiAssetDataUri } from '../styles/assets'
 import { theme } from '../styles/theme'
+
+// File names inside assets/icon use lowercase for `cute`/`birthday` and a
+// capitalized first letter for the rest. Centralized here to keep callers terse.
+const ATTRIBUTE_ICON_FILES: Record<string, string> = {
+  cute: 'cute.png',
+  cool: 'Cool.png',
+  pure: 'Pure.png',
+  happy: 'Happy.png',
+  mysterious: 'Mysterious.png',
+}
+
+function getAttributeIconUri(attr: string): string | undefined {
+  const file = ATTRIBUTE_ICON_FILES[attr]
+  if (file) {
+    const local = getLocalIconAssetDataUri(file)
+    if (local) return local
+  }
+  // Fallback to the old sekai_cards_assets pack so existing renders keep working
+  // even when assets/icon is unavailable on disk.
+  return getSekaiCardUiAssetDataUri(`attr_${attr}.png`)
+}
+
+function getRarityStarIconUri(birthday: boolean, isTrained: boolean): string | undefined {
+  const file = birthday ? 'birthday.png' : isTrained ? 'star_trained.png' : 'star.png'
+  const local = getLocalIconAssetDataUri(file)
+  if (local) return local
+  return getSekaiCardUiAssetDataUri(birthday ? 'rare_birthday.png' : isTrained ? 'rare_star_after_training.png' : 'rare_star_normal.png')
+}
 
 export interface SekaiCardThumbnailProps {
   imageUrl?: string
@@ -59,8 +87,8 @@ export function SekaiCardThumbnail({
   const birthday = rarity === 'rarity_birthday'
   const raritySuffix = birthday ? 'birthday' : String(getRarityNumber(rarity))
   const frameUrl = getSekaiCardUiAssetDataUri(`frame_rarity_${raritySuffix}.png`)
-  const attrUrl = getSekaiCardUiAssetDataUri(`attr_${attr}.png`)
-  const starUrl = getSekaiCardUiAssetDataUri(birthday ? 'rare_birthday.png' : isTrained ? 'rare_star_after_training.png' : 'rare_star_normal.png')
+  const attrUrl = getAttributeIconUri(attr)
+  const starUrl = getRarityStarIconUri(birthday, isTrained)
   const masteryUrl = mastery > 0 ? getSekaiCardUiAssetDataUri(`train_rank_${mastery}.png`) : undefined
   const scale = size / 156
   const supplyBadge = supplyType ? getSupplyBadgeStyle(supplyType) : undefined

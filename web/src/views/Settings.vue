@@ -288,75 +288,10 @@
           <div class="settings-card__heading">
             <div class="settings-card__icon"><SvgIcon name="renderer" :size="22" /></div>
             <div>
-              <h2>Renderer</h2>
-              <p>Satori 渲染服务、SVG 转 PNG 精度与缓存配置。</p>
-            </div>
-          </div>
-          <div class="settings-form">
-            <label class="settings-field">
-              <span>渲染精度</span>
-              <input v-model.number="form.renderer.precision" class="ui-input" type="number" min="0.1" step="0.1" @input="normalizeRendererPrecision" />
-            </label>
-            <label class="settings-field">
-              <span>谱面渲染精度</span>
-              <input v-model.number="form.renderer.chart_precision" class="ui-input" type="number" min="0.1" step="0.1" @input="normalizeRendererPrecision" />
-            </label>
-            <div class="settings-field settings-field--readonly">
-              <span>说明</span>
-              <strong>普通图片约 {{ rendererOutputScaleText }}，谱面约 {{ chartRendererOutputScaleText }}；越高越清晰但图片体积和耗时越大。</strong>
-            </div>
-          </div>
-          <div class="renderer-fonts-panel">
-            <div class="renderer-fonts-panel__header">
-              <div>
-                <strong>渲染字体</strong>
-                <span>放置字体文件到 <code>renderer/assets/fonts/</code> 目录即可自动加载，支持 .otf / .ttf / .woff。保存设置后即时生效。</span>
-              </div>
-              <UiBadge :variant="fontsLoaded ? 'success' : 'warning'">{{ fontsLoaded ? `${fontsData?.total ?? 0} 字体` : '未加载' }}</UiBadge>
-            </div>
-            <div v-if="fontsLoading" class="renderer-fonts-panel__loading">
-              <UiSkeleton height="60px" />
-            </div>
-            <template v-else-if="fontsData">
-              <div class="settings-form">
-                <label class="settings-field">
-                  <span>正文字体</span>
-                  <select v-model="form.renderer.fonts.body_family" class="ui-select">
-                    <option value="">默认（{{ fontsData.config.body }}）</option>
-                    <option v-for="family in fontsData.families" :key="`body-${family}`" :value="family">{{ family }}</option>
-                  </select>
-                </label>
-                <label class="settings-field">
-                  <span>PT 得分字体（黑体）</span>
-                  <select v-model="form.renderer.fonts.score_family" class="ui-select">
-                    <option value="">默认（{{ fontsData.config.score }}）</option>
-                    <option v-for="family in fontsData.families" :key="`score-${family}`" :value="family">{{ family }}</option>
-                  </select>
-                </label>
-                <div class="settings-field settings-field--readonly settings-field--full">
-                  <span>当前生效</span>
-                  <strong style="font-size: 11px; line-height: 1.6;">
-                    正文：{{ fontsData.defaults.body }}<br />
-                    PT：{{ fontsData.defaults.score }}
-                  </strong>
-                </div>
-              </div>
-              <div class="renderer-fonts-panel__families">
-                <div v-for="family in fontsData.families" :key="family" class="renderer-fonts-panel__family">
-                  <span class="renderer-fonts-panel__family-name">{{ family }}</span>
-                  <div class="renderer-fonts-panel__family-weights">
-                    <UiBadge v-for="font in fontsByFamily(family)" :key="`${font.name}-${font.weight}-${font.style}`" variant="outline">
-                      {{ font.weight }}{{ font.style === 'italic' ? 'i' : '' }}
-                    </UiBadge>
-                  </div>
-                </div>
-              </div>
-            </template>
-            <div v-else class="renderer-fonts-panel__empty">
-              <span>无法获取字体信息，请检查 Renderer 服务状态。</span>
-            </div>
-            <div class="settings-actions-row">
-              <UiButton variant="outline" size="sm" :loading="fontsLoading" @click="loadFontsInfo">刷新字体</UiButton>
+              <h2>卡牌缩略图预载</h2>
+              <p>把当前区服全部卡牌缩略图提前下载并预生成合成 SVG，加速首次渲染。
+                <RouterLink to="/settings" style="color: var(--accent, #5fd49a);">渲染精度 / 字体 / 渲染结果缓存</RouterLink> 已迁移到核心设置。
+              </p>
             </div>
           </div>
           <div id="renderer-cache" class="renderer-cache-panel">
@@ -383,15 +318,6 @@
               <UiButton size="sm" :loading="thumbnailPreloadButtonLoading" :disabled="!config?.renderer.cache.enabled" @click="preloadCardThumbnails">预载卡牌缩略图</UiButton>
             </div>
           </div>
-          <dl class="settings-list settings-list--compact">
-            <div v-for="item in rendererItems" :key="item.label">
-              <dt>{{ item.label }}</dt>
-              <dd>
-                <UiBadge v-if="item.badge" :variant="item.value ? 'success' : 'warning'">{{ item.value ? '是' : '否' }}</UiBadge>
-                <template v-else>{{ item.value }}</template>
-              </dd>
-            </div>
-          </dl>
         </UiCard>
         <ConfigSection title="Web" description="Fiber 管理控制台监听配置。" icon="web" :items="webItems" />
         <ConfigSection title="默认区服数据状态" description="当前默认区服生效的数据来源、刷新与本地路径。" icon="masterdata" :items="masterdataItems" />
@@ -405,19 +331,23 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref } from "vue";
 import {
+	clearRenderCache as apiClearRenderCache,
 	getPublicConfig,
+	getRenderCacheStats,
 	getRendererCardThumbnailCacheStatus,
 	getRendererFonts,
 	preloadRendererCardThumbnails,
 	reloadMasterdata,
 	testSekaiSystem,
 	updatePublicConfig,
+	updateRenderCacheConfig,
 } from "../api/client";
 import type {
 	ConfigOption,
 	MasterdataCounts,
 	PublicConfig,
 	PublicServerProfile,
+	RenderCacheStats,
 	RendererCardThumbnailCacheStatus,
 	RendererFontsResponse,
 	SekaiSystemTestResponse,
@@ -547,6 +477,12 @@ const thumbnailCache = ref<RendererCardThumbnailCacheStatus | null>(null);
 const thumbnailCacheLoading = ref(false);
 const thumbnailCachePreloading = ref(false);
 let thumbnailCachePollTimer: ReturnType<typeof window.setTimeout> | null = null;
+
+const renderCache = ref<RenderCacheStats | null>(null);
+const renderCacheLoading = ref(false);
+const renderCacheClearing = ref(false);
+const renderCacheSaving = ref(false);
+const renderCacheForm = ref({ maxBytesMB: 256, maxEntries: 1024 });
 
 const fontsData = ref<RendererFontsResponse | null>(null);
 const fontsLoading = ref(false);
@@ -826,7 +762,7 @@ async function loadConfig() {
 		config.value = data;
 		applyConfigToForm(data);
 		await refreshThumbnailCacheStatus(true);
-		void loadFontsInfo();
+		// 字体与渲染结果缓存已迁移到核心设置 (/settings)，本页不再加载。
 	} catch (err) {
 		error.value = getErrorMessage(err, "加载配置失败。");
 	} finally {
@@ -953,6 +889,69 @@ function scheduleThumbnailCachePoll() {
 	}, 1800);
 }
 
+async function refreshRenderCacheStats(silent = false) {
+	renderCacheLoading.value = true;
+	try {
+		const stats = await getRenderCacheStats();
+		renderCache.value = stats;
+		// 同步表单（仅当用户未修改过）
+		renderCacheForm.value.maxBytesMB = Math.round(stats.maxBytes / (1024 * 1024));
+		renderCacheForm.value.maxEntries = stats.maxEntries;
+	} catch (err) {
+		if (!silent) error.value = getErrorMessage(err, "获取渲染缓存状态失败。");
+	} finally {
+		renderCacheLoading.value = false;
+	}
+}
+
+async function clearRenderCacheAction() {
+	renderCacheClearing.value = true;
+	error.value = "";
+	success.value = "";
+	try {
+		const resp = await apiClearRenderCache();
+		renderCache.value = resp.stats;
+		success.value = resp.message || "渲染缓存已清空。";
+	} catch (err) {
+		error.value = getErrorMessage(err, "清空渲染缓存失败。");
+	} finally {
+		renderCacheClearing.value = false;
+	}
+}
+
+async function saveRenderCacheConfig() {
+	const stats = renderCache.value;
+	if (!stats) return;
+	renderCacheSaving.value = true;
+	error.value = "";
+	success.value = "";
+	try {
+		const maxBytes = Math.max(1, Math.round(renderCacheForm.value.maxBytesMB)) * 1024 * 1024;
+		const maxEntries = Math.max(1, Math.round(renderCacheForm.value.maxEntries));
+		const resp = await updateRenderCacheConfig({ maxBytes, maxEntries });
+		renderCache.value = resp.stats;
+		renderCacheForm.value.maxBytesMB = Math.round(resp.stats.maxBytes / (1024 * 1024));
+		renderCacheForm.value.maxEntries = resp.stats.maxEntries;
+		success.value = resp.message || "渲染缓存配置已更新。";
+	} catch (err) {
+		error.value = getErrorMessage(err, "更新渲染缓存配置失败。");
+	} finally {
+		renderCacheSaving.value = false;
+	}
+}
+
+function formatBytes(bytes: number): string {
+	if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+	const units = ["B", "KB", "MB", "GB"];
+	let value = bytes;
+	let unit = 0;
+	while (value >= 1024 && unit < units.length - 1) {
+		value /= 1024;
+		unit++;
+	}
+	return `${value.toFixed(value >= 100 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
 function clearThumbnailCachePoll() {
 	if (thumbnailCachePollTimer) {
 		window.clearTimeout(thumbnailCachePollTimer);
@@ -1007,16 +1006,9 @@ function applyConfigToForm(data: PublicConfig) {
 
 function buildPayload(): UpdatePublicConfigPayload {
 	const defaultProfile = ensureServerForm(form.value.server.region);
+	// 注：renderer 字段由「核心设置」页 (/settings) 管理，本页不再下发以避免覆盖。
 	return {
 		server: { region: form.value.server.region },
-		renderer: {
-			precision: Number(form.value.renderer.precision) || 1.5,
-			chart_precision: Number(form.value.renderer.chart_precision) || 4,
-			fonts: {
-				body_family: form.value.renderer.fonts.body_family,
-				score_family: form.value.renderer.fonts.score_family,
-			},
-		},
 		masterdata: buildMasterdataPayload(defaultProfile.masterdata),
 		assets: buildAssetsPayload(defaultProfile.assets),
 		servers: Object.fromEntries(
