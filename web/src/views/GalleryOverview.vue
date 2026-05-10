@@ -466,7 +466,7 @@ async function removePic(pid: number) {
   error.value = ''
   try {
     await deleteGalleryPic(pid)
-    pics.value = pics.value.filter(p => p.PID !== pid)
+    pics.value = pics.value.filter(p => p.pid !== pid)
     picTotal.value--
     flash('图片已删除')
   } catch (e: any) {
