@@ -77,11 +77,15 @@ func (p *pluginImpl) registerHandlers() *zero.Engine {
 	engine := zero.New()
 
 	// 普通命令
-	engine.OnMessage(textRegexRule(`^/(看|gall pick)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handlePick))
+	// 注意：`/看所有|看全部|gall list` 必须比 `/看` 先注册，否则
+	// `/看全部冬雪` 会被 `/看` 先命中 (args="全部冬雪") 而不进入 list 处理。
 	engine.OnMessage(textRegexRule(`^/(看所有|看全部|gall list)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleList))
-	engine.OnMessage(textRegexRule(`^/(上传|添加|gall add|gall upload)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleAdd))
-	engine.OnMessage(textRegexRule(`^/(取消上传|撤销上传|回退上传|gall cancel|gall revert)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleCancel))
+	engine.OnMessage(textRegexRule(`^/(看|gall pick)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handlePick))
+	// 同理：更具体的子命令 (上传记录 / 取消上传) 必须先注册，否则前缀更短的
+	// `/上传` 会先匹配 `/上传记录 1`、把 args 解析为"记录 1"。
 	engine.OnMessage(textRegexRule(`^/(上传记录|gall record)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleRecord))
+	engine.OnMessage(textRegexRule(`^/(取消上传|撤销上传|回退上传|gall cancel|gall revert)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleCancel))
+	engine.OnMessage(textRegexRule(`^/(上传|添加|gall add|gall upload)\s*(.*)`), zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleAdd))
 
 	// 管理命令
 	engine.OnMessage(textRegexRule(`^/gall open\s+(.+)`), zero.SuperUserPermission, zero.OnlyGroup).SetBlock(true).Handle(p.gate(p.handleOpen))
