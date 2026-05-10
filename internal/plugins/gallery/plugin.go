@@ -8,6 +8,7 @@ import (
 	"moebot-next/internal/database"
 	"moebot-next/internal/filter"
 	"moebot-next/internal/plugin"
+	"moebot-next/internal/renderer"
 	"moebot-next/internal/web"
 
 	"github.com/rs/zerolog/log"
@@ -22,7 +23,8 @@ type pluginImpl struct {
 	configPath string
 	mgr        *GalleryManager
 	engine     *zero.Engine
-	filterMgr  *filter.Manager // 用于查询本插件的 internal FilterApp 规则
+	filterMgr  *filter.Manager  // 用于查询本插件的 internal FilterApp 规则
+	rendererCl *renderer.Client // 调用 satori 渲染服务（/看所有 拼图）
 }
 
 // filterAppName 返回本插件在 filter 网关中的 internal app 名字。
@@ -172,8 +174,10 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 	p.mgr = NewGalleryManager(db.DB, &c)
 
 	// 保存 filter manager 引用，用于消息处理时查询规则
+	rendererClient, _ := ctx.Renderer.(*renderer.Client)
 	p.mu.Lock()
 	p.filterMgr = filterMgr
+	p.rendererCl = rendererClient
 	p.mu.Unlock()
 
 	// 注册 ZeroBot 命令

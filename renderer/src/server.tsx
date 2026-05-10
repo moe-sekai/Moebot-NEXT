@@ -21,6 +21,7 @@ import {
 	EventList,
 	GachaInfo,
 	GachaList,
+	GalleryGrid,
 	HelpCard,
 	SkillCalc,
 	MemoryCard,
@@ -874,6 +875,9 @@ async function createElement(req: RenderRequest) {
 		case "gacha_list":
 		case "gachas":
 			return <GachaList {...normalizeGachaList(data)} />;
+		case "gallery_grid":
+		case "gallery":
+			return <GalleryGrid {...(data ?? { title: "画廊", pics: [] })} />;
 		case "virtual_live_list":
 		case "virtual-lives":
 		case "vlive":

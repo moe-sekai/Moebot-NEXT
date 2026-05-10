@@ -33,6 +33,8 @@ export { CharacterRankMission } from "./CharacterRankMission";
 export type { CharacterRankMissionProps } from "./CharacterRankMission";
 export { DeckRecommend } from "./DeckRecommend";
 export type { DeckRecommendProps } from "./DeckRecommend";
+export { GalleryGrid } from "./GalleryGrid";
+export type { GalleryGridProps, GalleryGridPic } from "./GalleryGrid";
 export {
 	SekaiCardThumbnail,
 	canUseTrainedArt,

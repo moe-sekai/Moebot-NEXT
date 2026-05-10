@@ -2,17 +2,20 @@ package gallery
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"moebot-next/internal/renderer"
+
+	"github.com/rs/zerolog/log"
 	zero "github.com/wdvxdr1123/ZeroBot"
 	"github.com/wdvxdr1123/ZeroBot/message"
 )
@@ -42,21 +45,15 @@ func textRegexRule(pattern string) zero.Rule {
 	}
 }
 
-// picFileURI 把图片磁盘路径转成 OneBot 客户端可解析的 file:// URI。
-// 在 Windows 上必须用正斜杠，否则部分 OneBot 实现 (LLOnebot/NapCat) 会报
-// "路径不存在"。同时检查文件是否真实存在，缺失时返回空串供调用方降级。
-func picFileURI(p string) string {
+// readPicBytes 读取图片字节，供 message.ImageBytes 使用。
+// 与 moesekai 等其它插件保持一致的发图方式：bot 与 OneBot 客户端常常
+// 不在同一文件系统（不同容器/不同机器），file:// 不可达；用字节流由
+// zero-bot 自动编为 base64 是最稳的做法。
+func readPicBytes(p string) ([]byte, error) {
 	if p == "" {
-		return ""
+		return nil, fmt.Errorf("path empty")
 	}
-	abs, err := filepath.Abs(p)
-	if err != nil {
-		abs = p
-	}
-	if _, err := os.Stat(abs); err != nil {
-		return ""
-	}
-	return "file:///" + filepath.ToSlash(abs)
+	return os.ReadFile(p)
 }
 
 // gate 包装一个 handler：在调用前先咨询 filter 网关；未放行则静默丢弃，
@@ -150,12 +147,12 @@ func (p *pluginImpl) handlePick(ctx *zero.Ctx) {
 				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("图片pid=%d不存在", pid)))
 				return
 			}
-			uri := picFileURI(pic.Path)
-			if uri == "" {
-				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("图片pid=%d文件丢失: %q", pic.PID, pic.Path)))
+			data, rErr := readPicBytes(pic.Path)
+			if rErr != nil {
+				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("图片pid=%d文件读取失败(%s): %s", pic.PID, pic.Path, rErr.Error())))
 				return
 			}
-			msgs = append(msgs, message.Image(uri))
+			msgs = append(msgs, message.ImageBytes(data))
 		}
 		ctx.SendChain(msgs...)
 		return
@@ -186,12 +183,12 @@ func (p *pluginImpl) handlePick(ctx *zero.Ctx) {
 				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(err.Error()))
 				return
 			}
-			uri := picFileURI(pic.Path)
-			if uri == "" {
-				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("图片pid=%d文件丢失: %q", pic.PID, pic.Path)))
+			data, rErr := readPicBytes(pic.Path)
+			if rErr != nil {
+				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("图片pid=%d文件读取失败(%s): %s", pic.PID, pic.Path, rErr.Error())))
 				return
 			}
-			ctx.SendChain(message.Image(uri))
+			ctx.SendChain(message.ImageBytes(data))
 			return
 		}
 	}
@@ -228,26 +225,38 @@ func (p *pluginImpl) handlePick(ctx *zero.Ctx) {
 	var msgs []message.Segment
 	var missing []string
 	for _, pic := range pics {
-		uri := picFileURI(pic.Path)
-		if uri == "" {
-			missing = append(missing, fmt.Sprintf("pid=%d (%q)", pic.PID, pic.Path))
+		data, rErr := readPicBytes(pic.Path)
+		if rErr != nil {
+			missing = append(missing, fmt.Sprintf("pid=%d (%s): %s", pic.PID, pic.Path, rErr.Error()))
 			continue
 		}
-		msgs = append(msgs, message.Image(uri))
+		msgs = append(msgs, message.ImageBytes(data))
 	}
 	if len(msgs) == 0 {
-		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text("画廊\""+g.Name+"\"中所有图片文件丢失:\n"+strings.Join(missing, "\n")))
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text("画廊\""+g.Name+"\"中所有图片读取失败:\n"+strings.Join(missing, "\n")))
 		return
 	}
 	if len(missing) > 0 {
-		msgs = append(msgs, message.Text(fmt.Sprintf("\n[警告] %d 张图片文件丢失", len(missing))))
+		msgs = append(msgs, message.Text(fmt.Sprintf("\n[警告] %d 张图片读取失败", len(missing))))
 	}
 	ctx.SendChain(msgs...)
 }
 
+// pageRe 解析 "画廊名 @N" / "画廊名@N" 形式的页码后缀。
+var pageRe = regexp.MustCompile(`\s*@\s*(\d+)\s*$`)
+
 func (p *pluginImpl) handleList(ctx *zero.Ctx) {
 	matches := ctx.State["regex_matched"].([]string)
 	name := strings.TrimSpace(matches[2])
+
+	// 解析尾部 @N 当页码（默认 1）
+	page := 1
+	if m := pageRe.FindStringSubmatch(name); m != nil {
+		if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
+			page = n
+		}
+		name = strings.TrimSpace(pageRe.ReplaceAllString(name, ""))
+	}
 
 	if name == "" {
 		galleries, err := p.mgr.ListGalleries()
@@ -284,12 +293,96 @@ func (p *pluginImpl) handleList(ctx *zero.Ctx) {
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"没有图片", name)))
 		return
 	}
-	var pids []string
-	for _, pic := range pics {
-		pids = append(pids, strconv.Itoa(int(pic.PID)))
+
+	p.sendGalleryGrid(ctx, g.Name, pics, page)
+}
+
+// sendGalleryGrid 调用 satori 渲染服务把当前页缩略图拼成一张大图发送。
+// 渲染失败时回退为文本 PID 列表。
+func (p *pluginImpl) sendGalleryGrid(ctx *zero.Ctx, gallName string, pics []GalleryPic, page int) {
+	const perPage = 100
+	total := len(pics)
+	totalPages := (total + perPage - 1) / perPage
+	if totalPages == 0 {
+		totalPages = 1
 	}
-	text := fmt.Sprintf("画廊\"%s\"共%d张图片:\n%s", g.Name, len(pics), strings.Join(pids, " "))
-	ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(text))
+	if page <= 0 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	start := (page - 1) * perPage
+	end := start + perPage
+	if end > total {
+		end = total
+	}
+	pageSlice := pics[start:end]
+
+	if p.rendererCl == nil || !p.rendererCl.Health() {
+		// 渲染服务不可用：发文本列表
+		var pids []string
+		for _, pic := range pageSlice {
+			pids = append(pids, strconv.Itoa(int(pic.PID)))
+		}
+		text := fmt.Sprintf("画廊\"%s\"第%d/%d页 共%d张:\n%s", gallName, page, totalPages, total, strings.Join(pids, " "))
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(text))
+		return
+	}
+
+	// 把每张缩略图字节转成 data URI
+	type dtoPic struct {
+		PID     uint   `json:"pid"`
+		DataURI string `json:"dataUri"`
+	}
+	var dtoPics []dtoPic
+	for _, pic := range pageSlice {
+		path := pic.ThumbPath
+		if path == "" {
+			path = pic.Path
+		}
+		data, err := readPicBytes(path)
+		if err != nil {
+			continue
+		}
+		mime := "image/jpeg"
+		if strings.HasSuffix(strings.ToLower(path), ".png") {
+			mime = "image/png"
+		}
+		dtoPics = append(dtoPics, dtoPic{
+			PID:     pic.PID,
+			DataURI: "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data),
+		})
+	}
+	if len(dtoPics) == 0 {
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"第%d页所有缩略图读取失败", gallName, page)))
+		return
+	}
+
+	payload := map[string]interface{}{
+		"title":      "画廊 " + gallName,
+		"subtitle":   fmt.Sprintf("第 %d/%d 页 · 共 %d 张 · 本页 %d 张", page, totalPages, total, len(dtoPics)),
+		"pics":       dtoPics,
+		"page":       page,
+		"totalPages": totalPages,
+		"total":      total,
+	}
+	png, err := p.rendererCl.Render(renderer.RenderRequest{Template: "gallery_grid", Data: payload})
+	if err != nil {
+		log.Warn().Err(err).Msg("[gallery] satori 渲染失败，回退文本列表")
+		var pids []string
+		for _, pic := range pageSlice {
+			pids = append(pids, strconv.Itoa(int(pic.PID)))
+		}
+		text := fmt.Sprintf("画廊\"%s\"第%d/%d页 共%d张:\n%s\n（渲染失败: %s）", gallName, page, totalPages, total, strings.Join(pids, " "), err.Error())
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(text))
+		return
+	}
+	hint := fmt.Sprintf("画廊\"%s\" 第 %d/%d 页", gallName, page, totalPages)
+	if totalPages > 1 {
+		hint += "，使用 /看所有 " + gallName + " @N 切换页码"
+	}
+	ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(hint), message.ImageBytes(png))
 }
 
 func (p *pluginImpl) handleAdd(ctx *zero.Ctx) {
