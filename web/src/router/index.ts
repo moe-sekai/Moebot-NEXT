@@ -89,15 +89,20 @@ router.beforeEach(async (to) => {
     }
   }
   const isPublic = Boolean(to.meta?.public)
+  // 未初始化：所有路径都引导到 /setup（除 /setup 本身）。
   if (auth.initialized === false) {
     if (to.path !== '/setup') return { path: '/setup' }
     return true
+  }
+  // 已初始化：/setup 已不再可用，未登录访问应跳到 /login，已登录则回 /。
+  if (auth.initialized === true && to.path === '/setup') {
+    return auth.isLoggedIn ? { path: '/' } : { path: '/login' }
   }
   if (!auth.isLoggedIn) {
     if (isPublic) return true
     return { path: '/login', query: to.fullPath !== '/' ? { redirect: to.fullPath } : undefined }
   }
-  if (auth.isLoggedIn && (to.path === '/login' || to.path === '/setup')) {
+  if (auth.isLoggedIn && to.path === '/login') {
     return { path: '/' }
   }
   return true

@@ -94,21 +94,24 @@ watch(collapsed, value => {
   align-items: center;
   padding: 10px 24px;
   font-size: 12px;
-  color: var(--text-muted, #8a8f99);
-  border-top: 1px solid var(--border, #2a2f38);
-  background: var(--surface, #181b22);
+  color: var(--muted-foreground, #5b6270);
+  border-top: 1px solid rgba(165, 180, 252, 0.22);
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(12px);
 }
 .footer-logout {
   background: transparent;
   color: inherit;
-  border: 1px solid var(--border, #2a2f38);
-  border-radius: 6px;
-  padding: 4px 10px;
+  border: 1px solid rgba(165, 180, 252, 0.32);
+  border-radius: 999px;
+  padding: 4px 12px;
   font-size: 12px;
   cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
 }
 .footer-logout:hover {
-  border-color: var(--accent-pink, #ff66b2);
-  color: var(--accent-pink, #ff66b2);
+  border-color: rgba(255, 120, 183, 0.55);
+  color: var(--accent-pink, #ff78b7);
+  background: #fff4fa;
 }
 </style>

@@ -375,7 +375,9 @@ func (p *pluginImpl) sendGalleryGrid(ctx *zero.Ctx, gallName string, pics []Gall
 		"totalPages": totalPages,
 		"total":      total,
 	}
-	png, err := p.rendererCl.Render(renderer.RenderRequest{Template: "gallery_grid", Data: payload})
+	// 模板内 BaseCard 宽度 = 10 列 × 96 + 11 × 8 + 32 = 1080；
+	// 必须显式传给渲染服务，否则 Satori 默认 viewport=800，右侧 footer 被裁。
+	png, err := p.rendererCl.Render(renderer.RenderRequest{Template: "gallery_grid", Data: payload, Width: 1080})
 	if err != nil {
 		log.Warn().Err(err).Msg("[gallery] satori 渲染失败，回退文本列表")
 		var pids []string
@@ -467,7 +469,9 @@ func (p *pluginImpl) sendGalleryListCard(ctx *zero.Ctx, galleries []GalleryInfo)
 		"subtitle":  fmt.Sprintf("共 %d 个画廊　|　使用 /看所有 画廊名 查看该画廊图片、/看所有 画廊名 @N 切换页码", len(galleries)),
 		"galleries": items,
 	}
-	png, err := p.rendererCl.Render(renderer.RenderRequest{Template: "gallery_list", Data: payload})
+	// 模板内 BaseCard 宽度 = 4 × 220 + 5 × 12 + 32 = 972；同样需要显式传 Width
+	// 以避免 Satori 默认 800 viewport 把右侧 footer 截掉。
+	png, err := p.rendererCl.Render(renderer.RenderRequest{Template: "gallery_list", Data: payload, Width: 972})
 	if err != nil {
 		log.Warn().Err(err).Msg("[gallery] satori 渲染画廊总览失败，回退文本")
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(buildTextFallback()))
