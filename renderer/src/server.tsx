@@ -2,6 +2,13 @@ import { getAssetBaseUrl } from "../shared";
 import { rendererAssetCache } from "./asset-cache";
 import { getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, startCardThumbnailCompositePreload, statusForCardThumbnailComposites, type CardThumbnailCompositeLayer, type CardThumbnailCompositeRequest } from "./card-thumbnail-composites";
 import { calculateDeckRecommend } from "./deck-recommend/calculate";
+import {
+	getMasterSnapshot,
+	getMusicMetasSnapshot,
+	listSnapshotStatus,
+	setMasterSnapshot,
+	setMusicMetasSnapshot,
+} from "./deck-recommend/snapshot-store";
 import { setDeployer, getDeployer } from "./deployer";
 import { renderWithTrace } from "./engine";
 import { getCachedRender, setCachedRender, renderCacheStats, clearRenderCache, updateRenderCacheConfig } from "./render-cache";
@@ -1188,6 +1195,53 @@ Bun.serve({
 					{ status: 500 },
 				);
 			}
+		}
+
+		// Push or update the per-region master/musicMetas snapshot used by the
+		// deck recommender. Go calls this once on startup (and when the cached
+		// version changes) so /deck-recommend/calculate can stop carrying the
+		// 32MB master payload on every request.
+		if (url.pathname === "/deck-recommend/snapshot" && request.method === "POST") {
+			try {
+				const body = await request.json() as {
+					region?: string;
+					master?: { version?: string; data?: Record<string, unknown[]> } | null;
+					musicMetas?: { version?: string; data?: any[] } | null;
+				};
+				const region = String(body?.region ?? "jp").trim() || "jp";
+				const out: Record<string, unknown> = { ok: true, region };
+				if (body?.master && body.master.data) {
+					const snap = setMasterSnapshot(region, body.master.data as any, String(body.master.version ?? Date.now()));
+					out.master = { version: snap.version, keyCount: snap.keyCount, updatedAt: snap.updatedAt };
+				}
+				if (body?.musicMetas && body.musicMetas.data) {
+					const snap = setMusicMetasSnapshot(region, body.musicMetas.data, String(body.musicMetas.version ?? Date.now()));
+					out.musicMetas = { version: snap.version, count: snap.count, updatedAt: snap.updatedAt };
+				}
+				return Response.json(out);
+			} catch (error) {
+				console.error("[renderer] deck recommend snapshot upload failed:", error);
+				return Response.json(
+					{ ok: false, error: true, message: error instanceof Error ? error.message : String(error) },
+					{ status: 500 },
+				);
+			}
+		}
+
+		if (url.pathname === "/deck-recommend/snapshot/status" && request.method === "GET") {
+			const queryRegion = url.searchParams.get("region");
+			if (queryRegion) {
+				const region = queryRegion.trim().toLowerCase() || "jp";
+				const master = getMasterSnapshot(region);
+				const musicMetas = getMusicMetasSnapshot(region);
+				return Response.json({
+					ok: true,
+					region,
+					master: master ? { version: master.version, keyCount: master.keyCount, updatedAt: master.updatedAt } : null,
+					musicMetas: musicMetas ? { version: musicMetas.version, count: musicMetas.count, updatedAt: musicMetas.updatedAt } : null,
+				});
+			}
+			return Response.json({ ok: true, snapshots: listSnapshotStatus() });
 		}
 
 		if (url.pathname === "/deck-recommend/calculate" && request.method === "POST") {

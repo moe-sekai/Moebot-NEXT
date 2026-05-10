@@ -32,8 +32,12 @@ export interface DeckRecommendCalculateRequest {
 	region?: string;
 	regionLabel?: string;
 	userData: UserDataMap;
-	masterData: MasterDataMap;
-	musicMetas: MusicMeta[];
+	// masterData / musicMetas are optional now: Go uploads them once via
+	// /deck-recommend/snapshot per region, and we read them from the snapshot
+	// store when omitted. Kept on the type for legacy callers that still inline
+	// them in the request body.
+	masterData?: MasterDataMap;
+	musicMetas?: MusicMeta[];
 	options: DeckRecommendOptions;
 	cardAssets?: Record<number, any>;
 	musicAssets?: Record<number, any>;

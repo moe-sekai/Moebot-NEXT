@@ -12,19 +12,20 @@ import (
 	"sync"
 	"time"
 
-	"moebot-next/internal/plugins/moesekai/assets"
 	"moebot-next/internal/bot"
 	"moebot-next/internal/config"
+	"moebot-next/internal/plugins/moesekai/assets"
 	"moebot-next/internal/plugins/moesekai/deckrecommenddata"
 	"moebot-next/internal/plugins/moesekai/masterdata"
 	"moebot-next/internal/plugins/moesekai/musicsearch"
-	"moebot-next/internal/renderer"
 	"moebot-next/internal/plugins/moesekai/servers"
 	"moebot-next/internal/plugins/moesekai/suite"
+	"moebot-next/internal/renderer"
+
+	"moebot-next/internal/plugins/moesekai/renderpayloads"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
 	"github.com/wdvxdr1123/ZeroBot/message"
-	"moebot-next/internal/plugins/moesekai/renderpayloads"
 )
 
 const musicMetaURL = "https://moe.exmeaning.com/data/music_meta/music_metas.json"
@@ -173,10 +174,26 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 				ctx.SendChain(message.Text(fmt.Sprintf("获取歌曲分数元数据失败：%v", err)))
 				return
 			}
+			// Push master / musicMetas snapshot to the renderer once per
+			// content-version. Subsequent calls with unchanged caches become
+			// no-ops, so the request body below only ships userData/options.
+			snapshotRegion := runtime.Region
+			if snapshotRegion == "" {
+				snapshotRegion = "jp"
+			}
+			masterVersion := ""
+			if resolved, resolveErr := deckRecommendResolvedMasterdata(); resolveErr == nil {
+				masterVersion = deckRecommendMasterDataVersion(resolved)
+			}
+			musicMetasVersion := deckRecommendMusicMetaVersion()
+			if err := deps.Renderer.EnsureDeckRecommendSnapshot(snapshotRegion, masterVersion, func() map[string]any { return masterMap }, musicMetasVersion, func() []map[string]any { return musicMetas }); err != nil {
+				ctx.SendChain(message.Text(fmt.Sprintf("组卡数据快照同步失败：%v", err)))
+				return
+			}
 			profile := suiteProfileFromUserData(userData, user.GameID)
 			req := renderer.DeckRecommendCalculateRequest{
-				Region: runtime.Region, RegionLabel: runtime.Label, UserData: userData, MasterData: masterMap,
-				MusicMetas: musicMetas, Options: options, CardAssets: buildDeckRecommendCardAssets(runtime.Store, runtime.Assets),
+				Region: snapshotRegion, RegionLabel: runtime.Label, UserData: userData,
+				Options: options, CardAssets: buildDeckRecommendCardAssets(runtime.Store, runtime.Assets),
 				Music: deckMusicPayload(runtime.Store, music, runtime.Assets, options.Difficulty, options.IsPresetDefault), Profile: profile,
 			}
 			if event != nil {

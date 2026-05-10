@@ -13,17 +13,17 @@ import (
 	"sync"
 	"time"
 
+	"moebot-next/internal/config"
 	"moebot-next/internal/plugins/moesekai/assets"
 	"moebot-next/internal/plugins/moesekai/b30"
 	"moebot-next/internal/plugins/moesekai/cardquery"
-	"moebot-next/internal/config"
 	"moebot-next/internal/plugins/moesekai/deckrecommenddata"
 	"moebot-next/internal/plugins/moesekai/masterdata"
 	"moebot-next/internal/plugins/moesekai/musicsearch"
-	"moebot-next/internal/renderer"
+	"moebot-next/internal/plugins/moesekai/renderpayloads"
 	"moebot-next/internal/plugins/moesekai/servers"
 	"moebot-next/internal/plugins/moesekai/suite"
-	"moebot-next/internal/plugins/moesekai/renderpayloads"
+	"moebot-next/internal/renderer"
 )
 
 const (
@@ -1154,13 +1154,26 @@ func (s *Service) buildDeckRecommendDebugPayload(def Definition, runtime *server
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("获取歌曲分数元数据失败：%w", err)
 	}
+	// Push master / musicMetas snapshot to the renderer once per
+	// content-version. Mirrors the OneBot deck recommend pipeline so the
+	// request body below only ships userData/options.
+	snapshotRegion := runtime.Region
+	if snapshotRegion == "" {
+		snapshotRegion = "jp"
+	}
+	masterVersion := ""
+	if resolved, resolveErr := suiteDebugDeckRecommendResolvedMasterdata(); resolveErr == nil {
+		masterVersion = suiteDebugDeckRecommendMasterDataVersion(resolved)
+	}
+	musicMetasVersion := suiteDebugDeckRecommendMusicMetaVersion()
+	if err := s.Renderer.EnsureDeckRecommendSnapshot(snapshotRegion, masterVersion, func() map[string]any { return masterMap }, musicMetasVersion, func() []map[string]any { return musicMetas }); err != nil {
+		return nil, nil, nil, fmt.Errorf("组卡数据快照同步失败：%w", err)
+	}
 	profile := suiteProfileFromSuiteDebugUserData(userData, gameID)
 	request := renderer.DeckRecommendCalculateRequest{
-		Region:      runtime.Region,
+		Region:      snapshotRegion,
 		RegionLabel: runtime.Label,
 		UserData:    userData,
-		MasterData:  masterMap,
-		MusicMetas:  musicMetas,
 		Options:     options,
 		CardAssets:  buildSuiteDebugDeckRecommendCardAssets(runtime.Store, runtime.Assets),
 		Music:       suiteDebugDeckMusicPayload(runtime.Store, music, runtime.Assets, options.Difficulty, options.IsPresetDefault),

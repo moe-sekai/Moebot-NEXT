@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"moebot-next/internal/config"
@@ -30,6 +31,14 @@ type Client struct {
 	chartPrecision float64
 	cache          config.CacheConfig
 	fonts          config.RendererFontConfig
+
+	// deckRecommendSnapshotMu guards the per-region versions of master /
+	// musicMetas snapshots we have already pushed to the Bun renderer.
+	// Used by EnsureDeckRecommendSnapshot to skip uploads when nothing
+	// changed.
+	deckRecommendSnapshotMu       sync.Mutex
+	deckRecommendMasterVersion    map[string]string
+	deckRecommendMusicMetaVersion map[string]string
 }
 
 // RenderRequest is sent to the renderer service.
@@ -317,6 +326,96 @@ func (c *Client) CardThumbnailPreloadStatusWithCards(urls []string, cards []Card
 	var result AssetPreloadStatus
 	err := c.postJSON("/cache/card-thumbnails/status", assetPreloadRequest{URLs: urls, Cards: cards}, &result)
 	return &result, err
+}
+
+// UploadDeckRecommendSnapshot pushes a master / musicMetas snapshot to the
+// Bun renderer. Either Master or MusicMetas may be nil to leave that part
+// untouched. Caller is responsible for providing version strings stable
+// enough to detect changes.
+func (c *Client) UploadDeckRecommendSnapshot(req DeckRecommendSnapshotRequest) (*DeckRecommendSnapshotResponse, error) {
+	if req.Region == "" {
+		req.Region = "jp"
+	}
+	var result DeckRecommendSnapshotResponse
+	if err := c.postJSON("/deck-recommend/snapshot", req, &result); err != nil {
+		return nil, err
+	}
+	if !result.OK {
+		msg := result.Error
+		if msg == "" {
+			msg = result.Message
+		}
+		if msg == "" {
+			msg = "snapshot upload failed"
+		}
+		return &result, fmt.Errorf("%s", msg)
+	}
+	return &result, nil
+}
+
+// EnsureDeckRecommendSnapshot uploads master / musicMetas only when their
+// version differs from what we last pushed for this region. Pass empty
+// strings / nil to skip a part. Safe to call before every deck recommend
+// request; the no-op case is just a mutex acquire.
+func (c *Client) EnsureDeckRecommendSnapshot(region string, masterVersion string, masterFn func() map[string]any, musicMetasVersion string, musicMetasFn func() []map[string]any) error {
+	if region == "" {
+		region = "jp"
+	}
+
+	c.deckRecommendSnapshotMu.Lock()
+	if c.deckRecommendMasterVersion == nil {
+		c.deckRecommendMasterVersion = map[string]string{}
+	}
+	if c.deckRecommendMusicMetaVersion == nil {
+		c.deckRecommendMusicMetaVersion = map[string]string{}
+	}
+	masterStale := masterVersion != "" && c.deckRecommendMasterVersion[region] != masterVersion
+	musicStale := musicMetasVersion != "" && c.deckRecommendMusicMetaVersion[region] != musicMetasVersion
+	c.deckRecommendSnapshotMu.Unlock()
+
+	if !masterStale && !musicStale {
+		return nil
+	}
+
+	req := DeckRecommendSnapshotRequest{Region: region}
+	if masterStale && masterFn != nil {
+		data := masterFn()
+		if len(data) > 0 {
+			req.Master = &DeckRecommendMasterSnapshot{Version: masterVersion, Data: data}
+		}
+	}
+	if musicStale && musicMetasFn != nil {
+		data := musicMetasFn()
+		if len(data) > 0 {
+			req.MusicMetas = &DeckRecommendMusicMetasSnapshot{Version: musicMetasVersion, Data: data}
+		}
+	}
+	if req.Master == nil && req.MusicMetas == nil {
+		return nil
+	}
+
+	resp, err := c.UploadDeckRecommendSnapshot(req)
+	if err != nil {
+		return err
+	}
+
+	c.deckRecommendSnapshotMu.Lock()
+	if resp.Master != nil {
+		c.deckRecommendMasterVersion[region] = resp.Master.Version
+	}
+	if resp.MusicMetas != nil {
+		c.deckRecommendMusicMetaVersion[region] = resp.MusicMetas.Version
+	}
+	c.deckRecommendSnapshotMu.Unlock()
+
+	log.Info().
+		Str("region", region).
+		Str("master_version", masterVersion).
+		Str("music_metas_version", musicMetasVersion).
+		Bool("master_uploaded", resp.Master != nil).
+		Bool("music_metas_uploaded", resp.MusicMetas != nil).
+		Msg("Renderer deck recommend snapshot refreshed")
+	return nil
 }
 
 // CalculateDeckRecommend runs the embedded TypeScript deck recommender in the renderer service.

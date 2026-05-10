@@ -7,6 +7,7 @@ import { MysekaiEventCalculator } from "../sekai-calculator/mysekai-information/
 import { SkillReferenceChooseStrategy } from "../sekai-calculator/deck-information/deck-calculator";
 import { LiveCalculator, LiveType } from "../sekai-calculator/live-score/live-calculator";
 import { MemoryDeckRecommendDataProvider } from "./data-provider";
+import { getMasterSnapshot, getMusicMetasSnapshot } from "./snapshot-store";
 import type {
 	DeckRecommendCalculateRequest,
 	DeckRecommendCalculateResponse,
@@ -275,13 +276,30 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 	const warnings: string[] = [];
 	try {
 		if (!req?.userData) throw new Error("userData is required");
-		if (!req?.masterData) throw new Error("masterData is required");
 		const _mode = normalizeMode(req?.options?.mode);
 		if (!req?.options?.eventId && _mode !== "strongest" && _mode !== "challenge") throw new Error("eventId is required");
+		// Resolve masterData/musicMetas: prefer inline body (legacy), fall back to
+		// the per-region snapshot store populated via /deck-recommend/snapshot.
+		const region = String(req.region ?? "jp");
+		let masterData = req.masterData;
+		if (!masterData || Object.keys(masterData).length === 0) {
+			const snap = getMasterSnapshot(region);
+			if (!snap) throw new Error(`masterData snapshot is not registered for region "${region}"; upload via POST /deck-recommend/snapshot first`);
+			masterData = snap.data;
+			req.masterData = masterData;
+		}
+		let musicMetas = req.musicMetas;
+		if (!musicMetas || musicMetas.length === 0) {
+			const snap = getMusicMetasSnapshot(region);
+			if (snap) {
+				musicMetas = snap.data;
+				req.musicMetas = musicMetas;
+			}
+		}
 		const provider = new MemoryDeckRecommendDataProvider({
 			userData: req.userData,
-			masterData: req.masterData,
-			musicMetas: req.musicMetas,
+			masterData,
+			musicMetas,
 		});
 		const config = buildConfig(req);
 		let liveType = normalizeLiveType(req.options.liveType);
