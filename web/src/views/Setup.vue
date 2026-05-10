@@ -119,16 +119,21 @@ async function onSubmit() {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: radial-gradient(ellipse at top, rgba(255, 102, 178, 0.08), transparent 60%), var(--bg-primary, #0f1115);
+  background:
+    radial-gradient(circle at 8% 12%, rgba(255, 120, 183, .18), transparent 38%),
+    radial-gradient(circle at 92% 18%, rgba(53, 199, 212, .16), transparent 38%),
+    linear-gradient(180deg, #fef7fb 0%, #f5f7ff 100%);
+  color: #1f2230;
 }
 .auth-card {
   width: 100%;
-  max-width: 480px;
+  max-width: 500px;
   padding: 36px;
-  border-radius: 16px;
-  background: var(--surface, #181b22);
-  border: 1px solid var(--border, #2a2f38);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(165, 180, 252, 0.3);
+  box-shadow: 0 24px 60px rgba(142, 124, 195, 0.22);
+  backdrop-filter: blur(18px);
 }
 .auth-brand {
   display: flex;
@@ -141,25 +146,30 @@ async function onSubmit() {
 .auth-brand h1 {
   margin: 8px 0 0;
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 800;
+  color: #1f2230;
+  letter-spacing: -0.01em;
 }
 .auth-subtitle {
   margin: 0;
   font-size: 13px;
-  color: var(--text-muted, #8a8f99);
+  color: #5b6270;
 }
 .auth-error {
   margin: 14px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(255, 80, 110, 0.12);
-  border: 1px solid rgba(255, 80, 110, 0.4);
-  color: #ff6e8a;
+  border-radius: 10px;
+  background: #fff1f5;
+  border: 1px solid #fecdd3;
+  color: #b91c3c;
   font-size: 13px;
 }
 code {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(15, 23, 42, 0.06);
+  color: #1f2230;
   padding: 1px 6px;
   border-radius: 4px;
+  font-size: 12px;
 }
+:deep(.n-form-item .n-form-item-label) { color: #1f2230; font-weight: 600; }
 </style>
