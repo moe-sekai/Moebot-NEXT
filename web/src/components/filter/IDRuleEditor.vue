@@ -28,6 +28,8 @@
           :disabled="disabled"
           @input="onIdsInput"
           placeholder="例如：&#10;123456789&#10;987654321"
+          spellcheck="false"
+          autocomplete="off"
         />
       </label>
       <small class="rule-editor-hint">已解析 {{ modelValue.ids?.length ?? 0 }} 个 ID。</small>
@@ -39,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { FilterIDRule } from '../../api/types'
 
 const props = withDefaults(
@@ -73,7 +75,29 @@ const needIDs = computed(
   () => props.modelValue.mode === 'whitelist' || props.modelValue.mode === 'blacklist',
 )
 
-const idsText = computed(() => (props.modelValue.ids || []).join('\n'))
+function parseIds(raw: string): number[] {
+  return raw
+    .split(/[\s,，;；]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => Number(s))
+    .filter((n) => Number.isFinite(n))
+}
+
+// Local raw text preserves user typing (newlines, trailing whitespace) so that
+// the controlled textarea does not strip newlines on the way through the
+// `ids` array round-trip.
+const idsText = ref<string>((props.modelValue.ids || []).join('\n'))
+
+watch(
+  () => props.modelValue.ids,
+  (ids) => {
+    const next = ids || []
+    const parsed = parseIds(idsText.value)
+    const same = parsed.length === next.length && parsed.every((v, i) => v === next[i])
+    if (!same) idsText.value = next.join('\n')
+  },
+)
 
 function setMode(mode: FilterIDRule['mode']) {
   if (props.disabled) return
@@ -82,13 +106,8 @@ function setMode(mode: FilterIDRule['mode']) {
 
 function onIdsInput(ev: Event) {
   const raw = (ev.target as HTMLTextAreaElement).value
-  const ids = raw
-    .split(/[\s,，;；]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => Number(s))
-    .filter((n) => Number.isFinite(n))
-  emit('update:modelValue', { ...props.modelValue, ids })
+  idsText.value = raw
+  emit('update:modelValue', { ...props.modelValue, ids: parseIds(raw) })
 }
 </script>
 

@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { FilterMessageRule } from '../../api/types'
 
 const props = withDefaults(
@@ -94,8 +94,35 @@ const modeOptions = computed<ModeOption[]>(() => {
 const needRules = computed(
   () => props.modelValue.mode === 'whitelist' || props.modelValue.mode === 'blacklist',
 )
-const filtersText = computed(() => (props.modelValue.filters || []).join('\n'))
-const prefixText = computed(() => (props.modelValue.prefix || []).join('\n'))
+function parseLines(raw: string): string[] {
+  return raw.split(/\n+/).map((s) => s.trim()).filter(Boolean)
+}
+
+// Local raw text preserves user typing (newlines, trailing whitespace) so that
+// the controlled textarea does not strip newlines on the way through the
+// array round-trip.
+const filtersText = ref<string>((props.modelValue.filters || []).join('\n'))
+const prefixText = ref<string>((props.modelValue.prefix || []).join('\n'))
+
+function sameStrArr(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i])
+}
+
+watch(
+  () => props.modelValue.filters,
+  (v) => {
+    const next = v || []
+    if (!sameStrArr(parseLines(filtersText.value), next)) filtersText.value = next.join('\n')
+  },
+)
+
+watch(
+  () => props.modelValue.prefix,
+  (v) => {
+    const next = v || []
+    if (!sameStrArr(parseLines(prefixText.value), next)) prefixText.value = next.join('\n')
+  },
+)
 
 function setMode(mode: FilterMessageRule['mode']) {
   if (props.disabled) return
@@ -104,14 +131,14 @@ function setMode(mode: FilterMessageRule['mode']) {
 
 function onFiltersInput(ev: Event) {
   const raw = (ev.target as HTMLTextAreaElement).value
-  const filters = raw.split(/\n+/).map((s) => s.trim()).filter(Boolean)
-  emit('update:modelValue', { ...props.modelValue, filters })
+  filtersText.value = raw
+  emit('update:modelValue', { ...props.modelValue, filters: parseLines(raw) })
 }
 
 function onPrefixInput(ev: Event) {
   const raw = (ev.target as HTMLTextAreaElement).value
-  const prefix = raw.split(/\n+/).map((s) => s.trim()).filter(Boolean)
-  emit('update:modelValue', { ...props.modelValue, prefix })
+  prefixText.value = raw
+  emit('update:modelValue', { ...props.modelValue, prefix: parseLines(raw) })
 }
 
 function onPrefixReplaceInput(ev: Event) {

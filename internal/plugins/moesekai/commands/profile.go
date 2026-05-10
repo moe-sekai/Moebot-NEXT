@@ -87,7 +87,7 @@ func registerBindCommands(deps *Deps) {
 				profile, err := runtime.Sekai.GetProfile(gameID)
 				if err != nil {
 					ctx.SendChain(message.Text(fmt.Sprintf(
-						"❌ %s ID %s 校验失败：%s\n请确认 ID 正确（不是 6/8 位短 ID，应为长 ID）后重试",
+						"❌ %s ID %s 校验失败：%s\n请确认 ID 正确（不是你的游戏昵称）后重试，有区服请加上cn/tw/en/kr前缀",
 						regionLabel(bindRegion), gameID, summarizeBindError(err),
 					)))
 					return
