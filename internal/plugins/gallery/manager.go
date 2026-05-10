@@ -81,6 +81,9 @@ func (m *GalleryManager) DeleteGallery(nameOrAlias string) error {
 }
 
 func (m *GalleryManager) SetMode(nameOrAlias, mode string) (string, string, error) {
+	if !isValidMode(mode) {
+		return "", "", fmt.Errorf("无效模式\"%s\"", mode)
+	}
 	g, err := m.FindGallery(nameOrAlias)
 	if err != nil {
 		return "", "", fmt.Errorf("画廊\"%s\"不存在", nameOrAlias)
@@ -88,6 +91,76 @@ func (m *GalleryManager) SetMode(nameOrAlias, mode string) (string, string, erro
 	old := g.Mode
 	g.Mode = mode
 	return old, mode, m.db.Save(g).Error
+}
+
+// EffectiveMode 返回某画廊在指定群中的实际生效模式。
+// 优先 GroupModes[gid]，缺省回落到 g.Mode。私聊或 gid==0 始终用 g.Mode。
+func (m *GalleryManager) EffectiveMode(g *GalleryInfo, groupID int64) string {
+	if g == nil {
+		return ""
+	}
+	if groupID > 0 {
+		gm := parseGroupModes(g.GroupModes)
+		if v, ok := gm[groupID]; ok && v != "" {
+			return v
+		}
+	}
+	return g.Mode
+}
+
+// SetGroupMode 设置某画廊在某群中的覆盖模式。mode 为空字符串时等价于 UnsetGroupMode。
+func (m *GalleryManager) SetGroupMode(nameOrAlias string, groupID int64, mode string) error {
+	if groupID <= 0 {
+		return errors.New("group id must be positive")
+	}
+	if mode != "" && !isValidMode(mode) {
+		return fmt.Errorf("无效模式\"%s\"", mode)
+	}
+	g, err := m.FindGallery(nameOrAlias)
+	if err != nil {
+		return fmt.Errorf("画廊\"%s\"不存在", nameOrAlias)
+	}
+	gm := parseGroupModes(g.GroupModes)
+	if mode == "" {
+		delete(gm, groupID)
+	} else {
+		gm[groupID] = mode
+	}
+	g.GroupModes = marshalGroupModes(gm)
+	return m.db.Save(g).Error
+}
+
+// UnsetGroupMode 移除某画廊在某群的覆盖（回落到全局 Mode）。
+func (m *GalleryManager) UnsetGroupMode(nameOrAlias string, groupID int64) error {
+	return m.SetGroupMode(nameOrAlias, groupID, "")
+}
+
+// ReplaceGroupModes 整体替换 GroupModes（供 Web 表单一次保存全部覆盖）。
+func (m *GalleryManager) ReplaceGroupModes(nameOrAlias string, modes map[int64]string) error {
+	g, err := m.FindGallery(nameOrAlias)
+	if err != nil {
+		return fmt.Errorf("画廊\"%s\"不存在", nameOrAlias)
+	}
+	clean := map[int64]string{}
+	for gid, mode := range modes {
+		if gid <= 0 || mode == "" {
+			continue
+		}
+		if !isValidMode(mode) {
+			return fmt.Errorf("群 %d 的模式\"%s\"无效", gid, mode)
+		}
+		clean[gid] = mode
+	}
+	g.GroupModes = marshalGroupModes(clean)
+	return m.db.Save(g).Error
+}
+
+func isValidMode(mode string) bool {
+	switch mode {
+	case "edit", "view", "off":
+		return true
+	}
+	return false
 }
 
 func (m *GalleryManager) AddAlias(nameOrAlias, alias string) error {
@@ -436,13 +509,55 @@ func (m *GalleryManager) CheckDuplicates(gallName string, rehash bool) (map[uint
 
 // --- 上传记录 ---
 
-func (m *GalleryManager) AddUploadRecord(userID int64, pids []uint) (uint, error) {
+func (m *GalleryManager) AddUploadRecord(userID, groupID int64, gallName string, pids []uint) (uint, error) {
 	data, _ := json.Marshal(pids)
-	r := GalleryUploadRecord{UserID: userID, PIDs: string(data), CreatedAt: time.Now()}
+	r := GalleryUploadRecord{
+		UserID:    userID,
+		GroupID:   groupID,
+		GallName:  gallName,
+		PIDs:      string(data),
+		CreatedAt: time.Now(),
+	}
 	if err := m.db.Create(&r).Error; err != nil {
 		return 0, err
 	}
 	return r.ID, nil
+}
+
+// UploadRecordFilter 用于 Web/管理页面的筛选条件。空字段表示不过滤。
+type UploadRecordFilter struct {
+	UserID   int64
+	GroupID  int64
+	GallName string
+	Offset   int
+	Limit    int
+}
+
+// ListUploadRecords 返回符合筛选条件的上传记录及总数（按 ID 倒序）。
+func (m *GalleryManager) ListUploadRecords(f UploadRecordFilter) ([]GalleryUploadRecord, int64, error) {
+	q := m.db.Model(&GalleryUploadRecord{})
+	if f.UserID != 0 {
+		q = q.Where("user_id = ?", f.UserID)
+	}
+	if f.GroupID != 0 {
+		q = q.Where("group_id = ?", f.GroupID)
+	}
+	if f.GallName != "" {
+		q = q.Where("gall_name = ?", f.GallName)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	limit := f.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	var rows []GalleryUploadRecord
+	if err := q.Order("id DESC").Offset(f.Offset).Limit(limit).Find(&rows).Error; err != nil {
+		return nil, total, err
+	}
+	return rows, total, nil
 }
 
 func (m *GalleryManager) GetUploadRecord(hid uint) (*GalleryUploadRecord, error) {
@@ -534,6 +649,39 @@ func marshalAliases(aliases []string) string {
 		return "[]"
 	}
 	data, _ := json.Marshal(aliases)
+	return string(data)
+}
+
+// parseGroupModes 把 JSON {"123":"edit"} 形式的字符串解析回 map[int64]string。
+// 健壮：空串/解析失败/非法 key 都返回空 map。
+func parseGroupModes(s string) map[int64]string {
+	out := map[int64]string{}
+	if s == "" || s == "{}" {
+		return out
+	}
+	raw := map[string]string{}
+	if err := json.Unmarshal([]byte(s), &raw); err != nil {
+		return out
+	}
+	for k, v := range raw {
+		var gid int64
+		if _, err := fmt.Sscanf(k, "%d", &gid); err != nil || gid <= 0 || v == "" {
+			continue
+		}
+		out[gid] = v
+	}
+	return out
+}
+
+func marshalGroupModes(modes map[int64]string) string {
+	if len(modes) == 0 {
+		return "{}"
+	}
+	raw := make(map[string]string, len(modes))
+	for k, v := range modes {
+		raw[fmt.Sprintf("%d", k)] = v
+	}
+	data, _ := json.Marshal(raw)
 	return string(data)
 }
 

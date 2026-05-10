@@ -38,14 +38,27 @@ func (p *pluginImpl) registerWebRoutes(api fiber.Router) {
 	g.Get("/pics/:pid/thumb", p.webGetPicThumb)
 	g.Delete("/pics/:pid", p.webDeletePic)
 	g.Post("/upload", p.webUploadPic)
+
+	g.Get("/upload-records", p.webListUploadRecords)
+	g.Post("/upload-records/:id/revert", p.webRevertUploadRecord)
 }
 
 type galleryDTO struct {
-	Name     string   `json:"name"`
-	Mode     string   `json:"mode"`
-	Aliases  []string `json:"aliases"`
-	CoverPID uint     `json:"cover_pid"`
-	PicCount int64    `json:"pic_count"`
+	Name       string            `json:"name"`
+	Mode       string            `json:"mode"`
+	GroupModes map[string]string `json:"group_modes"` // 前端用 string key 方便 JSON 处理
+	Aliases    []string          `json:"aliases"`
+	CoverPID   uint              `json:"cover_pid"`
+	PicCount   int64             `json:"pic_count"`
+}
+
+func toGroupModesDTO(s string) map[string]string {
+	parsed := parseGroupModes(s)
+	out := make(map[string]string, len(parsed))
+	for k, v := range parsed {
+		out[strconv.FormatInt(k, 10)] = v
+	}
+	return out
 }
 
 func (p *pluginImpl) webListGalleries(c *fiber.Ctx) error {
@@ -56,11 +69,12 @@ func (p *pluginImpl) webListGalleries(c *fiber.Ctx) error {
 	out := make([]galleryDTO, 0, len(galleries))
 	for _, g := range galleries {
 		out = append(out, galleryDTO{
-			Name:     g.Name,
-			Mode:     g.Mode,
-			Aliases:  parseAliases(g.Aliases),
-			CoverPID: g.CoverPID,
-			PicCount: p.mgr.PicCount(g.Name),
+			Name:       g.Name,
+			Mode:       g.Mode,
+			GroupModes: toGroupModesDTO(g.GroupModes),
+			Aliases:    parseAliases(g.Aliases),
+			CoverPID:   g.CoverPID,
+			PicCount:   p.mgr.PicCount(g.Name),
 		})
 	}
 	return c.JSON(fiber.Map{"galleries": out})
@@ -90,10 +104,11 @@ func (p *pluginImpl) webDeleteGallery(c *fiber.Ctx) error {
 func (p *pluginImpl) webUpdateGallery(c *fiber.Ctx) error {
 	name := paramName(c)
 	var body struct {
-		Mode     *string `json:"mode,omitempty"`
-		AddAlias *string `json:"add_alias,omitempty"`
-		DelAlias *string `json:"del_alias,omitempty"`
-		CoverPID *uint   `json:"cover_pid,omitempty"`
+		Mode       *string            `json:"mode,omitempty"`
+		AddAlias   *string            `json:"add_alias,omitempty"`
+		DelAlias   *string            `json:"del_alias,omitempty"`
+		CoverPID   *uint              `json:"cover_pid,omitempty"`
+		GroupModes *map[string]string `json:"group_modes,omitempty"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
@@ -115,6 +130,19 @@ func (p *pluginImpl) webUpdateGallery(c *fiber.Ctx) error {
 	}
 	if body.CoverPID != nil {
 		if err := p.mgr.SetCover(name, *body.CoverPID); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		}
+	}
+	if body.GroupModes != nil {
+		modes := map[int64]string{}
+		for k, v := range *body.GroupModes {
+			gid, err := strconv.ParseInt(k, 10, 64)
+			if err != nil || gid <= 0 {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("invalid group id: %s", k))
+			}
+			modes[gid] = v
+		}
+		if err := p.mgr.ReplaceGroupModes(name, modes); err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
 	}
@@ -226,4 +254,58 @@ func (p *pluginImpl) webUploadPic(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 	return c.JSON(fiber.Map{"ok": true, "pid": pid})
+}
+
+type uploadRecordDTO struct {
+	ID        uint   `json:"id"`
+	UserID    int64  `json:"user_id"`
+	GroupID   int64  `json:"group_id"`
+	GallName  string `json:"gall_name"`
+	PIDs      []uint `json:"pids"`
+	Reverted  bool   `json:"reverted"`
+	CreatedAt string `json:"created_at"`
+}
+
+// webListUploadRecords 返回上传记录，可按 user_id / group_id / gallery 过滤。
+func (p *pluginImpl) webListUploadRecords(c *fiber.Ctx) error {
+	uid, _ := strconv.ParseInt(c.Query("user_id", "0"), 10, 64)
+	gid, _ := strconv.ParseInt(c.Query("group_id", "0"), 10, 64)
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	limit, _ := strconv.Atoi(c.Query("limit", "100"))
+	gall := c.Query("gallery", "")
+	if gall != "" {
+		if decoded, err := url.QueryUnescape(gall); err == nil {
+			gall = decoded
+		}
+	}
+	rows, total, err := p.mgr.ListUploadRecords(UploadRecordFilter{
+		UserID: uid, GroupID: gid, GallName: gall, Offset: offset, Limit: limit,
+	})
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	out := make([]uploadRecordDTO, 0, len(rows))
+	for _, r := range rows {
+		var pids []uint
+		_ = parseJSON(r.PIDs, &pids)
+		out = append(out, uploadRecordDTO{
+			ID: r.ID, UserID: r.UserID, GroupID: r.GroupID, GallName: r.GallName,
+			PIDs: pids, Reverted: r.Reverted,
+			CreatedAt: r.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+	return c.JSON(fiber.Map{"records": out, "total": total})
+}
+
+// webRevertUploadRecord 撤销指定上传记录（删除其所有 PID 对应的图片）。
+func (p *pluginImpl) webRevertUploadRecord(c *fiber.Ctx) error {
+	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+	}
+	okList, errList, err := p.mgr.RevertUploadRecord(uint(id))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	return c.JSON(fiber.Map{"ok": true, "deleted": okList, "failed": errList})
 }

@@ -141,7 +141,87 @@
           <UiButton variant="outline" size="sm" :loading="loading" @click="loadMorePics">加载更多</UiButton>
         </div>
       </UiCard>
+
+      <!-- 分群覆盖模式 -->
+      <UiCard>
+        <div class="card-heading">
+          <div>
+            <h2>分群覆盖模式</h2>
+            <p>
+              全局模式: <code>{{ selectedGallery.mode }}</code> · 这里可以为指定群单独设置 edit/view/off。
+              留空表示删除该群的覆盖（回落到全局模式）。
+            </p>
+          </div>
+          <div class="actions">
+            <UiButton variant="outline" size="sm" @click="addGroupModeRow">+ 添加群</UiButton>
+            <UiButton variant="default" size="sm" :loading="savingGroupModes" @click="saveGroupModes">保存</UiButton>
+          </div>
+        </div>
+        <div v-if="!groupModeRows.length" class="empty">尚未配置任何分群覆盖。点击右上角新增。</div>
+        <table v-else class="gm-table">
+          <thead>
+            <tr><th>群号</th><th>模式</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, idx) in groupModeRows" :key="idx">
+              <td><input v-model="row.gid" type="text" placeholder="例如 1095426209" /></td>
+              <td>
+                <select v-model="row.mode">
+                  <option value="edit">edit (可上传可查看)</option>
+                  <option value="view">view (仅查看)</option>
+                  <option value="off">off (关闭)</option>
+                </select>
+              </td>
+              <td>
+                <button class="icon-btn icon-btn--danger" @click="groupModeRows.splice(idx, 1)">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </UiCard>
     </template>
+
+    <!-- 上传记录（仅画廊列表页显示） -->
+    <UiCard v-if="!selectedGallery">
+      <div class="card-heading">
+        <div>
+          <h2>上传记录</h2>
+          <p>记录每次群聊上传的 QQ / 群号 / 画廊 / PID 列表，可一键撤销。</p>
+        </div>
+        <div class="actions">
+          <UiButton variant="ghost" size="sm" :loading="loadingRecords" @click="loadUploadRecords">刷新</UiButton>
+        </div>
+      </div>
+      <div class="rec-filters">
+        <input v-model="recFilters.user_id" type="text" placeholder="按 QQ 过滤" />
+        <input v-model="recFilters.group_id" type="text" placeholder="按群号过滤" />
+        <input v-model="recFilters.gallery" type="text" placeholder="按画廊名过滤" />
+        <UiButton variant="outline" size="sm" :loading="loadingRecords" @click="loadUploadRecords">查询</UiButton>
+      </div>
+      <div v-if="!uploadRecords.length && !loadingRecords" class="empty">暂无上传记录。</div>
+      <table v-else class="rec-table">
+        <thead>
+          <tr><th>#</th><th>时间</th><th>画廊</th><th>QQ</th><th>群号</th><th>PID</th><th>状态</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in uploadRecords" :key="r.id" :class="{ 'rec-reverted': r.reverted }">
+            <td>{{ r.id }}</td>
+            <td>{{ r.created_at }}</td>
+            <td>{{ r.gall_name || '-' }}</td>
+            <td>{{ r.user_id }}</td>
+            <td>{{ r.group_id || '-' }}</td>
+            <td class="rec-pids">{{ r.pids.join(', ') }}</td>
+            <td>
+              <span v-if="r.reverted" class="badge badge--muted">已撤销</span>
+              <span v-else class="badge badge--ok">有效</span>
+            </td>
+            <td>
+              <button v-if="!r.reverted" class="icon-btn icon-btn--danger" @click="doRevertRecord(r.id)">撤销</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </UiCard>
 
     <!-- 新建画廊弹窗 -->
     <div v-if="showCreateDialog" class="dialog-overlay" @click.self="showCreateDialog = false">
@@ -172,10 +252,11 @@ import UiCard from '../components/ui/UiCard.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import UiAlert from '../components/ui/UiAlert.vue'
 import SvgIcon from '../components/icons/SvgIcon.vue'
-import type { GalleryDTO, GalleryPic } from '../api/types'
+import type { GalleryDTO, GalleryPic, GalleryUploadRecord } from '../api/types'
 import {
   listGalleries, createGallery, deleteGallery, updateGallery,
   listGalleryPics, deleteGalleryPic, uploadGalleryPic,
+  listGalleryUploadRecords, revertGalleryUploadRecord,
   galleryPicThumbUrl, galleryPicImageUrl,
 } from '../api/client'
 
@@ -191,6 +272,16 @@ const newGalleryName = ref('')
 const previewPic = ref<GalleryPic | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const showCommands = ref(true)
+
+// 分群覆盖模式
+interface GroupModeRow { gid: string; mode: string }
+const groupModeRows = ref<GroupModeRow[]>([])
+const savingGroupModes = ref(false)
+
+// 上传记录
+const uploadRecords = ref<GalleryUploadRecord[]>([])
+const loadingRecords = ref(false)
+const recFilters = ref({ user_id: '', group_id: '', gallery: '' })
 
 const thumbUrl = galleryPicThumbUrl
 const imageUrl = galleryPicImageUrl
@@ -215,7 +306,10 @@ async function reload() {
   }
 }
 
-onMounted(reload)
+onMounted(() => {
+  reload()
+  loadUploadRecords()
+})
 
 async function doCreate() {
   if (!newGalleryName.value.trim()) return
@@ -269,13 +363,78 @@ async function openGallery(g: GalleryDTO) {
   selectedGallery.value = g
   pics.value = []
   picTotal.value = 0
+  // 加载该画廊的分群覆盖
+  groupModeRows.value = Object.entries(g.group_modes || {}).map(([gid, mode]) => ({ gid, mode }))
   await loadPics(0)
 }
 
 function closeGallery() {
   selectedGallery.value = null
   pics.value = []
+  groupModeRows.value = []
   reload()
+}
+
+function addGroupModeRow() {
+  groupModeRows.value.push({ gid: '', mode: 'view' })
+}
+
+async function saveGroupModes() {
+  if (!selectedGallery.value) return
+  // 校验 + 收集
+  const out: Record<string, string> = {}
+  for (const row of groupModeRows.value) {
+    const gid = row.gid.trim()
+    if (!gid) continue
+    if (!/^\d+$/.test(gid)) {
+      error.value = `群号 "${gid}" 无效，必须为正整数`
+      return
+    }
+    out[gid] = row.mode
+  }
+  savingGroupModes.value = true
+  error.value = ''
+  try {
+    await updateGallery(selectedGallery.value.name, { group_modes: out })
+    selectedGallery.value.group_modes = out
+    flash('分群覆盖已保存')
+  } catch (e: any) {
+    error.value = e.response?.data?.message || e.message
+  } finally {
+    savingGroupModes.value = false
+  }
+}
+
+async function loadUploadRecords() {
+  loadingRecords.value = true
+  error.value = ''
+  try {
+    const params: any = { limit: 200 }
+    if (recFilters.value.user_id.trim()) params.user_id = Number(recFilters.value.user_id.trim())
+    if (recFilters.value.group_id.trim()) params.group_id = Number(recFilters.value.group_id.trim())
+    if (recFilters.value.gallery.trim()) params.gallery = recFilters.value.gallery.trim()
+    const data = await listGalleryUploadRecords(params)
+    uploadRecords.value = data.records || []
+  } catch (e: any) {
+    error.value = e.response?.data?.message || e.message
+  } finally {
+    loadingRecords.value = false
+  }
+}
+
+async function doRevertRecord(id: number) {
+  if (!confirm(`确定要撤销上传记录 #${id} 吗？这将删除其中所有图片。`)) return
+  loadingRecords.value = true
+  error.value = ''
+  try {
+    await revertGalleryUploadRecord(id)
+    flash(`已撤销上传 #${id}`)
+    await loadUploadRecords()
+  } catch (e: any) {
+    error.value = e.response?.data?.message || e.message
+  } finally {
+    loadingRecords.value = false
+  }
 }
 
 async function loadPics(offset: number) {
@@ -651,5 +810,76 @@ async function handleUpload(e: Event) {
   border-left: 3px solid var(--primary, #ec4899);
   background: var(--bg-secondary, #f8fafc);
   border-radius: 0 0.4rem 0.4rem 0;
+}
+
+/* 分群覆盖模式 */
+.gm-table,
+.rec-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+.gm-table th,
+.gm-table td,
+.rec-table th,
+.rec-table td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.gm-table th,
+.rec-table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gm-table input,
+.gm-table select,
+.rec-filters input {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 0.35rem;
+  font-size: 0.85rem;
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary);
+}
+.rec-filters {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rec-filters input {
+  flex: 1 1 160px;
+  max-width: 220px;
+}
+.rec-pids {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  max-width: 240px;
+}
+.rec-reverted {
+  opacity: 0.55;
+}
+.badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.3rem;
+}
+.badge--ok {
+  background: #dcfce7;
+  color: #166534;
+}
+.badge--muted {
+  background: #f1f5f9;
+  color: #64748b;
 }
 </style>

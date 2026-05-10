@@ -20,6 +20,7 @@ import type {
 	FilterStatus,
 	GalleryDTO,
 	GalleryPic,
+	GalleryUploadRecord,
 	GroupRecentCommandsResponse,
 	GroupRow,
 	HealthResponse,
@@ -880,8 +881,35 @@ export async function deleteGallery(name: string) {
 	return data
 }
 
-export async function updateGallery(name: string, payload: { mode?: string; add_alias?: string; del_alias?: string; cover_pid?: number }) {
+export async function updateGallery(name: string, payload: {
+	mode?: string;
+	add_alias?: string;
+	del_alias?: string;
+	cover_pid?: number;
+	group_modes?: Record<string, string>;
+}) {
 	const { data } = await api.put<{ ok: boolean }>(`/plugins/gallery/galleries/${encodeURIComponent(name)}`, payload)
+	return data
+}
+
+export async function listGalleryUploadRecords(params: {
+	user_id?: number;
+	group_id?: number;
+	gallery?: string;
+	offset?: number;
+	limit?: number;
+} = {}) {
+	const { data } = await api.get<{ records: GalleryUploadRecord[]; total: number }>(
+		'/plugins/gallery/upload-records',
+		{ params },
+	)
+	return data
+}
+
+export async function revertGalleryUploadRecord(id: number) {
+	const { data } = await api.post<{ ok: boolean; deleted: number[]; failed: number[] }>(
+		`/plugins/gallery/upload-records/${id}/revert`,
+	)
 	return data
 }
 

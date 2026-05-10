@@ -854,6 +854,7 @@ export interface FilterImportYAMLResponse {
 export interface GalleryDTO {
 	name: string;
 	mode: string;
+	group_modes: Record<string, string>; // {"<groupID>": "edit|view|off"}
 	aliases: string[];
 	cover_pid: number;
 	pic_count: number;
@@ -866,4 +867,14 @@ export interface GalleryPic {
 	Hash1: string;
 	Hash2: string;
 	ThumbPath: string;
+}
+
+export interface GalleryUploadRecord {
+	id: number;
+	user_id: number;
+	group_id: number;
+	gall_name: string;
+	pids: number[];
+	reverted: boolean;
+	created_at: string;
 }

@@ -156,8 +156,8 @@ func (p *pluginImpl) handlePick(ctx *zero.Ctx) {
 				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"不存在", gallName)))
 				return
 			}
-			if g.Mode == "off" && !isSuperUser(ctx) {
-				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"已关闭", gallName)))
+			if p.mgr.EffectiveMode(g, ctx.Event.GroupID) == "off" && !isSuperUser(ctx) {
+				ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"在本群已关闭", gallName)))
 				return
 			}
 			pic, err := p.mgr.FindPicByNegativeIndex(g.Name, -n)
@@ -190,8 +190,8 @@ func (p *pluginImpl) handlePick(ctx *zero.Ctx) {
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"不存在", name)))
 		return
 	}
-	if g.Mode == "off" && !isSuperUser(ctx) {
-		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"已关闭", name)))
+	if p.mgr.EffectiveMode(g, ctx.Event.GroupID) == "off" && !isSuperUser(ctx) {
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"在本群已关闭", name)))
 		return
 	}
 
@@ -238,8 +238,8 @@ func (p *pluginImpl) handleList(ctx *zero.Ctx) {
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"不存在", name)))
 		return
 	}
-	if g.Mode == "off" && !isSuperUser(ctx) {
-		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"已关闭", name)))
+	if p.mgr.EffectiveMode(g, ctx.Event.GroupID) == "off" && !isSuperUser(ctx) {
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"在本群已关闭", name)))
 		return
 	}
 	pics, _ := p.mgr.ListPics(g.Name, 0, 0)
@@ -272,12 +272,13 @@ func (p *pluginImpl) handleAdd(ctx *zero.Ctx) {
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"不存在", name)))
 		return
 	}
-	if g.Mode != "edit" && !isSuperUser(ctx) {
-		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"不允许上传图片", name)))
+	effMode := p.mgr.EffectiveMode(g, ctx.Event.GroupID)
+	if effMode != "edit" && !isSuperUser(ctx) {
+		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(fmt.Sprintf("画廊\"%s\"在本群不允许上传图片（当前模式: %s）", name, effMode)))
 		return
 	}
 
-	imageURLs := extractImageURLs(ctx.Event.Message)
+	imageURLs := collectImageURLs(ctx)
 	if len(imageURLs) == 0 {
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text("请附加要上传的图片（可回复包含图片的消息）"))
 		return
@@ -302,7 +303,7 @@ func (p *pluginImpl) handleAdd(ctx *zero.Ctx) {
 
 	var hid uint
 	if len(okList) > 0 {
-		hid, _ = p.mgr.AddUploadRecord(ctx.Event.UserID, okList)
+		hid, _ = p.mgr.AddUploadRecord(ctx.Event.UserID, ctx.Event.GroupID, g.Name, okList)
 	}
 
 	msg := ""
@@ -312,6 +313,9 @@ func (p *pluginImpl) handleAdd(ctx *zero.Ctx) {
 	msg += fmt.Sprintf("成功上传%d/%d张图片到\"%s\"", len(okList), len(imageURLs), g.Name)
 	if len(errMsgs) > 0 {
 		msg += "\n" + strings.Join(errMsgs, "\n")
+	}
+	if len(okList) > 0 {
+		msg += fmt.Sprintf("\n⚠ 请勿上传违规内容，你的QQ号(%d)已被记录。如需撤回请发送 /取消上传", ctx.Event.UserID)
 	}
 	ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(msg))
 }
@@ -479,7 +483,7 @@ func (p *pluginImpl) handleReplace(ctx *zero.Ctx) {
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text("使用方式: /gall replace pid"))
 		return
 	}
-	imageURLs := extractImageURLs(ctx.Event.Message)
+	imageURLs := collectImageURLs(ctx)
 	if len(imageURLs) == 0 {
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text("请附加要替换的图片"))
 		return
@@ -604,6 +608,36 @@ func extractImageURLs(msg message.Message) []string {
 		}
 	}
 	return urls
+}
+
+// collectImageURLs 从当前消息提取图片 url；若当前消息无图片但存在 reply 段，
+// 则调用 OneBot get_msg API 取被回复消息中的图片。
+func collectImageURLs(ctx *zero.Ctx) []string {
+	if urls := extractImageURLs(ctx.Event.Message); len(urls) > 0 {
+		return urls
+	}
+	// 找 reply 段
+	for _, seg := range ctx.Event.Message {
+		if seg.Type != "reply" {
+			continue
+		}
+		idStr, ok := seg.Data["id"]
+		if !ok || idStr == "" {
+			continue
+		}
+		mid, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			continue
+		}
+		replied := ctx.GetMessage(mid)
+		if replied.Elements == nil {
+			continue
+		}
+		if urls := extractImageURLs(replied.Elements); len(urls) > 0 {
+			return urls
+		}
+	}
+	return nil
 }
 
 func downloadImage(url string) (string, error) {

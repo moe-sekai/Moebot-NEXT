@@ -134,6 +134,18 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 		_ = filterMgr.Reload(ctx.Ctx)
 	}
 
+	// 旧表迁移：早期版本 GORM 默认将 PID 字段映射成 p_id 列，导致后续手写
+	// SQL（Where/Order 用 "pid"）全部报 "no such column: pid"。
+	// 在 AutoMigrate 之前先把 p_id 列改名为 pid（仅当 pid 列不存在时执行）。
+	mig := db.DB.Migrator()
+	if mig.HasTable(&GalleryPic{}) && mig.HasColumn(&GalleryPic{}, "p_id") && !mig.HasColumn(&GalleryPic{}, "pid") {
+		if err := mig.RenameColumn(&GalleryPic{}, "p_id", "pid"); err != nil {
+			log.Warn().Err(err).Msg("[gallery] 迁移 gallery_pics.p_id -> pid 失败")
+		} else {
+			log.Info().Msg("[gallery] 已将旧表 gallery_pics.p_id 重命名为 pid")
+		}
+	}
+
 	// AutoMigrate 画廊表
 	if err := db.DB.AutoMigrate(&GalleryInfo{}, &GalleryPic{}, &GalleryUploadRecord{}); err != nil {
 		return err
