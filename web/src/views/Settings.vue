@@ -315,7 +315,8 @@
             </div>
             <div class="settings-actions-row">
               <UiButton variant="outline" size="sm" :loading="thumbnailCacheLoading" @click="() => refreshThumbnailCacheStatus()">刷新状态</UiButton>
-              <UiButton size="sm" :loading="thumbnailPreloadButtonLoading" :disabled="!config?.renderer.cache.enabled" @click="preloadCardThumbnails">预载卡牌缩略图</UiButton>
+              <UiButton size="sm" :loading="thumbnailPreloadButtonLoading" :disabled="!config?.renderer.cache.enabled" @click="() => preloadCardThumbnails(false)">预载卡牌缩略图</UiButton>
+              <UiButton variant="outline" size="sm" :loading="thumbnailPreloadButtonLoading" :disabled="!config?.renderer.cache.enabled" @click="() => preloadCardThumbnails(true)" title="忽略已有缓存，强制重新下载并重新生成所有合成 SVG">重新预载</UiButton>
             </div>
           </div>
         </UiCard>
@@ -864,15 +865,16 @@ async function refreshThumbnailCacheStatus(silent = false) {
 	}
 }
 
-async function preloadCardThumbnails() {
+async function preloadCardThumbnails(force = false) {
 	clearThumbnailCachePoll();
 	thumbnailCachePreloading.value = true;
 	error.value = "";
 	success.value = "";
 	try {
-		const status = await preloadRendererCardThumbnails(thumbnailCacheRegion.value);
+		const status = await preloadRendererCardThumbnails(thumbnailCacheRegion.value, force);
 		thumbnailCache.value = status;
-		success.value = `${status.region_label} 卡牌缩略图预载已启动：${status.cached}/${status.total} 已缓存。`;
+		const label = force ? "强制重新预载" : "预载";
+		success.value = `${status.region_label} 卡牌缩略图${label}已启动：${status.cached}/${status.total} 已缓存。`;
 		scheduleThumbnailCachePoll();
 	} catch (err) {
 		error.value = getErrorMessage(err, "启动卡牌缩略图预载失败。");

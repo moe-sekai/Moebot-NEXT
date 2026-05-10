@@ -192,11 +192,14 @@ export async function getRendererCardThumbnailCacheStatus(region?: string) {
 	return data;
 }
 
-export async function preloadRendererCardThumbnails(region?: string) {
+export async function preloadRendererCardThumbnails(region?: string, force = false) {
+	const params: Record<string, string | boolean> = {};
+	if (region) params.region = region;
+	if (force) params.force = true;
 	const { data } = await api.post<RendererCardThumbnailCacheStatus>(
 		"/renderer/cache/card-thumbnails/preload",
 		null,
-		{ params: region ? { region } : undefined, timeout: 0 },
+		{ params: Object.keys(params).length > 0 ? params : undefined, timeout: 0 },
 	);
 	return data;
 }

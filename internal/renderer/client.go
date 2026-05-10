@@ -296,13 +296,14 @@ func (c *Client) RenderChartURLWithTrace(chartURL string, width int) (*PreviewRe
 
 // StartCardThumbnailPreload asks the renderer service to preload card thumbnail URLs in the background.
 func (c *Client) StartCardThumbnailPreload(urls []string) (*AssetPreloadStatus, error) {
-	return c.StartCardThumbnailPreloadWithCards(urls, nil)
+	return c.StartCardThumbnailPreloadWithCards(urls, nil, false)
 }
 
 // StartCardThumbnailPreloadWithCards preloads source images and renderer-side precomposited card tiles.
-func (c *Client) StartCardThumbnailPreloadWithCards(urls []string, cards []CardThumbnailPreloadCard) (*AssetPreloadStatus, error) {
+// When force is true, all URLs/composites are re-fetched and re-generated even if already cached.
+func (c *Client) StartCardThumbnailPreloadWithCards(urls []string, cards []CardThumbnailPreloadCard, force bool) (*AssetPreloadStatus, error) {
 	var result AssetPreloadStatus
-	err := c.postJSON("/cache/card-thumbnails/preload", assetPreloadRequest{URLs: urls, Cards: cards}, &result)
+	err := c.postJSON("/cache/card-thumbnails/preload", assetPreloadRequest{URLs: urls, Cards: cards, Force: force}, &result)
 	return &result, err
 }
 

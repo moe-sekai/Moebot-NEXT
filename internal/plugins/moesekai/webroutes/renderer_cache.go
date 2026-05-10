@@ -60,9 +60,10 @@ func (h *rendererCacheHandlers) preload(c *fiber.Ctx) error {
 	if h.d.Renderer == nil {
 		return fiber.NewError(fiber.StatusServiceUnavailable, "Renderer client is not configured")
 	}
+	force := c.QueryBool("force", false)
 	startedAt := time.Now()
-	log.Info().Str("region", target.Region).Int("urls", len(urls)).Int("composites", len(cards)).Msg("Starting renderer card thumbnail preload")
-	status, err := h.d.Renderer.StartCardThumbnailPreloadWithCards(urls, cards)
+	log.Info().Str("region", target.Region).Int("urls", len(urls)).Int("composites", len(cards)).Bool("force", force).Msg("Starting renderer card thumbnail preload")
+	status, err := h.d.Renderer.StartCardThumbnailPreloadWithCards(urls, cards, force)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadGateway, err.Error())
 	}
