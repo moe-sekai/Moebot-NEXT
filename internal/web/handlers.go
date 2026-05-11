@@ -180,6 +180,57 @@ func (s *Server) handleRenderCacheClear(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"ok": true, "message": "渲染缓存已清空", "stats": stats})
 }
 
+// handleRendererBudgetStats returns the renderer's current concurrency budget
+// stats (in-flight, queued, completed, etc).
+func (s *Server) handleRendererBudgetStats(c *fiber.Ctx) error {
+	if s.Renderer == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "Renderer client is not configured")
+	}
+	stats, err := s.Renderer.GetBudgetStats()
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadGateway, err.Error())
+	}
+	return c.JSON(stats)
+}
+
+// handleRendererBudgetUpdate updates the renderer concurrency budget at
+// runtime. Persists the new values to the YAML config so they survive
+// restart.
+func (s *Server) handleRendererBudgetUpdate(c *fiber.Ctx) error {
+	if s.Renderer == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "Renderer client is not configured")
+	}
+	var payload rendererBudgetSettingsRequest
+	if err := c.BodyParser(&payload); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid payload: "+err.Error())
+	}
+	if payload.MaxConcurrency == nil && payload.QueueLimit == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "至少需要提供 max_concurrency 或 queue_limit")
+	}
+	next := s.Config.Renderer.Budget
+	if payload.MaxConcurrency != nil {
+		if *payload.MaxConcurrency <= 0 {
+			return fiber.NewError(fiber.StatusBadRequest, "渲染并发数必须大于 0")
+		}
+		next.MaxConcurrency = *payload.MaxConcurrency
+	}
+	if payload.QueueLimit != nil {
+		if *payload.QueueLimit < 0 {
+			return fiber.NewError(fiber.StatusBadRequest, "渲染队列上限不能为负数")
+		}
+		next.QueueLimit = *payload.QueueLimit
+	}
+	stats, err := s.Renderer.SetBudget(next)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadGateway, err.Error())
+	}
+	s.Config.Renderer.Budget = next
+	if err := config.Save(s.Config, s.ConfigPath); err != nil {
+		log.Warn().Err(err).Msg("Failed to persist render budget to config file")
+	}
+	return c.JSON(fiber.Map{"ok": true, "message": "渲染并发预算已更新", "stats": stats})
+}
+
 // handleRenderCacheConfig updates render-cache size limits at runtime.
 func (s *Server) handleRenderCacheConfig(c *fiber.Ctx) error {
 	if s.Renderer == nil {
@@ -314,9 +365,15 @@ type serverSettingsRequest struct {
 }
 
 type rendererSettingsRequest struct {
-	Precision      *float64                     `json:"precision"`
-	ChartPrecision *float64                     `json:"chart_precision"`
-	Fonts          *rendererFontSettingsRequest `json:"fonts"`
+	Precision      *float64                       `json:"precision"`
+	ChartPrecision *float64                       `json:"chart_precision"`
+	Fonts          *rendererFontSettingsRequest   `json:"fonts"`
+	Budget         *rendererBudgetSettingsRequest `json:"budget"`
+}
+
+type rendererBudgetSettingsRequest struct {
+	MaxConcurrency *int `json:"max_concurrency"`
+	QueueLimit     *int `json:"queue_limit"`
 }
 
 type rendererFontSettingsRequest struct {
@@ -594,6 +651,20 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 				next.Renderer.Fonts.ScoreFamily = strings.TrimSpace(*req.Renderer.Fonts.ScoreFamily)
 			}
 		}
+		if req.Renderer.Budget != nil {
+			if req.Renderer.Budget.MaxConcurrency != nil {
+				if *req.Renderer.Budget.MaxConcurrency <= 0 {
+					return fiber.NewError(fiber.StatusBadRequest, "渲染并发数必须大于 0")
+				}
+				next.Renderer.Budget.MaxConcurrency = *req.Renderer.Budget.MaxConcurrency
+			}
+			if req.Renderer.Budget.QueueLimit != nil {
+				if *req.Renderer.Budget.QueueLimit < 0 {
+					return fiber.NewError(fiber.StatusBadRequest, "渲染队列上限不能为负数")
+				}
+				next.Renderer.Budget.QueueLimit = *req.Renderer.Budget.QueueLimit
+			}
+		}
 	}
 
 	config.NormalizeConfig(&next)
@@ -608,6 +679,9 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 		s.Renderer.SetChartPrecision(s.Config.Renderer.ChartPrecision)
 		if err := s.Renderer.SetFonts(s.Config.Renderer.Fonts); err != nil {
 			log.Warn().Err(err).Msg("Failed to push font preferences to renderer; will apply on next restart")
+		}
+		if _, err := s.Renderer.SetBudget(s.Config.Renderer.Budget); err != nil {
+			log.Warn().Err(err).Msg("Failed to push render budget to renderer; will apply on next restart")
 		}
 	}
 	if s.Servers != nil {
@@ -853,6 +927,10 @@ func (s *Server) publicConfigMap() fiber.Map {
 				"path":        s.Config.Renderer.Cache.Path,
 				"max_size_mb": s.Config.Renderer.Cache.MaxSizeMB,
 				"ttl_hours":   s.Config.Renderer.Cache.TTLHours,
+			},
+			"budget": fiber.Map{
+				"max_concurrency": s.Config.Renderer.Budget.MaxConcurrency,
+				"queue_limit":     s.Config.Renderer.Budget.QueueLimit,
 			},
 		},
 		"assets": assetMap,

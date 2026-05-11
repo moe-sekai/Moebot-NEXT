@@ -151,13 +151,27 @@ type B30Config struct {
 
 // RendererConfig holds the Bun renderer service settings.
 type RendererConfig struct {
-	Host           string             `yaml:"host"`            // renderer listen host
-	Port           int                `yaml:"port"`            // renderer listen port
-	Precision      float64            `yaml:"precision"`       // SVG -> PNG render scale
-	ChartPrecision float64            `yaml:"chart_precision"` // chart SVG -> PNG render scale
-	Cache          CacheConfig        `yaml:"cache"`
-	Fonts          RendererFontConfig `yaml:"fonts"`
+	Host           string               `yaml:"host"`            // renderer listen host
+	Port           int                  `yaml:"port"`            // renderer listen port
+	Precision      float64              `yaml:"precision"`       // SVG -> PNG render scale
+	ChartPrecision float64              `yaml:"chart_precision"` // chart SVG -> PNG render scale
+	Cache          CacheConfig          `yaml:"cache"`
+	Fonts          RendererFontConfig   `yaml:"fonts"`
+	Budget         RendererBudgetConfig `yaml:"budget"`
 }
+
+// RendererBudgetConfig 限制 Bun 渲染服务的并发量，避免在低内存机器上 OOM。
+//   - MaxConcurrency：同时进行的渲染请求数；<=0 时使用默认 2。
+//   - QueueLimit：等待中的请求数上限；超过直接 503，<0 视为 0（不允许排队）。
+type RendererBudgetConfig struct {
+	MaxConcurrency int `yaml:"max_concurrency"`
+	QueueLimit     int `yaml:"queue_limit"`
+}
+
+const (
+	DefaultRendererMaxConcurrency = 2
+	DefaultRendererQueueLimit     = 8
+)
 
 // RendererFontConfig holds the user-selected primary font family names for renderer text.
 // Empty values mean "use renderer defaults".
@@ -261,6 +275,10 @@ func DefaultConfig() *Config {
 				Path:      "./data/cache",
 				MaxSizeMB: 0,
 				TTLHours:  0,
+			},
+			Budget: RendererBudgetConfig{
+				MaxConcurrency: DefaultRendererMaxConcurrency,
+				QueueLimit:     DefaultRendererQueueLimit,
 			},
 		},
 		Assets: AssetsConfig{

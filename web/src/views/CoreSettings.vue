@@ -213,6 +213,61 @@
         </div>
       </div>
 
+      <!-- 渲染并发预算（防 OOM / 调度多核） -->
+      <div class="renderer-subpanel">
+        <div class="renderer-subpanel__header">
+          <div>
+            <strong>渲染并发预算</strong>
+            <span>限制同时进行的渲染数和等待队列。低内存机器请保守，超过队列上限直接 503。</span>
+          </div>
+          <UiBadge :variant="budgetStats ? 'success' : 'outline'">
+            {{ budgetStats ? `运行 ${budgetStats.inFlight}/${budgetStats.maxConcurrency} · 排队 ${budgetStats.queued}/${budgetStats.queueLimit}` : '未加载' }}
+          </UiBadge>
+        </div>
+        <div v-if="budgetStats" class="renderer-meta">
+          <span>已完成 {{ budgetStats.completed }} · 拒绝 {{ budgetStats.rejected }} · 平均等待 {{ budgetStats.avgWaitMs }}ms</span>
+          <span>峰值并发 {{ budgetStats.peakInFlight }} · 峰值队列 {{ budgetStats.peakQueued }}</span>
+        </div>
+        <div class="renderer-form">
+          <label class="renderer-field">
+            <span>最大并发渲染数</span>
+            <input
+              v-model.number="budgetForm.maxConcurrency"
+              class="ui-textarea"
+              type="number"
+              min="1"
+              :max="budgetStats?.limits.hardMaxConcurrency ?? 64"
+              step="1"
+            />
+          </label>
+          <label class="renderer-field">
+            <span>排队上限</span>
+            <input
+              v-model.number="budgetForm.queueLimit"
+              class="ui-textarea"
+              type="number"
+              min="0"
+              :max="budgetStats?.limits.hardMaxQueue ?? 1024"
+              step="1"
+            />
+          </label>
+          <div class="renderer-field renderer-field--readonly renderer-field--full">
+            <span>建议</span>
+            <strong>
+              16G 灵车建议并发 1-2、队列 4-8；CPU 充裕时可调到 3-4。超出队列直接 503，避免雪崩。
+              范围：并发 1–{{ budgetStats?.limits.hardMaxConcurrency ?? 64 }} · 队列 0–{{ budgetStats?.limits.hardMaxQueue ?? 1024 }}
+            </strong>
+          </div>
+        </div>
+        <div class="super-foot">
+          <span class="hint">保存后即时生效，并写入配置文件。</span>
+          <div class="renderer-actions">
+            <UiButton variant="outline" size="sm" :loading="budgetLoading" @click="() => refreshBudgetStats()">刷新</UiButton>
+            <UiButton size="sm" :loading="budgetSaving" @click="saveBudget">保存并发预算</UiButton>
+          </div>
+        </div>
+      </div>
+
       <div class="super-foot" style="margin-top: 16px;">
         <span class="hint">保存后立即生效；字体目录变化需重启 Bun 进程。</span>
         <UiButton variant="default" size="sm" :loading="rendererSaving" :disabled="!rendererDirty" @click="saveRendererSettings">保存渲染设置</UiButton>
@@ -294,15 +349,17 @@ import {
   clearRenderCache as apiClearRenderCache,
   getPublicConfig,
   getRenderCacheStats,
+  getRendererBudgetStats,
   getRendererFonts,
   getStatus,
   listPlugins,
   updatePublicConfig,
   updateRenderCacheConfig,
+  updateRendererBudget,
   type PluginListItem,
 } from '../api/client'
 import { useAuthStore } from '../stores/auth'
-import type { PublicConfig, RenderCacheStats, RendererFontsResponse, RuntimeStatus } from '../api/types'
+import type { PublicConfig, RenderCacheStats, RendererBudgetStats, RendererFontsResponse, RuntimeStatus } from '../api/types'
 import PageHeader from '../components/PageHeader.vue'
 import UiAlert from '../components/ui/UiAlert.vue'
 import UiBadge from '../components/ui/UiBadge.vue'
@@ -397,6 +454,13 @@ const renderCacheClearing = ref(false)
 const renderCacheSaving = ref(false)
 const renderCacheForm = reactive({ maxBytesMB: 256, maxEntries: 1024 })
 
+// 渲染并发预算（防 OOM）：低内存机器把 max_concurrency 调到 1-2，
+// queue_limit 是排队上限，超出会直接 503 让 Bot 回错而不是把进程打挂。
+const budgetStats = ref<RendererBudgetStats | null>(null)
+const budgetLoading = ref(false)
+const budgetSaving = ref(false)
+const budgetForm = reactive({ maxConcurrency: 2, queueLimit: 8 })
+
 async function loadRendererConfig() {
   try {
     const cfg = await getPublicConfig()
@@ -405,6 +469,10 @@ async function loadRendererConfig() {
     rendererForm.chart_precision = cfg.renderer.chart_precision || 4
     rendererForm.fonts.body_family = cfg.renderer.fonts?.body_family ?? ''
     rendererForm.fonts.score_family = cfg.renderer.fonts?.score_family ?? ''
+    if (cfg.renderer.budget) {
+      budgetForm.maxConcurrency = cfg.renderer.budget.max_concurrency || 2
+      budgetForm.queueLimit = cfg.renderer.budget.queue_limit ?? 8
+    }
     rendererFormOriginal.value = JSON.stringify(rendererForm)
   } catch (err) {
     rendererError.value = err instanceof Error ? err.message : '加载渲染配置失败。'
@@ -482,6 +550,42 @@ async function clearRenderCacheAction() {
   }
 }
 
+async function refreshBudgetStats(silent = false) {
+  budgetLoading.value = true
+  try {
+    const stats = await getRendererBudgetStats()
+    budgetStats.value = stats
+    if (stats.maxConcurrency > 0) budgetForm.maxConcurrency = stats.maxConcurrency
+    if (stats.queueLimit >= 0) budgetForm.queueLimit = stats.queueLimit
+  } catch (err) {
+    if (!silent) rendererError.value = err instanceof Error ? err.message : '获取渲染并发预算失败。'
+  } finally {
+    budgetLoading.value = false
+  }
+}
+
+async function saveBudget() {
+  budgetSaving.value = true
+  rendererError.value = ''
+  rendererSuccess.value = ''
+  try {
+    const maxConcurrency = Math.max(1, Math.round(budgetForm.maxConcurrency))
+    const queueLimit = Math.max(0, Math.round(budgetForm.queueLimit))
+    const resp = await updateRendererBudget({
+      max_concurrency: maxConcurrency,
+      queue_limit: queueLimit,
+    })
+    budgetStats.value = resp.stats
+    budgetForm.maxConcurrency = resp.stats.maxConcurrency
+    budgetForm.queueLimit = resp.stats.queueLimit
+    rendererSuccess.value = resp.message || '渲染并发预算已更新并立即生效。'
+  } catch (err) {
+    rendererError.value = err instanceof Error ? err.message : '更新渲染并发预算失败。'
+  } finally {
+    budgetSaving.value = false
+  }
+}
+
 async function saveRenderCacheConfig() {
   if (!renderCache.value) return
   renderCacheSaving.value = true
@@ -521,6 +625,7 @@ onMounted(() => {
   void loadRendererConfig()
   void loadFontsInfo()
   void refreshRenderCacheStats(true)
+  void refreshBudgetStats(true)
 })
 
 async function loadBot() {

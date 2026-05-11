@@ -31,6 +31,7 @@ type Client struct {
 	chartPrecision float64
 	cache          config.CacheConfig
 	fonts          config.RendererFontConfig
+	budget         config.RendererBudgetConfig
 
 	// deckRecommendSnapshotMu guards the per-region versions of master /
 	// musicMetas snapshots we have already pushed to the Bun renderer.
@@ -152,10 +153,21 @@ func New(cfg config.RendererConfig) *Client {
 		chartPrecision: chartPrecision,
 		cache:          cfg.Cache,
 		fonts:          cfg.Fonts,
+		budget:         normalizeBudget(cfg.Budget),
 		httpClient: &http.Client{
 			Timeout: defaultRendererRequestTimeout,
 		},
 	}
+}
+
+func normalizeBudget(b config.RendererBudgetConfig) config.RendererBudgetConfig {
+	if b.MaxConcurrency <= 0 {
+		b.MaxConcurrency = config.DefaultRendererMaxConcurrency
+	}
+	if b.QueueLimit < 0 {
+		b.QueueLimit = config.DefaultRendererQueueLimit
+	}
+	return b
 }
 
 // StartProcess starts the Bun renderer as a child process.
@@ -175,6 +187,7 @@ func (c *Client) StartProcess(rendererDir string, port int) error {
 	)
 	cmd.Env = append(cmd.Env, rendererCacheEnv(c.cache)...)
 	cmd.Env = append(cmd.Env, rendererFontEnv(c.fonts)...)
+	cmd.Env = append(cmd.Env, rendererBudgetEnv(c.budget)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -786,6 +799,98 @@ func (c *Client) SetFonts(fonts config.RendererFontConfig) error {
 // Fonts returns the currently cached font preferences.
 func (c *Client) Fonts() config.RendererFontConfig {
 	return c.fonts
+}
+
+// BudgetStats 是 Bun 渲染服务返回的并发预算运行时统计。
+type BudgetStats struct {
+	OK             bool `json:"ok"`
+	MaxConcurrency int  `json:"maxConcurrency"`
+	QueueLimit     int  `json:"queueLimit"`
+	InFlight       int  `json:"inFlight"`
+	Queued         int  `json:"queued"`
+	Completed      int  `json:"completed"`
+	Rejected       int  `json:"rejected"`
+	AvgWaitMs      int  `json:"avgWaitMs"`
+	PeakInFlight   int  `json:"peakInFlight"`
+	PeakQueued     int  `json:"peakQueued"`
+	Limits         struct {
+		HardMaxConcurrency int `json:"hardMaxConcurrency"`
+		HardMaxQueue       int `json:"hardMaxQueue"`
+	} `json:"limits"`
+	Message string `json:"message,omitempty"`
+}
+
+// GetBudgetStats 拉取 Bun 渲染服务当前的并发预算 / 运行时统计。
+func (c *Client) GetBudgetStats() (*BudgetStats, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/budget")
+	if err != nil {
+		return nil, fmt.Errorf("budget stats request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	var stats BudgetStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("decode budget stats: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		msg := stats.Message
+		if msg == "" {
+			msg = fmt.Sprintf("renderer returned %d", resp.StatusCode)
+		}
+		return &stats, fmt.Errorf("renderer rejected budget query: %s", msg)
+	}
+	return &stats, nil
+}
+
+// SetBudget 同时更新缓存的预算配置（用于下次进程重启）并热更新 Bun 渲染服务。
+// QueueLimit < 0 表示不修改；MaxConcurrency <= 0 表示不修改。
+func (c *Client) SetBudget(b config.RendererBudgetConfig) (*BudgetStats, error) {
+	c.budget = normalizeBudget(b)
+	payload := map[string]int{
+		"maxConcurrency": c.budget.MaxConcurrency,
+		"queueLimit":     c.budget.QueueLimit,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal budget request: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPut, c.baseURL+"/budget", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build budget request: %w", err)
+	}
+	req.Header.Set("content-type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("budget update request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	var stats BudgetStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("decode budget update response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK || !stats.OK {
+		msg := stats.Message
+		if msg == "" {
+			msg = fmt.Sprintf("renderer returned %d", resp.StatusCode)
+		}
+		return &stats, fmt.Errorf("renderer rejected budget update: %s", msg)
+	}
+	return &stats, nil
+}
+
+// Budget returns the currently cached budget configuration.
+func (c *Client) Budget() config.RendererBudgetConfig {
+	return c.budget
+}
+
+func rendererBudgetEnv(b config.RendererBudgetConfig) []string {
+	env := []string{}
+	if b.MaxConcurrency > 0 {
+		env = append(env, fmt.Sprintf("RENDER_MAX_CONCURRENCY=%d", b.MaxConcurrency))
+	}
+	if b.QueueLimit >= 0 {
+		env = append(env, fmt.Sprintf("RENDER_QUEUE_LIMIT=%d", b.QueueLimit))
+	}
+	return env
 }
 
 func rendererFontEnv(fonts config.RendererFontConfig) []string {

@@ -12,6 +12,12 @@ import {
 import { setDeployer, getDeployer } from "./deployer";
 import { renderWithTrace } from "./engine";
 import { getCachedRender, setCachedRender, renderCacheStats, clearRenderCache, updateRenderCacheConfig } from "./render-cache";
+import {
+	BudgetRejectedError,
+	configureRenderBudget,
+	getRenderBudgetStats,
+	runWithBudget,
+} from "./render-budget";
 import { loadFonts, FONT_FAMILY, defaultFontFamily, scoreFontFamily, setFontPreferences, fontPreferences } from "./fonts";
 import { renderChartSvg } from "./chart-svg-renderer";
 import { preloadFixedChartNoteAssets } from "./svg-assets";
@@ -69,6 +75,30 @@ interface ChartRenderRequest {
 
 const port = Number(process.env.PORT ?? 13001);
 const defaultPrecision = parsePositiveNumber(process.env.RENDER_PRECISION, 1.5);
+
+// 渲染并发预算：保护 16G 灵车不被几张大图同时打 OOM。
+// 默认很保守，可由 Go 端 / 控制台前端通过 PUT /budget 调整。
+configureRenderBudget({
+	maxConcurrency: parsePositiveNumber(process.env.RENDER_MAX_CONCURRENCY, 2),
+	queueLimit: Number.isFinite(Number(process.env.RENDER_QUEUE_LIMIT))
+		? Math.max(0, Math.floor(Number(process.env.RENDER_QUEUE_LIMIT)))
+		: 8,
+});
+
+function budgetRejectionResponse(error: unknown): Response | null {
+	if (error instanceof BudgetRejectedError) {
+		const stats = getRenderBudgetStats();
+		return Response.json(
+			{
+				error: true,
+				message: error.message,
+				budget: stats,
+			},
+			{ status: 503, headers: { "retry-after": "1" } },
+		);
+	}
+	return null;
+}
 
 void preloadFixedChartNoteAssets().catch((error) => {
 	console.warn("[renderer] fixed chart note asset preload failed:", error);
@@ -969,6 +999,8 @@ Bun.serve({
 					"GET /preview/:id",
 					"POST /render",
 					"POST /render/chart",
+					"GET /budget",
+					"PUT /budget",
 					"POST /cache/card-thumbnails/preload",
 					"POST /cache/card-thumbnails/status",
 				],
@@ -1061,11 +1093,13 @@ Bun.serve({
 					url.searchParams.get("precision"),
 					defaultPrecision,
 				);
-				const result = await renderPreviewTemplate(id, {
-					...(width > 0 ? { width } : {}),
-					...(height > 0 ? { height } : {}),
-					precision,
-				});
+				const result = await runWithBudget(() =>
+					renderPreviewTemplate(id, {
+						...(width > 0 ? { width } : {}),
+						...(height > 0 ? { height } : {}),
+						precision,
+					}),
+				);
 				return new Response(new Uint8Array(result.trace.png), {
 					headers: {
 						"content-type": "image/png",
@@ -1084,6 +1118,8 @@ Bun.serve({
 					},
 				});
 			} catch (error) {
+				const rejected = budgetRejectionResponse(error);
+				if (rejected) return rejected;
 				console.error("[renderer] preview render failed:", error);
 				return Response.json(
 					{
@@ -1097,6 +1133,35 @@ Bun.serve({
 
 		if (url.pathname === "/cache/render/stats" && request.method === "GET") {
 			return Response.json(renderCacheStats());
+		}
+
+		if (url.pathname === "/budget" && request.method === "GET") {
+			return Response.json({ ok: true, ...getRenderBudgetStats() });
+		}
+
+		if (url.pathname === "/budget" && request.method === "PUT") {
+			try {
+				const body = (await request.json()) as {
+					maxConcurrency?: number;
+					queueLimit?: number;
+				};
+				const applied = configureRenderBudget({
+					maxConcurrency:
+						typeof body.maxConcurrency === "number" ? body.maxConcurrency : undefined,
+					queueLimit:
+						typeof body.queueLimit === "number" ? body.queueLimit : undefined,
+				});
+				return Response.json({ ok: true, applied, ...getRenderBudgetStats() });
+			} catch (error) {
+				return Response.json(
+					{
+						ok: false,
+						error: true,
+						message: error instanceof Error ? error.message : String(error),
+					},
+					{ status: 400 },
+				);
+			}
 		}
 
 		if (url.pathname === "/cache/render" && request.method === "DELETE") {
@@ -1168,12 +1233,14 @@ Bun.serve({
 		if (url.pathname === "/render/chart" && request.method === "POST") {
 			try {
 				const body = (await request.json()) as ChartRenderRequest;
-				const trace = await renderChartSvg({
-					url: body.url,
-					svg: body.svg,
-					width: body.width,
-					precision: parsePositiveNumber(body.precision, defaultPrecision),
-				});
+				const trace = await runWithBudget(() =>
+					renderChartSvg({
+						url: body.url,
+						svg: body.svg,
+						width: body.width,
+						precision: parsePositiveNumber(body.precision, defaultPrecision),
+					}),
+				);
 				return new Response(new Uint8Array(trace.png), {
 					headers: {
 						"content-type": "image/png",
@@ -1186,6 +1253,8 @@ Bun.serve({
 					},
 				});
 			} catch (error) {
+				const rejected = budgetRejectionResponse(error);
+				if (rejected) return rejected;
 				console.error("[renderer] chart render failed:", error);
 				return Response.json(
 					{
@@ -1294,11 +1363,14 @@ Bun.serve({
 					});
 				}
 
-				const trace = await renderWithTrace(await createElement(body), {
-					width,
-					height,
-					precision,
-				});
+				const element = await createElement(body);
+				const trace = await runWithBudget(() =>
+					renderWithTrace(element, {
+						width,
+						height,
+						precision,
+					}),
+				);
 				const headers: Record<string, string> = {
 					"content-type": "image/png",
 					"cache-control": "no-store",
@@ -1320,6 +1392,8 @@ Bun.serve({
 					headers: { ...headers, "x-render-cache": "miss" },
 				});
 			} catch (error) {
+				const rejected = budgetRejectionResponse(error);
+				if (rejected) return rejected;
 				console.error("[renderer] render failed:", error);
 				return Response.json(
 					{

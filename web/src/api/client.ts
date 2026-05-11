@@ -41,6 +41,9 @@ import type {
 	RenderCacheStats,
 	RenderCacheActionResponse,
 	RenderCacheConfigUpdatePayload,
+	RendererBudgetStats,
+	RendererBudgetUpdatePayload,
+	RendererBudgetActionResponse,
 	RuntimeStatus,
 	SearchResponse,
 	SearchType,
@@ -221,6 +224,21 @@ export async function updateRenderCacheConfig(
 ) {
 	const { data } = await api.put<RenderCacheActionResponse>(
 		"/renderer/cache/render/config",
+		payload,
+	);
+	return data;
+}
+
+export async function getRendererBudgetStats() {
+	const { data } = await api.get<RendererBudgetStats>("/renderer/budget");
+	return data;
+}
+
+export async function updateRendererBudget(
+	payload: RendererBudgetUpdatePayload,
+) {
+	const { data } = await api.put<RendererBudgetActionResponse>(
+		"/renderer/budget",
 		payload,
 	);
 	return data;

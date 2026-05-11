@@ -249,6 +249,10 @@ export interface PublicConfig {
 			max_size_mb: number;
 			ttl_hours: number;
 		};
+		budget: {
+			max_concurrency: number;
+			queue_limit: number;
+		};
 	};
 	assets: PublicAssetsConfig;
 }
@@ -323,6 +327,39 @@ export interface UpdateRendererPayload {
 		body_family?: string;
 		score_family?: string;
 	};
+	budget?: {
+		max_concurrency?: number;
+		queue_limit?: number;
+	};
+}
+
+export interface RendererBudgetStats {
+	ok: boolean;
+	maxConcurrency: number;
+	queueLimit: number;
+	inFlight: number;
+	queued: number;
+	completed: number;
+	rejected: number;
+	avgWaitMs: number;
+	peakInFlight: number;
+	peakQueued: number;
+	limits: {
+		hardMaxConcurrency: number;
+		hardMaxQueue: number;
+	};
+	message?: string;
+}
+
+export interface RendererBudgetUpdatePayload {
+	max_concurrency?: number;
+	queue_limit?: number;
+}
+
+export interface RendererBudgetActionResponse {
+	ok: boolean;
+	message: string;
+	stats: RendererBudgetStats;
 }
 
 export interface UpdateBotDriverPayload {
