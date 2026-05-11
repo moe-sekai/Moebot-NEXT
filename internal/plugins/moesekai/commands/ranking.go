@@ -13,13 +13,14 @@ import (
 	"moebot-next/internal/config"
 	"moebot-next/internal/models"
 	"moebot-next/internal/plugins/moesekai/ranking"
-	"moebot-next/internal/renderer"
 	"moebot-next/internal/plugins/moesekai/servers"
+	"moebot-next/internal/renderer"
+
+	"moebot-next/internal/plugins/moesekai/renderpayloads"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
 	"github.com/wdvxdr1123/ZeroBot/message"
 	"gorm.io/gorm"
-	"moebot-next/internal/plugins/moesekai/renderpayloads"
 )
 
 func RegisterRanking(deps *Deps) {
@@ -424,7 +425,13 @@ func selectWorldLinkGroup(groups []ranking.WorldLinkGroup, rawArgs string) (rank
 }
 
 func firstNumericToken(raw string) int {
-	for _, token := range strings.Fields(raw) {
+	tokens := strings.Fields(raw)
+	// 只有当至少有两个 token 时，首个数字 token 才作为 WorldLink 角色组选择符；
+	// 单个 token 视为排名/UID，角色组使用默认值。
+	if len(tokens) < 2 {
+		return 0
+	}
+	for _, token := range tokens {
 		value, ok := parseRankToken(token)
 		if ok && value > 0 && value <= 26 {
 			return value
@@ -445,8 +452,10 @@ func parseRankingQuery(raw string, inferredUser *models.User, deps *Deps, ctx *z
 		query.UserID = gameID
 		return query, nil
 	}
-	for index, token := range strings.Fields(args) {
-		if worldLink && index == 0 && isWorldLinkSelectorToken(token) {
+	tokens := strings.Fields(args)
+	for index, token := range tokens {
+		// 仅在 token 数 >= 2 时，首个 selector token 才被视为 WorldLink 角色组选择符
+		if worldLink && index == 0 && len(tokens) >= 2 && isWorldLinkSelectorToken(token) {
 			continue
 		}
 		if strings.Contains(token, "-") {
