@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
@@ -183,16 +184,53 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 		// plugin:moesekai 这一层的统一前置过滤。挂在 Engine.UsePreHandler 上，
 		// 一处覆盖所有命令；返回 false 时整个事件被本插件忽略。
 		// 仅过滤 message 类事件，notice/request/meta 等放行。
+		//
+		// 注意：ZeroBot 的 PreHandler 会对引擎里 *每一个* Matcher 各触发一次
+		// （详见 ZeroBot/bot.go 的 dispatch 循环）。moesekai 在同一 Engine 上
+		// 注册了 25+ 条命令 Matcher，如果直接每次都调 AllowMessage，会重复
+		// 触发 SSE 事件（控制台「实时事件」会刷出几十条相同的 block）。
+		//
+		// 因此在闭包内按 *zero.Event 指针做一次性缓存：同一条上游消息只在
+		// 第一次评估时调用 AllowMessage / emit SSE，后续 Matcher 都直接命中
+		// 缓存。事件 TTL 远大于 ZeroBot 单事件 dispatch 时延即可。
 		filterAppName := filter.InternalAppName(PluginName)
 		var preHandler commands.PreHandler
 		if filterMgr != nil {
+			type evCacheEntry struct {
+				allow    bool
+				expireAt time.Time
+			}
+			const cacheTTL = 30 * time.Second
+			var (
+				cacheMu sync.Mutex
+				cache   = make(map[*zerobot.Event]evCacheEntry)
+			)
 			preHandler = func(zctx *zerobot.Ctx) bool {
 				ev := zctx.Event
 				if ev == nil || ev.PostType != "message" {
 					return true
 				}
+				cacheMu.Lock()
+				if entry, ok := cache[ev]; ok && time.Now().Before(entry.expireAt) {
+					cacheMu.Unlock()
+					return entry.allow
+				}
+				cacheMu.Unlock()
+
 				isPrivate := ev.MessageType == "private" || ev.DetailType == "private"
-				return filterMgr.AllowMessage(filterAppName, ev.GroupID, ev.UserID, isPrivate, ev.RawMessage)
+				allow := filterMgr.AllowMessage(filterAppName, ev.GroupID, ev.UserID, isPrivate, ev.RawMessage)
+
+				cacheMu.Lock()
+				// 顺手清理过期项，防止长生命周期 map 累积。
+				now := time.Now()
+				for k, v := range cache {
+					if now.After(v.expireAt) {
+						delete(cache, k)
+					}
+				}
+				cache[ev] = evCacheEntry{allow: allow, expireAt: now.Add(cacheTTL)}
+				cacheMu.Unlock()
+				return allow
 			}
 		}
 		commands.RegisterAll(&commands.Deps{
