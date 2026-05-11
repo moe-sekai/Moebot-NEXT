@@ -57,7 +57,11 @@ WORKDIR /app
 
 # tini: 正确转发信号给 Go 主进程,避免 bun 子进程僵尸
 # ca-certificates / tzdata: HTTPS 与时区
-RUN apk add --no-cache ca-certificates tzdata tini wget \
+# font-wqy-zenhei + fontconfig: 谱面 SVG 直出走 resvg,而 resvg 的 fontdb
+# 不支持 woff;同时 Alpine 默认没有任何 CJK 字形,会导致 <text> 渲染不出文字。
+# 装一份系统级 CJK 字体作为兜底(配合 engine.ts 里 loadSystemFonts: true)。
+RUN apk add --no-cache ca-certificates tzdata tini wget fontconfig font-wqy-zenhei \
+    && fc-cache -f \
     && addgroup -S moebot && adduser -S moebot -G moebot
 
 ENV TZ=Asia/Shanghai

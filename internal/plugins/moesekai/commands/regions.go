@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"moebot-next/internal/config"
@@ -34,7 +35,7 @@ func regionalCommands(command string) []regionalCommand {
 
 func parserCommands(deps *Deps, primary string) []regionalCommand {
 	if deps == nil || len(deps.Definitions) == 0 {
-		return regionalCommands(primary)
+		return sortRegionalCommandsByLength(regionalCommands(primary))
 	}
 	for _, def := range deps.Definitions {
 		if def.PrimaryCommand != primary {
@@ -51,9 +52,23 @@ func parserCommands(deps *Deps, primary string) []regionalCommand {
 				MatchSource: cmd.MatchSource,
 			})
 		}
-		return out
+		return sortRegionalCommandsByLength(out)
 	}
-	return regionalCommands(primary)
+	return sortRegionalCommandsByLength(regionalCommands(primary))
+}
+
+// sortRegionalCommandsByLength sorts commands by name length descending so that
+// longer aliases get registered to ZeroBot before shorter prefixes. ZeroBot's
+// OnCommand uses HasPrefix matching, so without this the alias "谱面" would
+// shadow "谱面预览" and parse `/谱面预览 123` as command="谱面" args="预览 123".
+func sortRegionalCommandsByLength(cmds []regionalCommand) []regionalCommand {
+	sort.SliceStable(cmds, func(i, j int) bool {
+		if len(cmds[i].Name) != len(cmds[j].Name) {
+			return len(cmds[i].Name) > len(cmds[j].Name)
+		}
+		return cmds[i].Name < cmds[j].Name
+	})
+	return cmds
 }
 
 func parseRegionalCommandName(command string) (base string, region string) {

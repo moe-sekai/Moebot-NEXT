@@ -1063,10 +1063,20 @@ export async function uploadGalleryPic(galleryName: string, file: File, checkDup
 	return data
 }
 
+// 浏览器 <img> / <a download> 等场景无法自定义 Authorization 头，
+// 后端 authMiddleware 兼容 ?token=<jwt> 查询参数；这里把当前登录态
+// 的 JWT 拼到 URL 上，否则 /api/plugins/gallery/pics/:pid/* 会 401。
+function withAuthToken(url: string): string {
+	const t = getStoredAuthToken()
+	if (!t) return url
+	const sep = url.includes('?') ? '&' : '?'
+	return `${url}${sep}token=${encodeURIComponent(t)}`
+}
+
 export function galleryPicThumbUrl(pid: number) {
-	return `/api/plugins/gallery/pics/${pid}/thumb`
+	return withAuthToken(`/api/plugins/gallery/pics/${pid}/thumb`)
 }
 
 export function galleryPicImageUrl(pid: number) {
-	return `/api/plugins/gallery/pics/${pid}/image`
+	return withAuthToken(`/api/plugins/gallery/pics/${pid}/image`)
 }

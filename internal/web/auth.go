@@ -163,10 +163,18 @@ func (s *Server) authMiddleware(c *fiber.Ctx) error {
 
 	header := c.Get(fiber.HeaderAuthorization)
 	const prefix = "Bearer "
-	if !strings.HasPrefix(header, prefix) {
+	var token string
+	if strings.HasPrefix(header, prefix) {
+		token = strings.TrimSpace(strings.TrimPrefix(header, prefix))
+	} else {
+		// 兼容浏览器 <img>/<a download> 等无法自定义请求头的场景：
+		// 允许通过 ?token=<jwt> 查询参数传入。仅用于 GET 静态资源类
+		// 端点（如 /api/plugins/gallery/pics/:pid/image）。
+		token = strings.TrimSpace(c.Query("token"))
+	}
+	if token == "" {
 		return fiber.NewError(fiber.StatusUnauthorized, "Missing bearer token")
 	}
-	token := strings.TrimSpace(strings.TrimPrefix(header, prefix))
 	user, err := s.parseToken(token)
 	if err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "Invalid or expired token")
