@@ -108,12 +108,13 @@
           <details :open="openApp === appKey(a)" @toggle="onToggle(a, $event)">
             <summary class="app-summary">
               <UiBadge v-if="a.internal" variant="secondary">插件内置</UiBadge>
+              <UiBadge v-else-if="a.system_transport" variant="secondary">系统传输</UiBadge>
               <UiBadge v-else :variant="connectedFor(a) ? 'success' : 'secondary'">
                 {{ connectedFor(a) ? '已连接' : '未连接' }}
               </UiBadge>
               <strong class="app-name">
                 {{ a.name || '未命名' }}
-                <UiBadge v-if="a.builtin && !a.internal" variant="secondary">内置</UiBadge>
+                <UiBadge v-if="a.builtin && !a.internal && !a.system_transport" variant="secondary">内置</UiBadge>
                 <UiBadge v-if="!a.enabled" variant="secondary">已禁用</UiBadge>
               </strong>
               <code v-if="!a.internal" class="app-uri">{{ a.uri || '（未填）' }}</code>
@@ -151,8 +152,14 @@
                 仅作为规则容器：插件在处理消息前会先查询此处的模板/规则做过滤，不会开启 WS 下游连接。
                 可独立分配模板，与 Bot 主体规则解耦。
               </p>
+              <p v-else-if="a.system_transport" class="app-template-hint">
+                <strong>系统传输闸门</strong>：负责把 Filter 网关收到的事件转发给 Bot 主进程，是所有插件接收消息的唯一通道。
+                规则被运行时强制锁定为「全部放行」，避免与各 <code>plugin:*</code> 应用的规则形成 AND 串联。
+                想限制某个插件的可用群/用户，请去对应的 <code>plugin:&lt;name&gt;</code> 应用配置；
+                这里只允许调整 URI / AccessToken / 启用状态等传输参数。
+              </p>
 
-              <div class="app-template-row">
+              <div class="app-template-row" v-if="!a.system_transport">
                 <label>
                   <span>引用规则模板</span>
                   <select :value="a.template_id ?? ''" @change="onTemplateSelect(a, $event)">
@@ -168,6 +175,7 @@
               </div>
 
               <RuleTabs
+                v-if="!a.system_transport"
                 :model-value="ruleSetOf(a)"
                 :allow-default="true"
                 :disabled="a.template_id != null"
@@ -538,6 +546,7 @@ function addNew() {
     enabled: true,
     builtin: false,
     internal: false,
+    system_transport: false,
     sort_order: apps.value.length,
     template_id: null,
     user_id_rules: { mode: 'default', ids: [] },

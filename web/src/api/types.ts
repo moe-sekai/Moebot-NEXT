@@ -809,6 +809,7 @@ export interface FilterAppPayload {
 	enabled: boolean;
 	builtin: boolean;
 	internal: boolean;
+	system_transport: boolean;
 	sort_order: number;
 	template_id: number | null;
 	user_id_rules: FilterIDRule;

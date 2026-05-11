@@ -21,6 +21,7 @@ import (
 	"moebot-next/internal/web"
 
 	"github.com/rs/zerolog/log"
+	zerobot "github.com/wdvxdr1123/ZeroBot"
 )
 
 const PluginName = "moesekai"
@@ -179,12 +180,28 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 
 	// 7) Register chat handlers (must run before zero.RunAndBlock).
 	if db != nil && rendererClient != nil {
+		// plugin:moesekai 这一层的统一前置过滤。挂在 Engine.UsePreHandler 上，
+		// 一处覆盖所有命令；返回 false 时整个事件被本插件忽略。
+		// 仅过滤 message 类事件，notice/request/meta 等放行。
+		filterAppName := filter.InternalAppName(PluginName)
+		var preHandler commands.PreHandler
+		if filterMgr != nil {
+			preHandler = func(zctx *zerobot.Ctx) bool {
+				ev := zctx.Event
+				if ev == nil || ev.PostType != "message" {
+					return true
+				}
+				isPrivate := ev.MessageType == "private" || ev.DetailType == "private"
+				return filterMgr.AllowMessage(filterAppName, ev.GroupID, ev.UserID, isPrivate, ev.RawMessage)
+			}
+		}
 		commands.RegisterAll(&commands.Deps{
 			DB:          db,
 			Renderer:    rendererClient,
 			Servers:     serverManager,
 			B30:         b30Client,
 			Definitions: defs,
+			PreHandler:  preHandler,
 		})
 		// 插件禁用时清理已注册的 ZeroBot matcher，避免重启后重复触发。
 		ctx.OnShutdown(commands.ResetEngine)

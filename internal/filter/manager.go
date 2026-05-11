@@ -316,6 +316,16 @@ func (m *Manager) startClientsLocked(ctx context.Context) error {
 		// When the app references a template, source rules from it; otherwise
 		// from the app's own fields.
 		userID, groupID, msg, priv, grp := appOrTemplateRules(&app, tplByID)
+		// "moebot-builtin" 是网关→Bot 主进程的传输闸门：把它当成纯透传，
+		// 防止与各 plugin:<name> 的 internal app 形成 AND 串联语义。
+		// 任何用户残留的规则在此处被强制忽略（控制台 UI 也会隐藏其规则编辑器）。
+		if IsBuiltinTransport(app.Name) {
+			userID = IDRule{Mode: ModeOn}
+			groupID = IDRule{Mode: ModeOn}
+			msg = MessageRule{Mode: ModeOn}
+			priv = MessageRule{Mode: ModeOn}
+			grp = MessageRule{Mode: ModeOn}
+		}
 		f := &Filter{}
 		f.Compile(CompiledRules{
 			Name:           app.Name,

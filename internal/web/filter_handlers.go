@@ -20,13 +20,17 @@ type effectiveRules struct {
 }
 
 type filterAppPayload struct {
-	ID                  uint               `json:"id"`
-	Name                string             `json:"name"`
-	URI                 string             `json:"uri"`
-	AccessToken         string             `json:"access_token"`
-	Enabled             bool               `json:"enabled"`
-	Builtin             bool               `json:"builtin"`
-	Internal            bool               `json:"internal"`
+	ID          uint   `json:"id"`
+	Name        string `json:"name"`
+	URI         string `json:"uri"`
+	AccessToken string `json:"access_token"`
+	Enabled     bool   `json:"enabled"`
+	Builtin     bool   `json:"builtin"`
+	Internal    bool   `json:"internal"`
+	// SystemTransport=true 表示该 App 仅用作「网关→Bot 主进程」的传输
+	// 闸门（当前仅 "moebot-builtin"），规则被运行时锁定为 ModeOn，
+	// 控制台不允许编辑其 template / 规则字段。
+	SystemTransport     bool               `json:"system_transport"`
 	SortOrder           int                `json:"sort_order"`
 	TemplateID          *uint              `json:"template_id"`
 	UserIDRules         filter.IDRule      `json:"user_id_rules"`
@@ -63,7 +67,9 @@ func computeEffectiveRules(a *models.FilterApp, tplByID map[uint]*models.FilterT
 func appToPayload(a *models.FilterApp, tplByID map[uint]*models.FilterTemplate) filterAppPayload {
 	return filterAppPayload{
 		ID: a.ID, Name: a.Name, URI: a.URI, AccessToken: a.AccessToken,
-		Enabled: a.Enabled, Builtin: a.Builtin, Internal: a.Internal, SortOrder: a.SortOrder,
+		Enabled: a.Enabled, Builtin: a.Builtin, Internal: a.Internal,
+		SystemTransport:     filter.IsBuiltinTransport(a.Name),
+		SortOrder:           a.SortOrder,
 		TemplateID:          a.TemplateID,
 		UserIDRules:         filter.DecodeIDRule(a.UserIDRules),
 		GroupIDRules:        filter.DecodeIDRule(a.GroupIDRules),
@@ -284,6 +290,16 @@ func (s *Server) handleUpdateFilterApp(c *fiber.Ctx) error {
 		// access token / rules are editable so users can re-point the
 		// gateway when the bot listens on a different port.
 		p.Name = app.Name
+	}
+	if filter.IsBuiltinTransport(app.Name) {
+		// 传输闸门：规则 / 模板 字段锁定，不接受前端修改（UI 也隐藏它们）。
+		// 只让 URI / AccessToken / Enabled / SortOrder 生效。
+		p.TemplateID = app.TemplateID
+		p.UserIDRules = filter.DecodeIDRule(app.UserIDRules)
+		p.GroupIDRules = filter.DecodeIDRule(app.GroupIDRules)
+		p.MessageRules = filter.DecodeMessageRule(app.MessageRules)
+		p.PrivateMessageRules = filter.DecodeMessageRule(app.PrivateMessageRules)
+		p.GroupMessageRules = filter.DecodeMessageRule(app.GroupMessageRules)
 	}
 	payloadToApp(&p, app)
 	if err := s.DB.UpdateFilterApp(app); err != nil {

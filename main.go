@@ -224,12 +224,54 @@ func pluginsDataDir(cfg *config.Config) string {
 	return "./data/plugins"
 }
 
-// seedBuiltinFilterApp 与原行为一致：确保 "moebot-builtin" 下游 app 存在。
+// seedBuiltinFilterApp 确保 "moebot-builtin" 下游 app 存在。
+//
+// 这是「网关 → Bot 主进程」的唯一传输闸门，所有过滤都应在各 plugin:<name>
+// internal app 中配置；本行的规则字段在每次启动时强制重置为 ModeOn，避免
+// 旧版本残留的用户白/黑名单与插件层规则形成 AND 串联，造成意料之外的拦截。
 func seedBuiltinFilterApp(db *database.DB, drv config.DriverConfig) error {
-	const builtinName = "moebot-builtin"
-	if _, err := db.GetFilterAppByName(builtinName); err == nil {
+	builtinName := filter.BuiltinTransportName
+	lockedUserID := filter.EncodeIDRule(filter.IDRule{Mode: filter.ModeOn})
+	lockedGroupID := filter.EncodeIDRule(filter.IDRule{Mode: filter.ModeOn})
+	lockedMsg := filter.EncodeMessageRule(filter.MessageRule{Mode: filter.ModeOn})
+
+	if existing, err := db.GetFilterAppByName(builtinName); err == nil && existing != nil {
+		// 把可能被旧 UI 写入的过滤规则一律重置回 ModeOn，并解除模板引用。
+		dirty := false
+		if existing.TemplateID != nil {
+			existing.TemplateID = nil
+			dirty = true
+		}
+		if existing.UserIDRules != lockedUserID {
+			existing.UserIDRules = lockedUserID
+			dirty = true
+		}
+		if existing.GroupIDRules != lockedGroupID {
+			existing.GroupIDRules = lockedGroupID
+			dirty = true
+		}
+		if existing.MessageRules != lockedMsg {
+			existing.MessageRules = lockedMsg
+			dirty = true
+		}
+		if existing.PrivateMessageRules != lockedMsg {
+			existing.PrivateMessageRules = lockedMsg
+			dirty = true
+		}
+		if existing.GroupMessageRules != lockedMsg {
+			existing.GroupMessageRules = lockedMsg
+			dirty = true
+		}
+		if !existing.Builtin {
+			existing.Builtin = true
+			dirty = true
+		}
+		if dirty {
+			return db.UpdateFilterApp(existing)
+		}
 		return nil
 	}
+
 	listen := drv.Listen
 	if listen == "" {
 		listen = "127.0.0.1:6700"
@@ -249,11 +291,11 @@ func seedBuiltinFilterApp(db *database.DB, drv config.DriverConfig) error {
 		Enabled:             true,
 		Builtin:             true,
 		SortOrder:           0,
-		UserIDRules:         filter.EncodeIDRule(filter.IDRule{Mode: filter.ModeOn}),
-		GroupIDRules:        filter.EncodeIDRule(filter.IDRule{Mode: filter.ModeOn}),
-		MessageRules:        filter.EncodeMessageRule(filter.MessageRule{Mode: filter.ModeOn}),
-		PrivateMessageRules: filter.EncodeMessageRule(filter.MessageRule{Mode: filter.ModeDefault}),
-		GroupMessageRules:   filter.EncodeMessageRule(filter.MessageRule{Mode: filter.ModeDefault}),
+		UserIDRules:         lockedUserID,
+		GroupIDRules:        lockedGroupID,
+		MessageRules:        lockedMsg,
+		PrivateMessageRules: lockedMsg,
+		GroupMessageRules:   lockedMsg,
 	}
 	return db.CreateFilterApp(app)
 }
