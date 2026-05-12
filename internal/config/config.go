@@ -158,6 +158,16 @@ type RendererConfig struct {
 	Cache          CacheConfig          `yaml:"cache"`
 	Fonts          RendererFontConfig   `yaml:"fonts"`
 	Budget         RendererBudgetConfig `yaml:"budget"`
+	RenderCache    RenderCacheConfig    `yaml:"render_cache"`
+}
+
+// RenderCacheConfig 控制 Bun 渲染服务内存中的渲染结果缓存上限（非持久化
+// 图片缓存，而是 SVG -> PNG 后的结果缓存）。零值表示沿用渲染端默认值。
+//   - MaxBytes：缓存总字节上限；<=0 时不向渲染端推送。
+//   - MaxEntries：缓存条目数上限；<=0 时不向渲染端推送。
+type RenderCacheConfig struct {
+	MaxBytes   int64 `yaml:"max_bytes"`
+	MaxEntries int   `yaml:"max_entries"`
 }
 
 // RendererBudgetConfig 限制 Bun 渲染服务的并发量，避免在低内存机器上 OOM。

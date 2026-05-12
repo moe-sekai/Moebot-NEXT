@@ -247,6 +247,16 @@ func (s *Server) handleRenderCacheConfig(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadGateway, err.Error())
 	}
+	// 持久化到 YAML，容器重启后由启动流程重新推送给 Bun 渲染服务。
+	if payload.MaxBytes != nil {
+		s.Config.Renderer.RenderCache.MaxBytes = *payload.MaxBytes
+	}
+	if payload.MaxEntries != nil {
+		s.Config.Renderer.RenderCache.MaxEntries = *payload.MaxEntries
+	}
+	if err := config.Save(s.Config, s.ConfigPath); err != nil {
+		log.Warn().Err(err).Msg("Failed to persist render cache config to config file")
+	}
 	return c.JSON(fiber.Map{"ok": true, "message": "渲染缓存配置已更新", "stats": stats})
 }
 

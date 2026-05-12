@@ -104,6 +104,23 @@ func runOnce(cfgPath string) bool {
 		log.Warn().Err(err).Msg("Renderer process failed to start; commands will fallback to text")
 	} else {
 		defer rendererClient.StopProcess()
+		// 启动成功后把 YAML 中持久化的渲染结果缓存上限推给 Bun 渲染服务，
+		// 否则控制台 /settings 中的调整会在容器重启后丢失。零值表示沿用
+		// 渲染端默认值，不推送。
+		if rc := cfg.Renderer.RenderCache; rc.MaxBytes > 0 || rc.MaxEntries > 0 {
+			update := renderer.RenderCacheConfigUpdate{}
+			if rc.MaxBytes > 0 {
+				mb := rc.MaxBytes
+				update.MaxBytes = &mb
+			}
+			if rc.MaxEntries > 0 {
+				me := rc.MaxEntries
+				update.MaxEntries = &me
+			}
+			if _, err := rendererClient.UpdateRenderCacheConfig(update); err != nil {
+				log.Warn().Err(err).Msg("Failed to push persisted render cache config to renderer")
+			}
+		}
 	}
 
 	bot.RegisterMiddleware(db)
