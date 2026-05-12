@@ -79,7 +79,9 @@ func (p *pluginImpl) handleListTemplates(c *fiber.Ctx) error {
 }
 
 func (p *pluginImpl) handleUpsertTemplate(c *fiber.Ctx) error {
-	name := strings.TrimSpace(c.Params("name"))
+	// Fiber 默认会复用请求缓冲区；c.Params 返回的 string 不能作为长期
+	// map key 保存，否则下一次请求可能把旧 key 的底层字节改掉。
+	name := strings.Clone(strings.TrimSpace(c.Params("name")))
 	if name == "" || name == "default" {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid template name")
 	}
@@ -131,7 +133,7 @@ func (p *pluginImpl) handleUpsertTemplate(c *fiber.Ctx) error {
 }
 
 func (p *pluginImpl) handleDeleteTemplate(c *fiber.Ctx) error {
-	name := strings.TrimSpace(c.Params("name"))
+	name := strings.Clone(strings.TrimSpace(c.Params("name")))
 	if name == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid template name")
 	}

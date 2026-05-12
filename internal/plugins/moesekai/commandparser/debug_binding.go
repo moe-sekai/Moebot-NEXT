@@ -284,7 +284,7 @@ func (s *Service) buildSuiteDebugPayloadForDefinition(def Definition, runtime *s
 		payload.Subtitle = suiteDebugPanelSubtitle(profile.BaseProfile)
 		sectionRows, stats, sectionExtra := suiteDebugRowsFromChallenge(profile, runtime.Store, 26)
 		payload.Stats = append(suiteDebugBasicStats(profile.commonSuiteProfile()), stats...)
-		payload.Sections = []renderpayloads.SuiteSectionPayload{{Title: "每日挑战 Live", Kind: "challenge_info", Note: "参考 lunabot：按角色统计挑战等级、最高分，以及未领取高分奖励中的水晶/碎片。", Rows: sectionRows, Extra: sectionExtra}}
+		payload.Sections = []renderpayloads.SuiteSectionPayload{{Title: "每日挑战 Live", Kind: "challenge_info", Note: "按角色统计挑战等级、最高分，以及未领取高分奖励中的水晶/碎片。", Rows: sectionRows, Extra: sectionExtra}}
 		return payload, suiteDebugSelected(def, runtime, profile.UserGamedata, "suite_panel"), suiteDebugRowsFromSections(payload.Sections), nil
 	case "event-record":
 		var profile suiteDebugEventRecordProfile
@@ -306,7 +306,7 @@ func (s *Service) buildSuiteDebugPayloadForDefinition(def Definition, runtime *s
 		payload.Subtitle = suiteDebugPanelSubtitle(profile.BaseProfile)
 		sectionRows, stats, sectionExtra := suiteDebugRowsFromLeaderCount(profile, runtime.Store, 26)
 		payload.Stats = append(suiteDebugBasicStats(profile.commonSuiteProfile()), stats...)
-		payload.Sections = []renderpayloads.SuiteSectionPayload{{Title: "角色队长次数", Kind: "leader_count", Note: "参考 lunabot：普通档位读取 parameterGroupId=1；EX 等级/次数读取 parameterGroupId=101 并累计已完成轮次。", Rows: sectionRows, Extra: sectionExtra}}
+		payload.Sections = []renderpayloads.SuiteSectionPayload{{Title: "角色队长次数", Kind: "leader_count", Note: "普通档位读取 parameterGroupId=1；EX 等级/次数读取 parameterGroupId=101 并累计已完成轮次。", Rows: sectionRows, Extra: sectionExtra}}
 		return payload, suiteDebugSelected(def, runtime, profile.UserGamedata, "suite_panel"), suiteDebugRowsFromSections(payload.Sections), nil
 	case "suite-card-box":
 		var profile suiteDebugCardBoxProfile
@@ -2604,7 +2604,7 @@ func suiteDebugMusicRewardSections(summary suiteDebugMusicRewardSummary) []rende
 	sections := []renderpayloads.SuiteSectionPayload{{
 		Title: "歌曲评级奖励(S)",
 		Kind:  "music_reward_summary",
-		Note:  "参考 lunabot：统计尚未获得的 S 评级水晶奖励；连击奖励按谱面等级汇总剩余值。",
+		Note:  "统计尚未获得的 S 评级水晶奖励；连击奖励按谱面等级汇总剩余值。",
 		Rows: []renderpayloads.SuiteSectionRowPayload{
 			{Label: "S评级剩余水晶", Value: formatDebugInt(summary.RankJewelRemain), Meta: fmt.Sprintf("%d首未达成 / 共%d首", summary.RankRemainCount, summary.ValidMusicCount), Extra: map[string]interface{}{"rewardType": "jewel", "amount": summary.RankJewelRemain, "remainCount": summary.RankRemainCount, "validMusicCount": summary.ValidMusicCount}},
 			{Label: "已达成奖励", Value: formatDebugInt(summary.AchievementTotal), Meta: fmt.Sprintf("涉及%d首歌曲", summary.AchievedMusicCount), Extra: map[string]interface{}{"achievementTotal": summary.AchievementTotal, "achievedMusicCount": summary.AchievedMusicCount}},

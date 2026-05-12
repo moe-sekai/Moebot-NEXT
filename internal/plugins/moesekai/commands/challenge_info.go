@@ -89,7 +89,7 @@ func RegisterChallengeInfo(deps *Deps) {
 			payload.Subtitle = suitePanelSubtitle(profile.BaseProfile)
 			rows, stats, sectionExtra := rowsFromChallenge(profile, runtime.Store, challengeDefaultLimit)
 			payload.Stats = append(suiteBasicStats(profile.commonSuiteProfile()), stats...)
-			payload.Sections = []renderpayloads.SuiteSectionPayload{{Title: "每日挑战 Live", Kind: "challenge_info", Note: "参考 lunabot：按角色统计挑战等级、最高分，以及未领取高分奖励中的水晶/碎片。", Rows: rows, Extra: sectionExtra}}
+			payload.Sections = []renderpayloads.SuiteSectionPayload{{Title: "每日挑战 Live", Kind: "challenge_info", Note: "按角色统计挑战等级、最高分，以及未领取高分奖励中的水晶/碎片。", Rows: rows, Extra: sectionExtra}}
 			sendSuitePanelOrText(ctx, deps, payload, formatChallengeTextWithStore(runtime.Region, profile, runtime.Store, challengeDefaultLimit))
 			bot.RecordCommandRegion(deps.DB, "挑战信息", runtime.Region, ctx, start)
 		})

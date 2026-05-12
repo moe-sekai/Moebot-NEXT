@@ -77,7 +77,7 @@ func RegisterLeaderCount(deps *Deps) {
 			payload.Subtitle = suitePanelSubtitle(profile.BaseProfile)
 			rows, stats, sectionExtra := rowsFromLeaderCount(profile, runtime.Store, leaderCountDefaultLimit)
 			payload.Stats = append(suiteBasicStats(profile.commonSuiteProfile()), stats...)
-			payload.Sections = []renderpayloads.SuiteSectionPayload{{Title: "角色队长次数", Kind: "leader_count", Note: "参考 lunabot：普通档位读取 parameterGroupId=1；EX 等级/次数读取 parameterGroupId=101 并累计已完成轮次。", Rows: rows, Extra: sectionExtra}}
+			payload.Sections = []renderpayloads.SuiteSectionPayload{{Title: "角色队长次数", Kind: "leader_count", Note: "普通档位读取 parameterGroupId=1；EX 等级/次数读取 parameterGroupId=101 并累计已完成轮次。", Rows: rows, Extra: sectionExtra}}
 			sendSuitePanelOrText(ctx, deps, payload, formatLeaderCountTextWithStore(runtime.Region, profile, runtime.Store, leaderCountDefaultLimit))
 			bot.RecordCommandRegion(deps.DB, "队长次数", runtime.Region, ctx, start)
 		})

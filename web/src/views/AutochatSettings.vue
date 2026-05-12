@@ -119,10 +119,10 @@
           暂无模板。点击"新建模板"创建。
         </div>
 
-        <div v-for="t in templates" :key="t.name" class="group-card">
+        <div v-for="t in templates" :key="t.rowKey" class="group-card">
           <div class="group-card-head">
             <div>
-              <span class="group-id">{{ t.name }}</span>
+              <span class="group-id">{{ displayTemplateName(t) }}</span>
               <span v-if="t.isNew" class="badge badge-auto">未保存</span>
               <span v-if="t.used_by_groups?.length" class="badge badge-on">绑定群 {{ t.used_by_groups.length }}</span>
             </div>
@@ -181,8 +181,8 @@
               </div>
               <input
                 type="text"
-                :value="keywordDraft[t.name] || ''"
-                @input="keywordDraft[t.name] = ($event.target as HTMLInputElement).value"
+                :value="keywordDraft[t.rowKey] || ''"
+                @input="keywordDraft[t.rowKey] = ($event.target as HTMLInputElement).value"
                 @keydown.enter.prevent="addKeyword(t)"
                 placeholder="输入关键词后按 Enter 添加"
               />
@@ -407,10 +407,19 @@ async function removeGroup(g: GroupRow) {
 interface TemplateRow extends AutochatTemplate {
   saving?: boolean
   isNew?: boolean
+  rowKey: string
+  originalName?: string
   // 因 multimodal 是三态(null/true/false)，UI 用单独的字符串字段绑定
   multimodalMode?: 'auto' | 'on' | 'off'
 }
 const templates = ref<TemplateRow[]>([])
+let nextTemplateRowID = 1
+function createTemplateRowKey(name: string, isNew = false): string {
+  return `${isNew ? 'new' : 'saved'}:${name}:${nextTemplateRowID++}`
+}
+function displayTemplateName(t: TemplateRow): string {
+  return t.name || t.originalName || '(未命名模板)'
+}
 const templatesLoading = ref(false)
 const templatesError = ref('')
 const availableModels = ref<string[]>([])
@@ -441,10 +450,10 @@ function removeTemplateModel(t: TemplateRow, m: string) {
 }
 
 function addKeyword(t: TemplateRow) {
-  const v = (keywordDraft.value[t.name] || '').trim()
+  const v = (keywordDraft.value[t.rowKey] || '').trim()
   if (!v) return
   if (!(t.keywords || []).includes(v)) t.keywords = [...(t.keywords || []), v]
-  keywordDraft.value[t.name] = ''
+  keywordDraft.value[t.rowKey] = ''
 }
 function removeKeyword(t: TemplateRow, k: string) {
   t.keywords = (t.keywords || []).filter(x => x !== k)
@@ -467,7 +476,14 @@ async function loadTemplates() {
   try {
     const data = await listAutochatTemplates()
     templates.value = (data.templates || []).map(t => {
-      const row: TemplateRow = { ...t, models: t.models || [], keywords: t.keywords || [], used_by_groups: t.used_by_groups || [] }
+      const row: TemplateRow = {
+        ...t,
+        models: t.models || [],
+        keywords: t.keywords || [],
+        used_by_groups: t.used_by_groups || [],
+        rowKey: createTemplateRowKey(t.name),
+        originalName: t.name,
+      }
       applyMultimodalMode(row)
       return row
     })
@@ -498,6 +514,8 @@ function addTemplate() {
     keywords: [],
     used_by_groups: [],
     isNew: true,
+    rowKey: createTemplateRowKey(trimmed, true),
+    originalName: trimmed,
     multimodalMode: 'auto',
   }
   templates.value.unshift(row)
@@ -509,11 +527,16 @@ function safeNum(v: unknown): number {
 }
 async function saveTemplate(t: TemplateRow) {
   syncMultimodalFromMode(t)
+  const templateName = (t.originalName || t.name || '').trim()
+  if (!templateName || templateName === 'default') {
+    templatesError.value = '模板名无效'
+    return
+  }
   t.saving = true
   templatesError.value = ''
   try {
-    await upsertAutochatTemplate(t.name, {
-      name: t.name,
+    await upsertAutochatTemplate(templateName, {
+      name: templateName,
       persona: t.persona ?? '',
       models: t.models || [],
       multimodal: t.multimodal ?? null,
@@ -524,6 +547,9 @@ async function saveTemplate(t: TemplateRow) {
       keywords: t.keywords || [],
       used_by_groups: t.used_by_groups || [],
     })
+    t.isNew = false
+    t.originalName = templateName
+    t.name = templateName
     // 保存成功后强制从后端 reload，避免前端 state 与后端漂移导致幽灵 row。
     await loadTemplates()
   } catch (e) { templatesError.value = e instanceof Error ? e.message : String(e) }
@@ -534,9 +560,14 @@ async function removeTemplate(t: TemplateRow) {
     templates.value = templates.value.filter(x => x !== t)
     return
   }
-  if (!window.confirm(`删除模板 "${t.name}"？所有绑定该模板的群将自动解绑。`)) return
+  const templateName = (t.originalName || t.name || '').trim()
+  if (!templateName) {
+    templatesError.value = '模板名无效'
+    return
+  }
+  if (!window.confirm(`删除模板 "${templateName}"？所有绑定该模板的群将自动解绑。`)) return
   try {
-    await deleteAutochatTemplate(t.name)
+    await deleteAutochatTemplate(templateName)
     // 删除成功后强制从后端 reload，避免本地按 name 过滤把同名 row 一并误删
     // 或漏掉真实后端状态。
     await loadTemplates()

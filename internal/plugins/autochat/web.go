@@ -118,7 +118,8 @@ func (p *pluginImpl) buildGroupPayload(cfg *Config, gid int64) groupSettingPaylo
 }
 
 func (p *pluginImpl) handleUpsertGroup(c *fiber.Ctx) error {
-	gid, err := strconv.ParseInt(c.Params("gid"), 10, 64)
+	gidParam := strings.Clone(c.Params("gid"))
+	gid, err := strconv.ParseInt(gidParam, 10, 64)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid group id")
 	}
@@ -206,7 +207,8 @@ func (p *pluginImpl) handleUpsertGroup(c *fiber.Ctx) error {
 }
 
 func (p *pluginImpl) handleDeleteGroup(c *fiber.Ctx) error {
-	gid, err := strconv.ParseInt(c.Params("gid"), 10, 64)
+	gidParam := strings.Clone(c.Params("gid"))
+	gid, err := strconv.ParseInt(gidParam, 10, 64)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid group id")
 	}

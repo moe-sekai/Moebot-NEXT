@@ -8,9 +8,9 @@ import (
 
 	"moebot-next/internal/config"
 	"moebot-next/internal/plugins/moesekai/masterdata"
-	"moebot-next/internal/renderer"
 	"moebot-next/internal/plugins/moesekai/servers"
 	"moebot-next/internal/plugins/moesekai/suite"
+	"moebot-next/internal/renderer"
 
 	zero "github.com/wdvxdr1123/ZeroBot"
 	"github.com/wdvxdr1123/ZeroBot/message"
@@ -710,7 +710,7 @@ func musicRewardSections(summary musicRewardSummary) []renderpayloads.SuiteSecti
 	sections := []renderpayloads.SuiteSectionPayload{{
 		Title: "歌曲评级奖励(S)",
 		Kind:  "music_reward_summary",
-		Note:  "参考 lunabot：统计尚未获得的 S 评级水晶奖励；连击奖励按谱面等级汇总剩余值。",
+		Note:  "统计尚未获得的 S 评级水晶奖励；连击奖励按谱面等级汇总剩余值。",
 		Rows: []renderpayloads.SuiteSectionRowPayload{
 			{Label: "S评级剩余水晶", Value: formatInt(summary.RankJewelRemain), Meta: fmt.Sprintf("%d首未达成 / 共%d首", summary.RankRemainCount, summary.ValidMusicCount), Extra: map[string]interface{}{"rewardType": "jewel", "amount": summary.RankJewelRemain, "remainCount": summary.RankRemainCount, "validMusicCount": summary.ValidMusicCount}},
 			{Label: "已达成奖励", Value: formatInt(summary.AchievementTotal), Meta: fmt.Sprintf("涉及%d首歌曲", summary.AchievedMusicCount), Extra: map[string]interface{}{"achievementTotal": summary.AchievementTotal, "achievedMusicCount": summary.AchievedMusicCount}},
