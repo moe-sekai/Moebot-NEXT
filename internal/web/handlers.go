@@ -62,6 +62,24 @@ func (s *Server) handleStatus(c *fiber.Ctx) error {
 		masterdataLoadedAt = store.LoadedAt()
 	}
 
+	filterStatus := fiber.Map{
+		"running":     false,
+		"upstream_up": false,
+		"upstreams":   []any{},
+		"clients":     []any{},
+	}
+	if s.Filter != nil {
+		filterStatus = fiber.Map{"running": false, "upstream_up": false, "upstreams": []any{}, "clients": []any{}}
+		st := s.Filter.Status()
+		filterStatus["running"] = st.Running
+		filterStatus["listen"] = st.Listen
+		filterStatus["suffix"] = st.Suffix
+		filterStatus["upstream_up"] = st.UpstreamUp
+		filterStatus["started_at"] = st.StartedAt
+		filterStatus["upstreams"] = st.Upstreams
+		filterStatus["clients"] = st.Clients
+	}
+
 	return c.JSON(fiber.Map{
 		"version": appVersion,
 		"time":    time.Now(),
@@ -109,6 +127,7 @@ func (s *Server) handleStatus(c *fiber.Ctx) error {
 			"message": databaseMessage,
 			"path":    s.Config.Database.Path,
 		},
+		"filter": filterStatus,
 	})
 }
 

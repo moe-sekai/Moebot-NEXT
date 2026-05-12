@@ -76,6 +76,7 @@ export interface RuntimeStatus {
   renderer: RendererStatus;
   masterdata: MasterdataStatus;
   database: DatabaseStatus;
+  filter?: FilterStatus;
 }
 
 export interface RendererHealth {
