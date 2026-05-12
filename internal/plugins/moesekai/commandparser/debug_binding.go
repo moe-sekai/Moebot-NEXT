@@ -17,6 +17,7 @@ import (
 	"moebot-next/internal/plugins/moesekai/assets"
 	"moebot-next/internal/plugins/moesekai/b30"
 	"moebot-next/internal/plugins/moesekai/cardquery"
+	"moebot-next/internal/plugins/moesekai/crmission"
 	"moebot-next/internal/plugins/moesekai/deckrecommenddata"
 	"moebot-next/internal/plugins/moesekai/masterdata"
 	"moebot-next/internal/plugins/moesekai/musicsearch"
@@ -308,6 +309,27 @@ func (s *Service) buildSuiteDebugPayloadForDefinition(def Definition, runtime *s
 		payload.Stats = append(suiteDebugBasicStats(profile.commonSuiteProfile()), stats...)
 		payload.Sections = []renderpayloads.SuiteSectionPayload{{Title: "角色队长次数", Kind: "leader_count", Note: "普通档位读取 parameterGroupId=1；EX 等级/次数读取 parameterGroupId=101 并累计已完成轮次。", Rows: sectionRows, Extra: sectionExtra}}
 		return payload, suiteDebugSelected(def, runtime, profile.UserGamedata, "suite_panel"), suiteDebugRowsFromSections(payload.Sections), nil
+	case "character-rank-mission":
+		options, err := crmission.ParseArgs(argument)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		var profile crmission.Profile
+		if err := runtime.Suite.GetUserData(gameID, "", crmission.Fields(), &profile); err != nil {
+			return nil, nil, nil, err
+		}
+		payload, _, err := crmission.BuildPayload(runtime.Region, profile, runtime.Store, runtime.Assets, options)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		selected := suiteDebugSelected(def, runtime, profile.UserGamedata, "character_rank_mission")
+		selected.Title = payload.Title
+		selected.Subtitle = payload.Subtitle
+		rows := suiteDebugRowsFromCRMission(payload)
+		if len(rows) == 0 {
+			rows = []EntityResult{{ID: payload.CharacterID, Title: payload.Title, Subtitle: payload.Subtitle, Type: "character_rank_mission"}}
+		}
+		return payload, selected, rows, nil
 	case "suite-card-box":
 		var profile suiteDebugCardBoxProfile
 		if err := runtime.Suite.GetUserData(gameID, "", suite.Fields(), &profile); err != nil {
@@ -2496,6 +2518,31 @@ func suiteDebugRowsFromEventRecord(profile suiteDebugEventRecordProfile, store *
 		sections = append(sections, renderpayloads.SuiteSectionPayload{Title: "WL章节", Kind: "event_record_wl", Note: "WL 章节记录按章节 PT 排序，角色头像来自本地 assets/characters。", Rows: rows})
 	}
 	return sections, []renderpayloads.SuiteStatPayload{{Label: "活动记录", Value: formatDebugInt(len(events))}, {Label: "WL记录", Value: formatDebugInt(len(blooms))}}
+}
+
+func suiteDebugRowsFromCRMission(payload crmission.Payload) []EntityResult {
+	if payload.Mode == "all" {
+		rows := make([]EntityResult, 0, minDebug(len(payload.AllRows), 12))
+		for _, row := range payload.AllRows {
+			if len(rows) >= 12 {
+				break
+			}
+			status := "未达成"
+			if row.Reached {
+				status = "已达成"
+			}
+			rows = append(rows, EntityResult{ID: row.Seq, Title: fmt.Sprintf("#%d %s", row.Seq, status), Subtitle: fmt.Sprintf("累计需求 %s · EXP +%s", formatDebugInt(row.AccRequirement), formatDebugInt(row.Exp)), Type: "character_rank_mission"})
+		}
+		return rows
+	}
+	rows := make([]EntityResult, 0, minDebug(len(payload.Rows), 12))
+	for _, row := range payload.Rows {
+		if len(rows) >= 12 {
+			break
+		}
+		rows = append(rows, EntityResult{ID: row.Level, Title: row.Title, Subtitle: fmt.Sprintf("当前 %s · 档位 %d/%d", formatDebugInt(row.Current), row.Level, row.LevelMax), Type: "character_rank_mission"})
+	}
+	return rows
 }
 
 func suiteDebugRowsFromLeaderCount(profile suiteDebugLeaderCountProfile, store *masterdata.Store, limit int) ([]renderpayloads.SuiteSectionRowPayload, []renderpayloads.SuiteStatPayload, map[string]interface{}) {
