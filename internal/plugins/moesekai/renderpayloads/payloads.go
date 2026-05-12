@@ -1473,7 +1473,7 @@ func BuildCardDetailPayloadWithAssets(store *masterdata.Store, card masterdata.C
 		if card.SpecialTrainingSkillID > 0 && card.SpecialTrainingSkillID != card.SkillID {
 			payload.TrainedSkill = buildCardSkill(store, card.SpecialTrainingSkillID, card)
 		}
-		payload.Costumes = buildCardCostumes(store, card.ID, assetResolver)
+		payload.Costumes = buildCardCostumes(store, card, assetResolver)
 	}
 
 	return payload
@@ -1603,14 +1603,15 @@ func formatFloat(v float64) string {
 }
 
 // buildCardCostumes lists every outfit linked to the card via cardIds and
-// resolves a few thumbnail URLs (one per shared part variant + character-specific
-// extras) for the renderer. Avoids over-fetching by capping at the first color
-// of each part group.
-func buildCardCostumes(store *masterdata.Store, cardID int, resolver *assets.Resolver) []CardCostumePayload {
-	if store == nil || cardID <= 0 {
+// resolves thumbnail URLs for the same visual part groups Snowy_Viewer shows:
+// shared body/hair/head first, then character-specific extra parts. Hair is often
+// stored as a character-specific extraPart instead of a shared part, so we must
+// keep the per-card matching extra instead of truncating extras globally.
+func buildCardCostumes(store *masterdata.Store, card masterdata.CardInfo, resolver *assets.Resolver) []CardCostumePayload {
+	if store == nil || card.ID <= 0 {
 		return nil
 	}
-	costumes := store.GetMoeCostumesByCardID(cardID)
+	costumes := store.GetMoeCostumesByCardID(card.ID)
 	if len(costumes) == 0 {
 		return nil
 	}
@@ -1622,26 +1623,150 @@ func buildCardCostumes(store *masterdata.Store, cardID int, resolver *assets.Res
 			Rarity:        c.Costume3dRarity,
 			Source:        c.Source,
 			Designer:      c.Designer,
-			PartTypes:     append([]string(nil), c.PartTypes...),
+			PartTypes:     costumeDisplayPartTypes(c, card.CharacterID),
 		}
-		// Shared parts: one assetbundle per part type (first color variant).
+
+		seen := make(map[string]struct{})
+		// Shared parts: one assetbundle per display group (first color variant).
 		for _, partType := range []string{"body", "hair", "head"} {
 			variants, ok := c.Parts[partType]
 			if !ok || len(variants) == 0 {
 				continue
 			}
-			item.ThumbnailURLs = append(item.ThumbnailURLs, resolver.GetCostumeThumbnailURL(variants[0].AssetbundleName))
-		}
-		// Character-specific extras (cap to 3 to avoid bloating renderer payloads).
-		for i, extra := range c.ExtraParts {
-			if i >= 3 || len(extra.Variants) == 0 {
-				break
+			for _, assetName := range firstCostumeAssetsByBaseName(variants) {
+				appendCostumeThumbnailURL(&item, resolver, seen, assetName)
 			}
-			item.ThumbnailURLs = append(item.ThumbnailURLs, resolver.GetCostumeThumbnailURL(extra.Variants[0].AssetbundleName))
+		}
+		// Character-specific extras: keep the current card's character first so
+		// unique hairstyles are rendered even when many characters have extra parts.
+		for _, extra := range sortedCostumeExtraParts(c.ExtraParts, card.CharacterID) {
+			if len(extra.Variants) == 0 {
+				continue
+			}
+			for _, assetName := range firstCostumeAssetsByBaseName(extra.Variants) {
+				appendCostumeThumbnailURL(&item, resolver, seen, assetName)
+			}
 		}
 		out = append(out, item)
 	}
 	return out
+}
+
+func appendCostumeThumbnailURL(item *CardCostumePayload, resolver *assets.Resolver, seen map[string]struct{}, assetName string) {
+	if assetName == "" {
+		return
+	}
+	if _, ok := seen[assetName]; ok {
+		return
+	}
+	seen[assetName] = struct{}{}
+	item.ThumbnailURLs = append(item.ThumbnailURLs, resolver.GetCostumeThumbnailURL(assetName))
+}
+
+func firstCostumeAssetsByBaseName(parts []masterdata.MoeCostumePart) []string {
+	groups := make(map[string][]masterdata.MoeCostumePart)
+	order := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part.AssetbundleName == "" {
+			continue
+		}
+		base := costumeVariantBaseName(part.AssetbundleName)
+		if _, ok := groups[base]; !ok {
+			order = append(order, base)
+		}
+		groups[base] = append(groups[base], part)
+	}
+
+	out := make([]string, 0, len(order))
+	for _, base := range order {
+		group := groups[base]
+		if costumePartGroupHasColorCollision(group) {
+			for _, part := range group {
+				out = append(out, part.AssetbundleName)
+			}
+			continue
+		}
+		out = append(out, group[0].AssetbundleName)
+	}
+	return out
+}
+
+func costumePartGroupHasColorCollision(parts []masterdata.MoeCostumePart) bool {
+	seen := make(map[int]struct{}, len(parts))
+	for _, part := range parts {
+		if _, ok := seen[part.ColorID]; ok {
+			return true
+		}
+		seen[part.ColorID] = struct{}{}
+	}
+	return false
+}
+
+var costumeVariantSuffixRe = regexp.MustCompile(`_\d+$`)
+
+func costumeVariantBaseName(assetName string) string {
+	return costumeVariantSuffixRe.ReplaceAllString(assetName, "")
+}
+
+func sortedCostumeExtraParts(extras []masterdata.MoeCostumeExtraPart, characterID int) []masterdata.MoeCostumeExtraPart {
+	if len(extras) == 0 {
+		return nil
+	}
+	out := append([]masterdata.MoeCostumeExtraPart(nil), extras...)
+	sort.SliceStable(out, func(i, j int) bool {
+		iMatches := out[i].CharacterID == characterID
+		jMatches := out[j].CharacterID == characterID
+		if iMatches != jMatches {
+			return iMatches
+		}
+		iScore := costumePartScore(out[i].PartType)
+		jScore := costumePartScore(out[j].PartType)
+		if iScore != jScore {
+			return iScore < jScore
+		}
+		return false
+	})
+	return out
+}
+
+func costumeDisplayPartTypes(costume masterdata.MoeCostumeInfo, characterID int) []string {
+	seen := make(map[string]struct{})
+	out := make([]string, 0, len(costume.PartTypes)+len(costume.ExtraParts))
+	for _, partType := range costume.PartTypes {
+		if partType == "" {
+			continue
+		}
+		seen[partType] = struct{}{}
+		out = append(out, partType)
+	}
+	for _, extra := range sortedCostumeExtraParts(costume.ExtraParts, characterID) {
+		partType := extra.PartType
+		if partType == "" {
+			continue
+		}
+		if _, ok := seen[partType]; ok {
+			continue
+		}
+		seen[partType] = struct{}{}
+		out = append(out, partType)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return costumePartScore(out[i]) < costumePartScore(out[j])
+	})
+	return out
+}
+
+func costumePartScore(partType string) int {
+	switch partType {
+	case "body":
+		return 1
+	case "hair":
+		return 2
+	case "head":
+		return 3
+	default:
+		return 4
+	}
 }
 
 // BuildMusicDetailPayload adapts a masterdata music row into MusicDetail renderer props.

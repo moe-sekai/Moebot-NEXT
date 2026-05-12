@@ -31,6 +31,26 @@ describe("card and event bonus display", () => {
 		expect(text).toContain("测试活动");
 	});
 
+	test("card detail keeps costume hair thumbnail visible", () => {
+		const tree = <CardDetail card={{
+			...card,
+			costumes: [{
+				costumeNumber: 74,
+				name: "测试服装",
+				partTypes: ["body", "hair", "head"],
+				thumbnailUrls: [
+					"https://example.com/cos0074_body.png",
+					"https://example.com/cos0074_head.png",
+					"https://example.com/cos0074_unique_hair.png",
+				],
+			}],
+		}} />;
+		const imageUrls = collectImageUrls(tree);
+		expect(imageUrls).toContain("https://example.com/cos0074_body.png");
+		expect(imageUrls).toContain("https://example.com/cos0074_head.png");
+		expect(imageUrls).toContain("https://example.com/cos0074_unique_hair.png");
+	});
+
 	test("card list displays related event summary", () => {
 		const text = collectText(<CardList title="卡牌查询" cards={[card]} />);
 		expect(text).toContain("活动：测试活动");
@@ -59,4 +79,18 @@ function collectText(node: any): string {
 		return collectText((node.props as any).children);
 	}
 	return "";
+}
+
+function collectImageUrls(node: any): string[] {
+	if (node == null || typeof node === "boolean") return [];
+	if (Array.isArray(node)) return node.flatMap(collectImageUrls);
+	if (React.isValidElement(node)) {
+		if (typeof node.type === "function") {
+			return collectImageUrls((node.type as any)(node.props));
+		}
+		const props = node.props as any;
+		const urls = typeof props.src === "string" ? [props.src] : [];
+		return [...urls, ...collectImageUrls(props.children)];
+	}
+	return [];
 }

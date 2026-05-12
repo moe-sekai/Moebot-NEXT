@@ -1,6 +1,7 @@
 package renderpayloads
 
 import (
+	"strings"
 	"testing"
 
 	"moebot-next/internal/plugins/moesekai/masterdata"
@@ -16,6 +17,98 @@ func TestBuildMusicDetailPayloadIncludesDuration(t *testing.T) {
 
 	if payload.DurationSec != 74 {
 		t.Fatalf("DurationSec = %v, want 74", payload.DurationSec)
+	}
+}
+
+func TestBuildCardDetailPayloadIncludesCostumeHairThumbnail(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Cards: []masterdata.CardInfo{hairCostumeCard()},
+	})
+	store.SetMoeCostumes([]masterdata.MoeCostumeInfo{hairCostumeCostume()})
+
+	card := store.GetCard(180)
+	if card == nil {
+		t.Fatal("test card not found")
+	}
+
+	payload := BuildCardDetailPayloadWithAssets(store, *card, nil)
+	if len(payload.Costumes) != 1 {
+		t.Fatalf("len(payload.Costumes) = %d, want 1", len(payload.Costumes))
+	}
+	costume := payload.Costumes[0]
+	if !containsString(costume.PartTypes, "hair") {
+		t.Fatalf("costume.PartTypes = %#v, want hair", costume.PartTypes)
+	}
+	wantAssets := []string{"cos0074_body.png", "cos0074_head.png", "cos0074_unique_hair.png"}
+	for _, want := range wantAssets {
+		if !containsSubstring(costume.ThumbnailURLs, want) {
+			t.Fatalf("costume.ThumbnailURLs = %#v, want asset containing %q", costume.ThumbnailURLs, want)
+		}
+	}
+}
+
+func TestBuildCardDetailPayloadPreservesCostumePartColorCollisionGroups(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Cards: []masterdata.CardInfo{hairCostumeCard()},
+	})
+	costume := hairCostumeCostume()
+	costume.Parts["head"] = append(costume.Parts["head"], masterdata.MoeCostumePart{
+		ColorID:         1,
+		ColorName:       "original alt",
+		AssetbundleName: "cos0074_head_alt",
+	})
+	store.SetMoeCostumes([]masterdata.MoeCostumeInfo{costume})
+
+	card := store.GetCard(180)
+	if card == nil {
+		t.Fatal("test card not found")
+	}
+
+	payload := BuildCardDetailPayloadWithAssets(store, *card, nil)
+	if len(payload.Costumes) != 1 {
+		t.Fatalf("len(payload.Costumes) = %d, want 1", len(payload.Costumes))
+	}
+	thumbs := payload.Costumes[0].ThumbnailURLs
+	if !containsSubstring(thumbs, "cos0074_head.png") || !containsSubstring(thumbs, "cos0074_head_alt.png") {
+		t.Fatalf("ThumbnailURLs = %#v, want all assets from colliding head group", thumbs)
+	}
+	if containsSubstring(thumbs, "cos0074_body_01.png") {
+		t.Fatalf("ThumbnailURLs = %#v, did not expect non-colliding body color variant", thumbs)
+	}
+}
+
+func TestBuildCardDetailPayloadPrioritizesMatchingCharacterExtraCostumeParts(t *testing.T) {
+	store := masterdata.NewStore()
+	store.SetAll(&masterdata.MasterData{
+		Cards: []masterdata.CardInfo{hairCostumeCard()},
+	})
+	costume := hairCostumeCostume()
+	costume.ExtraParts = append([]masterdata.MoeCostumeExtraPart{{
+		CharacterID: 1,
+		PartType:    "hair",
+		Variants:    []masterdata.MoeCostumePart{{ColorID: 1, ColorName: "original", AssetbundleName: "cos0074_other_hair"}},
+	}}, costume.ExtraParts...)
+	store.SetMoeCostumes([]masterdata.MoeCostumeInfo{costume})
+
+	card := store.GetCard(180)
+	if card == nil {
+		t.Fatal("test card not found")
+	}
+
+	payload := BuildCardDetailPayloadWithAssets(store, *card, nil)
+	if len(payload.Costumes) != 1 {
+		t.Fatalf("len(payload.Costumes) = %d, want 1", len(payload.Costumes))
+	}
+	thumbs := payload.Costumes[0].ThumbnailURLs
+	matchingIdx := indexOfSubstring(thumbs, "cos0074_unique_hair.png")
+	otherIdx := indexOfSubstring(thumbs, "cos0074_other_hair.png")
+	if matchingIdx < 0 || otherIdx < 0 {
+		t.Fatalf("ThumbnailURLs = %#v, want both matching and non-matching hair extras", thumbs)
+	}
+	if matchingIdx > otherIdx {
+		t.Fatalf("ThumbnailURLs = %#v, want current character hair before other characters", thumbs)
 	}
 }
 
@@ -139,6 +232,64 @@ func TestBuildEventInfoPayloadIncludesPickupCards(t *testing.T) {
 	if payload.PickupCards[0].ID != 1002 || payload.PickupCards[0].Prefix != "Pickup卡牌" {
 		t.Fatalf("payload.PickupCards[0] = %#v, want pickup card", payload.PickupCards[0])
 	}
+}
+
+func hairCostumeCard() masterdata.CardInfo {
+	return masterdata.CardInfo{
+		ID:              180,
+		CharacterID:     14,
+		CardRarityType:  "rarity_4",
+		Attr:            "cool",
+		Prefix:          "带发型服装",
+		AssetbundleName: "card_hair_test",
+	}
+}
+
+func hairCostumeCostume() masterdata.MoeCostumeInfo {
+	return masterdata.MoeCostumeInfo{
+		CostumeNumber:   74,
+		Name:            "测试发型服装",
+		Costume3dRarity: "rare",
+		PartTypes:       []string{"body", "hair", "head"},
+		Parts: map[string][]masterdata.MoeCostumePart{
+			"body": {
+				{ColorID: 1, ColorName: "original", AssetbundleName: "cos0074_body"},
+				{ColorID: 2, ColorName: "variant 1", AssetbundleName: "cos0074_body_01"},
+			},
+			"head": {
+				{ColorID: 1, ColorName: "original", AssetbundleName: "cos0074_head"},
+				{ColorID: 2, ColorName: "variant 1", AssetbundleName: "cos0074_head_01"},
+			},
+		},
+		ExtraParts: []masterdata.MoeCostumeExtraPart{{
+			CharacterID: 14,
+			PartType:    "hair",
+			Variants:    []masterdata.MoeCostumePart{{ColorID: 1, ColorName: "original", AssetbundleName: "cos0074_unique_hair"}},
+		}},
+		CardIDs: []int{180},
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSubstring(values []string, want string) bool {
+	return indexOfSubstring(values, want) >= 0
+}
+
+func indexOfSubstring(values []string, want string) int {
+	for i, value := range values {
+		if strings.Contains(value, want) {
+			return i
+		}
+	}
+	return -1
 }
 
 func TestCardSupplyTypeDisplayName(t *testing.T) {

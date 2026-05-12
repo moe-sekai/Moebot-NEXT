@@ -402,7 +402,7 @@ function CostumeSection({ costumes, accentColor }: { costumes: CardCostume[]; ac
       <SectionHeader title="关联服装" badge={`共 ${costumes.length} 套`} accentColor={accentColor} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {visible.map((costume, idx) => {
-          const thumbs = (costume.thumbnailUrls ?? []).slice(0, 2)
+          const thumbs = (costume.thumbnailUrls ?? []).filter(Boolean).slice(0, 6)
           const partsLabel = (costume.partTypes ?? []).map(p => COSTUME_PART_LABELS[p] ?? p).join('/')
           return (
             <div
@@ -416,10 +416,10 @@ function CostumeSection({ costumes, accentColor }: { costumes: CardCostume[]; ac
                 backgroundColor: theme.colors.background,
               }}
             >
-              <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, width: 117, flexShrink: 0 }}>
                 {thumbs.length > 0 ? thumbs.map((url, i) => (
                   <div key={i} style={{ display: 'flex', width: 36, height: 36, borderRadius: 4, overflow: 'hidden', backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.border}` }}>
-                    <img src={url} width={36} height={36} style={{ objectFit: 'cover' }} />
+                    <img src={url} width={36} height={36} style={{ objectFit: 'contain' }} />
                   </div>
                 )) : (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 4, backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.border}`, color: theme.colors.textMuted, fontSize: 9, fontWeight: 800 }}>N/A</div>
