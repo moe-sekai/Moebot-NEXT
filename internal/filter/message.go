@@ -20,6 +20,7 @@ type OneBotMessagePartial struct {
 	UnDecodedMessage json.RawMessage        `json:"message"`
 	MessageArray     []OneBotMessageContent `json:"-"`
 	MessageString    string                 `json:"-"`
+	SelfID           int64                  `json:"self_id"`
 	UserID           int64                  `json:"user_id"`
 	GroupID          int64                  `json:"group_id"`
 	RawMessage       string                 `json:"raw_message"`

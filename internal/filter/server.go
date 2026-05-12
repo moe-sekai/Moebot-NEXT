@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"strconv"
 	"sync"
 	"time"
 
@@ -70,6 +71,7 @@ func (d *dedupCache) Stop() {
 // dedupProbe 是从 OneBot 事件 JSON 中提取的去重字段。
 type dedupProbe struct {
 	PostType   string `json:"post_type"`
+	SelfID     int64  `json:"self_id"`
 	GroupID    int64  `json:"group_id"`
 	UserID     int64  `json:"user_id"`
 	Time       int64  `json:"time"`
@@ -78,14 +80,14 @@ type dedupProbe struct {
 
 func dedupKey(p *dedupProbe) uint64 {
 	h := fnv.New64a()
-	fmt.Fprintf(h, "%d:%d:%d:%s", p.GroupID, p.UserID, p.Time, p.RawMessage)
+	fmt.Fprintf(h, "%d:%d:%d:%d:%s", p.SelfID, p.GroupID, p.UserID, p.Time, p.RawMessage)
 	return h.Sum64()
 }
 
 // wsServer is the upstream side: it accepts one or more connections from
-// real OneBot clients (e.g. NapCat) keyed by their self-id, and fans incoming
-// events out to all downstream clients. Outgoing action calls coming back from
-// downstream clients are routed by `self_id` when present.
+// real OneBot clients (e.g. NapCat) keyed by their self-id, and forwards each
+// event to the matching downstream connection for that self-id. Outgoing action
+// calls coming back from downstream clients are routed to their bound upstream.
 type wsServer struct {
 	mu        sync.RWMutex
 	upstreams map[string]*upstream
@@ -125,15 +127,14 @@ func (s *wsServer) serve(ctx context.Context, conn *websocket.Conn, selfID, remo
 	}
 	s.mu.Lock()
 	if existing, ok := s.upstreams[selfID]; ok {
-		s.mu.Unlock()
-		_ = existing
-		return fmt.Errorf("filter: upstream self-id %s already connected", selfID)
+		delete(s.upstreams, selfID)
+		_ = existing.conn.Close()
 	}
 	s.upstreams[selfID] = u
 	s.mu.Unlock()
 
 	innerCtx, cancel := context.WithCancel(ctx)
-	defer s.removeUpstream(selfID, cancel)
+	defer s.removeUpstream(selfID, u, cancel)
 
 	go s.upstreamWriteLoop(innerCtx, u)
 
@@ -141,6 +142,9 @@ func (s *wsServer) serve(ctx context.Context, conn *websocket.Conn, selfID, remo
 		mt, data, err := conn.ReadMessage()
 		if err != nil {
 			return err
+		}
+		if mt == websocket.TextMessage {
+			data = ensurePayloadSelfID(data, selfID)
 		}
 		if s.dedup != nil && mt == websocket.TextMessage {
 			var p dedupProbe
@@ -151,17 +155,19 @@ func (s *wsServer) serve(ctx context.Context, conn *websocket.Conn, selfID, remo
 				}
 			}
 		}
-		s.broadcastToClients(wsMsg{mt, data})
+		s.broadcastToClients(wsMsg{mt: mt, data: data, selfID: selfID})
 	}
 }
 
 // removeUpstream stops a single upstream connection and cleans state.
-func (s *wsServer) removeUpstream(selfID string, cancel context.CancelFunc) {
+func (s *wsServer) removeUpstream(selfID string, expected *upstream, cancel context.CancelFunc) {
 	cancel()
 	s.mu.Lock()
 	u, ok := s.upstreams[selfID]
-	if ok {
+	if ok && (expected == nil || u == expected) {
 		delete(s.upstreams, selfID)
+	} else {
+		ok = false
 	}
 	s.mu.Unlock()
 	if ok && u.conn != nil {
@@ -173,18 +179,18 @@ func (s *wsServer) removeUpstream(selfID string, cancel context.CancelFunc) {
 func (s *wsServer) broadcastToClients(msg wsMsg) {
 	for _, c := range s.snapshotClients() {
 		go func(c *wsClient, m wsMsg) {
-			if err := c.write(m.mt, m.data); err != nil {
+			if err := c.write(m); err != nil {
 				log.Debug().Str("client", c.name).Err(err).Msg("filter: forward to client failed")
 			}
 		}(c, msg)
 	}
 }
 
-// writeMessage routes a downstream-originated message to the correct upstream(s).
-// If `self_id` is present in the JSON payload and matches a connected upstream,
-// only that upstream receives the message; otherwise we fall back to broadcast
-// (covers single-account deployments and best-effort multi-account routing).
-func (s *wsServer) writeMessage(mt int, data []byte) error {
+// writeMessage routes a downstream-originated message to the correct upstream.
+// For system transport, boundSelfID is the downstream connection's account and
+// is authoritative. For ordinary downstream apps, a JSON self_id may target a
+// specific upstream; otherwise single-upstream deployments broadcast as before.
+func (s *wsServer) writeMessage(mt int, data []byte, boundSelfID string) error {
 	s.mu.RLock()
 	count := len(s.upstreams)
 	s.mu.RUnlock()
@@ -192,8 +198,8 @@ func (s *wsServer) writeMessage(mt int, data []byte) error {
 		return errors.New("filter: no upstream OneBot client")
 	}
 
-	target := ""
-	if mt == websocket.TextMessage {
+	target := boundSelfID
+	if target == "" && mt == websocket.TextMessage {
 		var probe struct {
 			SelfID json.Number `json:"self_id"`
 		}
@@ -206,13 +212,14 @@ func (s *wsServer) writeMessage(mt int, data []byte) error {
 	defer s.mu.RUnlock()
 	if target != "" {
 		if u, ok := s.upstreams[target]; ok {
-			return enqueue(u, wsMsg{mt, data})
+			return enqueue(u, wsMsg{mt: mt, data: data, selfID: target})
 		}
+		return fmt.Errorf("filter: upstream self_id %s not connected", target)
 	}
-	// Fan-out to all upstreams.
+	// Fan-out only for ordinary downstream clients without a self_id target.
 	var firstErr error
 	for _, u := range s.upstreams {
-		if err := enqueue(u, wsMsg{mt, data}); err != nil && firstErr == nil {
+		if err := enqueue(u, wsMsg{mt: mt, data: data, selfID: u.selfID}); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -293,4 +300,33 @@ func (s *wsServer) upstreamWriteLoop(ctx context.Context, u *upstream) {
 			return
 		}
 	}
+}
+
+func ensurePayloadSelfID(data []byte, selfID string) []byte {
+	if selfID == "" {
+		return data
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return data
+	}
+	if _, ok := obj["self_id"]; ok {
+		return data
+	}
+	if numericSelfID, err := strconv.ParseInt(selfID, 10, 64); err == nil {
+		encoded, _ := json.Marshal(numericSelfID)
+		obj["self_id"] = encoded
+	} else {
+		encoded, _ := json.Marshal(selfID)
+		obj["self_id"] = encoded
+	}
+	return encodeRawMap(obj)
+}
+
+func encodeRawMap(obj map[string]json.RawMessage) []byte {
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil
+	}
+	return data
 }

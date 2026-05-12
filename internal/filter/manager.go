@@ -21,7 +21,7 @@ import (
 //
 // Responsibilities:
 //   - Read/write the gateway + apps configuration from the database
-//   - Run an HTTP server that accepts a single OneBot client (reverse-WS)
+//   - Run an HTTP server that accepts OneBot clients (reverse-WS)
 //   - Maintain ws clients to each enabled downstream FilterApp
 //   - Hot-reload all clients on configuration change
 type Manager struct {
@@ -359,7 +359,7 @@ func (m *Manager) startClientsLocked(ctx context.Context) error {
 		if app.Internal {
 			continue
 		}
-		c := newWsClient(app.Name, app.URI, app.AccessToken, f, m.debug, m.bus.Publish)
+		c := newWsClient(app.Name, app.URI, app.AccessToken, f, m.debug, m.bus.Publish, IsBuiltinTransport(app.Name))
 		m.clients[app.Name] = c
 		go c.run(ctx, m.server, snap)
 	}

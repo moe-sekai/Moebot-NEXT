@@ -88,6 +88,7 @@ func EncodeMessageRule(r MessageRule) string {
 
 // wsMsg is an internal channel envelope.
 type wsMsg struct {
-	mt   int
-	data []byte
+	mt     int
+	data   []byte
+	selfID string
 }
