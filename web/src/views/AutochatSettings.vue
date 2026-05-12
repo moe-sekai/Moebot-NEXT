@@ -481,7 +481,10 @@ function addTemplate() {
   if (!name) return
   const trimmed = name.trim()
   if (!trimmed || trimmed === 'default') { templatesError.value = '模板名无效'; return }
-  if (templates.value.some(t => t.name === trimmed)) return
+  if (templates.value.some(t => t.name === trimmed)) {
+    templatesError.value = `模板 "${trimmed}" 已存在`
+    return
+  }
   const row: TemplateRow = {
     name: trimmed,
     persona: '',
@@ -508,7 +511,7 @@ async function saveTemplate(t: TemplateRow) {
   t.saving = true
   templatesError.value = ''
   try {
-    const updated = await upsertAutochatTemplate(t.name, {
+    await upsertAutochatTemplate(t.name, {
       name: t.name,
       persona: t.persona ?? '',
       models: t.models || [],
@@ -520,8 +523,8 @@ async function saveTemplate(t: TemplateRow) {
       keywords: t.keywords || [],
       used_by_groups: t.used_by_groups || [],
     })
-    Object.assign(t, updated, { isNew: false })
-    applyMultimodalMode(t)
+    // 保存成功后强制从后端 reload，避免前端 state 与后端漂移导致幽灵 row。
+    await loadTemplates()
   } catch (e) { templatesError.value = e instanceof Error ? e.message : String(e) }
   finally { t.saving = false }
 }
@@ -533,7 +536,9 @@ async function removeTemplate(t: TemplateRow) {
   if (!window.confirm(`删除模板 "${t.name}"？所有绑定该模板的群将自动解绑。`)) return
   try {
     await deleteAutochatTemplate(t.name)
-    templates.value = templates.value.filter(x => x.name !== t.name)
+    // 删除成功后强制从后端 reload，避免本地按 name 过滤把同名 row 一并误删
+    // 或漏掉真实后端状态。
+    await loadTemplates()
     // 同步刷新 groups（解除绑定）
     await loadGroups()
   } catch (e) { templatesError.value = e instanceof Error ? e.message : String(e) }

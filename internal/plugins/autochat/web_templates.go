@@ -8,6 +8,7 @@ import (
 	"moebot-next/internal/plugin"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog/log"
 )
 
 // templatePayload 是 ChatTemplate 的前端 DTO。Multimodal 用 *bool 保留三态：
@@ -84,6 +85,11 @@ func (p *pluginImpl) handleUpsertTemplate(c *fiber.Ctx) error {
 	if err := c.BodyParser(&body); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
+	// 防御：body.Name 必须与 URL name 一致（前端正常调用一定一致；不一致
+	// 多半是异常状态或调用错位，直接拒绝以暴露问题，避免静默写错 key）。
+	if bn := strings.TrimSpace(body.Name); bn != "" && bn != name {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("template name mismatch: url=%q body=%q", name, bn))
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	cfg := GetConfig()
@@ -115,6 +121,7 @@ func (p *pluginImpl) handleUpsertTemplate(c *fiber.Ctx) error {
 		RandomDeltaMax:   derefFloat(body.RandomDeltaMax),
 		Keywords:         keywords,
 	}
+	logTemplateKeys(cfg, "upsert", name)
 	if err := plugin.WriteYAMLFrom(p.configPath, cfg); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("write config: %v", err))
 	}
@@ -139,8 +146,20 @@ func (p *pluginImpl) handleDeleteTemplate(c *fiber.Ctx) error {
 			delete(cfg.Chat.GroupTemplates, gid)
 		}
 	}
+	logTemplateKeys(cfg, "delete", name)
 	if err := plugin.WriteYAMLFrom(p.configPath, cfg); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("write config: %v", err))
 	}
 	return c.JSON(fiber.Map{"ok": true, "name": name})
+}
+
+// logTemplateKeys 把当前 Templates 与 GroupTemplates 的 key 列出来；用于
+// 定位"模板被错改/丢失"类问题：每次落盘前留下一条 service-side 真实状态。
+func logTemplateKeys(c *Config, op, name string) {
+	keys := make([]string, 0, len(c.Chat.Templates))
+	for k := range c.Chat.Templates {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	log.Info().Str("op", op).Str("name", name).Strs("templates", keys).Interface("group_templates", c.Chat.GroupTemplates).Msg("[autochat] template state")
 }
