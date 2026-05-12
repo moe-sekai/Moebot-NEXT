@@ -23,8 +23,10 @@ type FilterGateway struct {
 	UserAgent   string    `gorm:"default:'Moebot'" json:"user_agent"`
 	BufferSize  int       `gorm:"default:4096" json:"buffer_size"`
 	SleepTime   float32   `gorm:"default:5" json:"sleep_time"`
-	Debug       bool      `json:"debug"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	Debug        bool      `json:"debug"`
+	DedupEnabled bool      `gorm:"default:false" json:"dedup_enabled"`
+	DedupTTL     int       `gorm:"default:60" json:"dedup_ttl"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // FilterTemplate is a reusable bundle of filter rules that one or more

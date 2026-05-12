@@ -86,6 +86,10 @@ func (m *Manager) Start(ctx context.Context) error {
 		CheckOrigin:     func(r *http.Request) bool { return true },
 	}
 	m.server = newWsServer()
+	if gw.DedupEnabled {
+		m.server.dedup = newDedupCache(gw.DedupTTL)
+		log.Info().Int("ttl", gw.DedupTTL).Msg("Filter: message dedup enabled")
+	}
 
 	mux := http.NewServeMux()
 	suffix := gw.Suffix
@@ -140,6 +144,9 @@ func (m *Manager) Stop() {
 		_ = m.httpSrv.Shutdown(shutdownCtx)
 		m.httpSrv = nil
 	}
+	if m.server != nil && m.server.dedup != nil {
+		m.server.dedup.Stop()
+	}
 	m.server = nil
 }
 
@@ -156,6 +163,15 @@ func (m *Manager) Reload(ctx context.Context) error {
 	}
 	m.gateway = *gw
 	m.debug = gw.Debug
+	if m.server != nil {
+		if m.server.dedup != nil {
+			m.server.dedup.Stop()
+			m.server.dedup = nil
+		}
+		if gw.DedupEnabled {
+			m.server.dedup = newDedupCache(gw.DedupTTL)
+		}
+	}
 	m.stopClientsLocked()
 	return m.startClientsLocked(ctx)
 }

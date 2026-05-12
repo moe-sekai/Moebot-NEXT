@@ -5,12 +5,82 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 )
+
+// dedupCache 提供基于 TTL 的消息去重缓存。
+type dedupCache struct {
+	ttl   time.Duration
+	store sync.Map // key(uint64) → expireAt(int64, UnixNano)
+	stop  chan struct{}
+}
+
+func newDedupCache(ttlSeconds int) *dedupCache {
+	if ttlSeconds <= 0 {
+		ttlSeconds = 60
+	}
+	d := &dedupCache{
+		ttl:  time.Duration(ttlSeconds) * time.Second,
+		stop: make(chan struct{}),
+	}
+	go d.cleanup()
+	return d
+}
+
+// IsDup 检查 key 是否已在缓存中（未过期）。若不存在则写入并返回 false。
+func (d *dedupCache) IsDup(key uint64) bool {
+	now := time.Now().UnixNano()
+	if v, ok := d.store.Load(key); ok {
+		if v.(int64) > now {
+			return true
+		}
+	}
+	d.store.Store(key, now+int64(d.ttl))
+	return false
+}
+
+func (d *dedupCache) cleanup() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-d.stop:
+			return
+		case <-ticker.C:
+			now := time.Now().UnixNano()
+			d.store.Range(func(k, v any) bool {
+				if v.(int64) <= now {
+					d.store.Delete(k)
+				}
+				return true
+			})
+		}
+	}
+}
+
+func (d *dedupCache) Stop() {
+	close(d.stop)
+}
+
+// dedupProbe 是从 OneBot 事件 JSON 中提取的去重字段。
+type dedupProbe struct {
+	PostType   string `json:"post_type"`
+	GroupID    int64  `json:"group_id"`
+	UserID     int64  `json:"user_id"`
+	Time       int64  `json:"time"`
+	RawMessage string `json:"raw_message"`
+}
+
+func dedupKey(p *dedupProbe) uint64 {
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%d:%d:%d:%s", p.GroupID, p.UserID, p.Time, p.RawMessage)
+	return h.Sum64()
+}
 
 // wsServer is the upstream side: it accepts one or more connections from
 // real OneBot clients (e.g. NapCat) keyed by their self-id, and fans incoming
@@ -19,6 +89,7 @@ import (
 type wsServer struct {
 	mu        sync.RWMutex
 	upstreams map[string]*upstream
+	dedup     *dedupCache
 
 	clientsMu sync.RWMutex
 	clients   []*wsClient
@@ -70,6 +141,15 @@ func (s *wsServer) serve(ctx context.Context, conn *websocket.Conn, selfID, remo
 		mt, data, err := conn.ReadMessage()
 		if err != nil {
 			return err
+		}
+		if s.dedup != nil && mt == websocket.TextMessage {
+			var p dedupProbe
+			if json.Unmarshal(data, &p) == nil && p.PostType == "message" && p.RawMessage != "" {
+				if s.dedup.IsDup(dedupKey(&p)) {
+					log.Debug().Str("self_id", selfID).Int64("group_id", p.GroupID).Msg("filter: dedup skipped duplicate message")
+					continue
+				}
+			}
 		}
 		s.broadcastToClients(wsMsg{mt, data})
 	}

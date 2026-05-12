@@ -95,16 +95,18 @@ func payloadToApp(p *filterAppPayload, dst *models.FilterApp) {
 }
 
 type gatewayPayload struct {
-	Enabled     bool    `json:"enabled"`
-	Host        string  `json:"host"`
-	Port        int     `json:"port"`
-	Suffix      string  `json:"suffix"`
-	BotID       string  `json:"bot_id"`
-	AccessToken string  `json:"access_token"`
-	UserAgent   string  `json:"user_agent"`
-	BufferSize  int     `json:"buffer_size"`
-	SleepTime   float32 `json:"sleep_time"`
-	Debug       bool    `json:"debug"`
+	Enabled      bool    `json:"enabled"`
+	Host         string  `json:"host"`
+	Port         int     `json:"port"`
+	Suffix       string  `json:"suffix"`
+	BotID        string  `json:"bot_id"`
+	AccessToken  string  `json:"access_token"`
+	UserAgent    string  `json:"user_agent"`
+	BufferSize   int     `json:"buffer_size"`
+	SleepTime    float32 `json:"sleep_time"`
+	Debug        bool    `json:"debug"`
+	DedupEnabled bool    `json:"dedup_enabled"`
+	DedupTTL     int     `json:"dedup_ttl"`
 }
 
 func gatewayToPayload(g *models.FilterGateway) gatewayPayload {
@@ -113,6 +115,7 @@ func gatewayToPayload(g *models.FilterGateway) gatewayPayload {
 		BotID: g.BotID, AccessToken: g.AccessToken,
 		UserAgent: g.UserAgent, BufferSize: g.BufferSize,
 		SleepTime: g.SleepTime, Debug: g.Debug,
+		DedupEnabled: g.DedupEnabled, DedupTTL: g.DedupTTL,
 	}
 }
 
@@ -205,6 +208,10 @@ func (s *Server) handleUpdateFilterGateway(c *fiber.Ctx) error {
 		gw.SleepTime = p.SleepTime
 	}
 	gw.Debug = p.Debug
+	gw.DedupEnabled = p.DedupEnabled
+	if p.DedupTTL > 0 {
+		gw.DedupTTL = p.DedupTTL
+	}
 	if err := s.DB.UpdateFilterGateway(gw); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
