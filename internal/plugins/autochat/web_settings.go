@@ -3,11 +3,13 @@ package autochat
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"moebot-next/internal/plugin"
 
 	"github.com/gofiber/fiber/v2"
+	"gopkg.in/yaml.v3"
 )
 
 func readFileBytes(path string) ([]byte, error) { return os.ReadFile(path) }
@@ -425,4 +427,42 @@ func (p *pluginImpl) handleGetYAML(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(fiber.Map{"path": p.configPath, "yaml": string(data)})
+}
+
+// handlePutYAML 保存 YAML 原文并同步更新内存配置和 Provider 客户端。
+// 区别于通用 /api/plugins/:name/config 端点（仅写文件、不更新内存，需重启），
+// 本端点写文件后立即 setConfig + applyProviders，前端无需重启即可生效。
+func (p *pluginImpl) handlePutYAML(c *fiber.Ctx) error {
+	if p.configPath == "" {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "autochat: plugin not initialized")
+	}
+	var body struct {
+		YAML string `json:"yaml"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	if strings.TrimSpace(body.YAML) == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "yaml body is empty")
+	}
+	// 先解析验证 YAML 语法
+	var newCfg Config
+	if err := yaml.Unmarshal([]byte(body.YAML), &newCfg); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("invalid yaml: %v", err))
+	}
+	applyDefaults(&newCfg)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	// 写文件（使用原始 YAML 文本，保留用户格式/注释）
+	if err := os.MkdirAll(filepath.Dir(p.configPath), 0o755); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	if err := os.WriteFile(p.configPath, []byte(body.YAML), 0o644); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("write config: %v", err))
+	}
+	// 更新内存配置并刷新 Provider 客户端
+	setConfig(&newCfg)
+	p.applyProviders(&newCfg)
+	return c.JSON(fiber.Map{"ok": true})
 }

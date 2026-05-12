@@ -278,7 +278,7 @@ import {
   upsertAutochatGroup,
   deleteAutochatGroup,
   getPluginConfig,
-  updatePluginConfig,
+  updateAutochatYAML,
   listAutochatTemplates,
   upsertAutochatTemplate,
   deleteAutochatTemplate,
@@ -384,13 +384,14 @@ async function saveGroup(g: GroupRow) {
   g.saving = true
   groupsError.value = ''
   try {
-    // 只发送 UI 中实际暴露的字段；persona/willing/model 现由模板统一管理。
-    const updated = await upsertAutochatGroup(g.group_id, {
+    await upsertAutochatGroup(g.group_id, {
       template: g.template ?? '',
       chat_enabled: g.chat_enabled,
       auto_enabled: g.auto_enabled,
     })
-    Object.assign(g, updated)
+    await loadGroups()
+    // 同步刷新 templates（更新 used_by_groups 显示）
+    await loadTemplates()
   } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
   finally { g.saving = false }
 }
@@ -398,7 +399,7 @@ async function removeGroup(g: GroupRow) {
   if (!window.confirm(`移除群 ${g.group_id} 的所有覆盖配置？默认值会重新生效。`)) return
   try {
     await deleteAutochatGroup(g.group_id)
-    groups.value = groups.value.filter(x => x.group_id !== g.group_id)
+    await loadGroups()
   } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
 }
 
@@ -543,7 +544,7 @@ async function removeTemplate(t: TemplateRow) {
     await loadGroups()
   } catch (e) { templatesError.value = e instanceof Error ? e.message : String(e) }
 }
-const templateNames = computed(() => templates.value.map(t => t.name))
+const templateNames = computed(() => templates.value.filter(t => !t.isNew).map(t => t.name))
 
 // ----- YAML -----
 const yamlText = ref('')
@@ -563,13 +564,25 @@ async function loadYAML() {
 async function saveYAML() {
   savingYAML.value = true
   error.value = ''
-  try { await updatePluginConfig('autochat', yamlText.value) }
+  try {
+    await updateAutochatYAML(yamlText.value)
+    // YAML 覆写整个配置，保存后重新加载所有数据以保持内存/UI 同步
+    await Promise.all([loadPersona(), loadTriggers(), loadGroups(), loadTemplates(), loadYAML()])
+  }
   catch (e) { error.value = e instanceof Error ? e.message : String(e) }
   finally { savingYAML.value = false }
 }
 
 onMounted(() => { loadPersona(); loadTriggers(); loadGroups(); loadTemplates(); loadAvailableModels(); loadYAML() })
-watch(tab, () => { error.value = '' })
+watch(tab, (newTab) => {
+  error.value = ''
+  // 切换 tab 时重新加载对应数据，避免跨 tab 操作后看到过期状态
+  if (newTab === 'persona') loadPersona()
+  else if (newTab === 'triggers') loadTriggers()
+  else if (newTab === 'templates') loadTemplates()
+  else if (newTab === 'groups') { loadGroups(); loadTemplates() }
+  else if (newTab === 'advanced') loadYAML()
+})
 </script>
 
 <style scoped>

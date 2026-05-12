@@ -1001,6 +1001,14 @@ export async function updatePluginConfig(name: string, yaml: string) {
 	return data;
 }
 
+export async function updateAutochatYAML(yaml: string) {
+	const { data } = await api.put<{ ok: boolean }>(
+		'/plugins/autochat/yaml',
+		{ yaml },
+	)
+	return data
+}
+
 function parseHeaderNumber(value: unknown) {
 	const raw = Array.isArray(value) ? value[0] : value;
 	if (raw === undefined || raw === null || raw === "") return null;

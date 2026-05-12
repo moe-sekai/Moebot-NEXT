@@ -60,6 +60,8 @@ func buildTemplatePayload(c *Config, name string) templatePayload {
 }
 
 func (p *pluginImpl) handleListTemplates(c *fiber.Ctx) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	cfg := GetConfig()
 	if cfg == nil {
 		return fiber.NewError(fiber.StatusServiceUnavailable, "autochat config not loaded")

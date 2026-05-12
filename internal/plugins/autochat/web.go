@@ -34,6 +34,7 @@ func (p *pluginImpl) registerWebRoutes(api fiber.Router) {
 	g.Get("/triggers", p.handleGetTriggers)
 	g.Put("/triggers", p.handlePutTriggers)
 	g.Get("/yaml", p.handleGetYAML)
+	g.Put("/yaml", p.handlePutYAML)
 	g.Post("/test-provider", p.handleTestProvider)
 	g.Post("/list-models", p.handleListModels)
 	g.Get("/groups", p.handleListGroups)

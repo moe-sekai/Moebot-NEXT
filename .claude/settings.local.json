@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(cd /d/Python_Project/Moebot-NEXT-Go && go build ./internal/plugins/autochat/ 2>&1)",
+      "Bash(cd /d/Python_Project/Moebot-NEXT-Go && go vet ./internal/plugins/autochat/ 2>&1)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(cd /d/Python_Project/Moebot-NEXT-Go && go build ./... 2>&1)"
+    ]
+  }
+}
