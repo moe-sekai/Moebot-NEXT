@@ -25,3 +25,4 @@ config.yml
 # Logs
 *.log
 config.yml
+.narrafork/
