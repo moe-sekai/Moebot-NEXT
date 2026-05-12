@@ -3,6 +3,7 @@ package commands
 import (
 	"testing"
 
+	"moebot-next/internal/plugins/moesekai/crmission"
 	"moebot-next/internal/plugins/moesekai/masterdata"
 	"moebot-next/internal/plugins/moesekai/suite"
 )
@@ -31,11 +32,11 @@ func TestParseCharacterRankMissionArgsOverview(t *testing.T) {
 }
 
 func TestParseCharacterRankMissionArgsAllMissionAlias(t *testing.T) {
-	opts, err := parseCharacterRankMissionArgs("miku all 队长")
+	opts, err := parseCharacterRankMissionArgs("miku all 队长 p2")
 	if err != nil {
 		t.Fatalf("parse args error: %v", err)
 	}
-	if opts.CharacterID != 21 || !opts.ShowAll || opts.MissionType != "play_live" {
+	if opts.CharacterID != 21 || !opts.ShowAll || opts.MissionType != "play_live" || opts.Page != 2 {
 		t.Fatalf("opts = %+v", opts)
 	}
 
@@ -120,6 +121,29 @@ func TestCharacterRankMissionAllRowsForExUsesAccumulatedRequirement(t *testing.T
 	}
 	if rows[0].AccRequirement != 5 || rows[1].AccRequirement != 13 || !rows[0].Reached || rows[1].Reached {
 		t.Fatalf("rows = %+v", rows)
+	}
+}
+
+func TestCharacterRankMissionPayloadUsesSafePage(t *testing.T) {
+	store := masterdata.NewStore()
+	groups := make([]masterdata.CharacterMissionV2ParameterGroup, 0, 100)
+	for i := 1; i <= 100; i++ {
+		groups = append(groups, masterdata.CharacterMissionV2ParameterGroup{ID: 1, Seq: i, Requirement: i, Exp: i})
+	}
+	store.SetAll(&masterdata.MasterData{CharacterMissionV2ParameterGroups: groups})
+	profile := characterRankMissionProfile{Missions: []characterMissionV2{{CharacterID: 21, CharacterMissionType: "play_live", Progress: 1}}}
+	payload, _, err := buildCharacterRankMissionPayload("jp", profile, store, nil, characterRankMissionOptions{CharacterID: 21, ShowAll: true, MissionType: "play_live", PageSize: 40})
+	if err != nil {
+		t.Fatalf("payload error: %v", err)
+	}
+	if len(payload.AllRows) != 40 || payload.AllRowsTotal != 100 || payload.Page != 1 || payload.TotalPages != 3 {
+		t.Fatalf("payload = %+v", payload)
+	}
+	if payload.PageSize != 40 || payload.Notice == "" {
+		t.Fatalf("payload pagination = %+v", payload)
+	}
+	if crmission.DefaultAllPageSize <= 0 {
+		t.Fatal("default page size should be positive")
 	}
 }
 

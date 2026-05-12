@@ -303,6 +303,13 @@ function normalizeWaterTable(data: any) {
 	};
 }
 
+function renderDataSummary(template: string, data: any) {
+	if (template === "character_rank_mission" || template === "cr_mission") {
+		return `mode=${data?.mode ?? data?.Mode ?? ""}, character=${data?.characterId ?? data?.CharacterID ?? ""}, mission=${data?.missionType ?? data?.MissionType ?? ""}, rows=${(data?.rows ?? data?.Rows ?? []).length}, allRows=${(data?.allRows ?? data?.AllRows ?? []).length}/${data?.allRowsTotal ?? data?.AllRowsTotal ?? ""}, page=${data?.page ?? data?.Page ?? ""}/${data?.totalPages ?? data?.TotalPages ?? ""}`;
+	}
+	return "";
+}
+
 function normalizeForecastRanking(data: any) {
 	return {
 		title: data.title ?? data.Title ?? "榜线预测",
@@ -1346,15 +1353,21 @@ Bun.serve({
 		}
 
 		if (url.pathname === "/render" && request.method === "POST") {
+			let body: RenderRequest | undefined;
+			let renderStarted = Date.now();
 			try {
-				const body = (await request.json()) as RenderRequest;
+				body = (await request.json()) as RenderRequest;
 				const precision = parsePositiveNumber(body.precision, defaultPrecision);
 				const width = body.width ?? 800;
 				const height = body.height;
+				renderStarted = Date.now();
+				const summary = renderDataSummary(body.template, body.data);
+				console.info(`[renderer] render start template=${body.template} width=${width} height=${height ?? "auto"}${summary ? ` ${summary}` : ""}`);
 
 				// 命中缓存则直接返回，省掉 createElement + satori + resvg 整条链路
 				const cached = getCachedRender(body.template, body.data, width, height, precision);
 				if (cached) {
+					console.info(`[renderer] render cache hit template=${body.template} elapsed=${Date.now() - renderStarted}ms bytes=${cached.png.length}`);
 					return new Response(new Uint8Array(cached.png), {
 						headers: {
 							...cached.headers,
@@ -1388,13 +1401,14 @@ Bun.serve({
 				};
 				const png = Buffer.from(trace.png);
 				setCachedRender(body.template, body.data, width, height, precision, png, headers);
+				console.info(`[renderer] render ok template=${body.template} elapsed=${Date.now() - renderStarted}ms bytes=${png.length}`);
 				return new Response(new Uint8Array(png), {
 					headers: { ...headers, "x-render-cache": "miss" },
 				});
 			} catch (error) {
 				const rejected = budgetRejectionResponse(error);
 				if (rejected) return rejected;
-				console.error("[renderer] render failed:", error);
+				console.error(`[renderer] render failed template=${body?.template ?? "unknown"} elapsed=${Date.now() - renderStarted}ms:`, error);
 				return Response.json(
 					{
 						error: true,

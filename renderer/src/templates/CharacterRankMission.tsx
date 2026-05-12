@@ -12,6 +12,13 @@ export interface CharacterRankMissionProps {
 	mode?: "overview" | "all" | string;
 	rows?: MissionRow[];
 	allRows?: MissionAllRow[];
+	allRowsTotal?: number;
+	shownFrom?: number;
+	shownTo?: number;
+	page?: number;
+	pageSize?: number;
+	totalPages?: number;
+	notice?: string;
 	assetSource?: string;
 }
 
@@ -37,7 +44,9 @@ interface MissionAllRow {
 	reached?: boolean;
 }
 
-export function CharacterRankMission({ title = "CR任务", subtitle, profile, characterId, character, mode = "overview", rows = [], allRows = [], assetSource = "main-jp" }: CharacterRankMissionProps) {
+const MAX_RENDER_ALL_ROWS = 120;
+
+export function CharacterRankMission({ title = "CR任务", subtitle, profile, characterId, character, mode = "overview", rows = [], allRows = [], allRowsTotal, shownFrom, shownTo, page, totalPages, notice, assetSource = "main-jp" }: CharacterRankMissionProps) {
 	const meta = [
 		profile?.name ? `玩家：${profile.name}` : undefined,
 		profile?.rank ? `Rank ${profile.rank}` : undefined,
@@ -45,6 +54,12 @@ export function CharacterRankMission({ title = "CR任务", subtitle, profile, ch
 		profile?.source ? `来源：${profile.source}` : undefined,
 	].filter(Boolean).join(" · ");
 	const isAllMode = mode === "all";
+	const renderedAllRows = isAllMode ? allRows.slice(0, MAX_RENDER_ALL_ROWS) : allRows;
+	const totalAllRows = Number(allRowsTotal ?? allRows.length ?? 0);
+	const rangeText = isAllMode && totalAllRows > 0
+		? `显示 ${shownFrom ?? 1}-${shownTo ?? renderedAllRows.length} / ${totalAllRows}${totalPages ? ` · 第 ${page ?? 1}/${totalPages} 页` : ""}`
+		: "";
+	const guardNotice = isAllMode && allRows.length > renderedAllRows.length ? `Renderer 已截断为前 ${MAX_RENDER_ALL_ROWS} 行，避免渲染服务过载。` : "";
 
 	return (
 		<BaseCard title={title} subtitle={subtitle ?? meta} accentColor={theme.colors.accentLight}>
@@ -61,7 +76,8 @@ export function CharacterRankMission({ title = "CR任务", subtitle, profile, ch
 						{isAllMode ? "档位表" : `${rows.length} 项任务`}
 					</span>
 				</div>
-				{isAllMode ? <AllTable rows={allRows} /> : <OverviewGrid rows={rows} />}
+				{isAllMode && (rangeText || notice || guardNotice) ? <NoticeBox text={[rangeText, notice, guardNotice].filter(Boolean).join(" · ")} /> : null}
+				{isAllMode ? <AllTable rows={renderedAllRows} /> : <OverviewGrid rows={rows} />}
 			</div>
 		</BaseCard>
 	);
@@ -142,6 +158,14 @@ function AllTableRow({ row }: { row: MissionAllRow }) {
 function EmptyState({ text }: { text: string }) {
 	return (
 		<div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 96, padding: theme.spacing.lg, borderRadius: theme.borderRadius.xl, backgroundColor: theme.colors.surface, border: `1px dashed ${theme.colors.borderStrong}`, color: theme.colors.textMuted, fontSize: theme.fontSize.sm, fontWeight: 900 }}>
+			{text}
+		</div>
+	);
+}
+
+function NoticeBox({ text }: { text: string }) {
+	return (
+		<div style={{ display: "flex", padding: "10px 12px", borderRadius: theme.borderRadius.lg, backgroundColor: theme.colors.accentSoft, border: `1px solid ${theme.colors.border}`, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: 900, lineHeight: 1.45 }}>
 			{text}
 		</div>
 	);
