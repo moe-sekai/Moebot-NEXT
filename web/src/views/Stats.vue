@@ -1,6 +1,10 @@
 <template>
   <main class="page-stack">
-    <PageHeader eyebrow="Command Stats" title="调用统计" subtitle="查看指令调用次数、响应耗时、活跃群组与用户分布。">
+    <PageHeader
+      eyebrow="Command Stats"
+      title="调用统计"
+      subtitle="查看指令调用次数、响应耗时、活跃群组与用户分布。"
+    >
       <template #actions>
         <select v-model.number="days" class="stats-select" @change="loadAll">
           <option :value="1">最近 1 天</option>
@@ -15,20 +19,58 @@
           <option :value="20">Top 20</option>
           <option :value="50">Top 50</option>
         </select>
-        <UiButton variant="outline" size="sm" :loading="loading" @click="loadAll">刷新</UiButton>
+        <select v-model="selectedClient" class="stats-select" @change="loadAll">
+          <option value="__all__">全部客户端</option>
+          <option
+            v-for="client in clientOptions"
+            :key="clientOptionKey(client)"
+            :value="client"
+          >
+            {{ formatClient(client) }}
+          </option>
+        </select>
+        <UiButton
+          variant="outline"
+          size="sm"
+          :loading="loading"
+          @click="loadAll"
+          >刷新</UiButton
+        >
       </template>
     </PageHeader>
 
-    <UiAlert v-if="error" variant="destructive" title="统计加载失败">{{ error }}</UiAlert>
+    <UiAlert v-if="error" variant="destructive" title="统计加载失败">{{
+      error
+    }}</UiAlert>
 
     <div v-if="loading && !stats" class="status-grid">
       <UiSkeleton v-for="item in 4" :key="item" height="108px" />
     </div>
     <div v-else class="status-grid status-grid--metrics">
-      <MetricCard label="调用总数" :value="formatNumber(stats?.totals.calls ?? 0)" :hint="windowHint" icon="stats" />
-      <MetricCard label="活跃用户" :value="formatNumber(stats?.totals.users ?? 0)" hint="去重后的用户数" icon="users" />
-      <MetricCard label="活跃群组" :value="formatNumber(stats?.totals.groups ?? 0)" hint="含私聊（empty group）" icon="groups" />
-      <MetricCard label="平均响应" :value="`${formatMs(stats?.totals.avg_ms ?? 0)} ms`" hint="所有指令端到端耗时" icon="clock" />
+      <MetricCard
+        label="调用总数"
+        :value="formatNumber(stats?.totals.calls ?? 0)"
+        :hint="windowHint"
+        icon="stats"
+      />
+      <MetricCard
+        label="活跃用户"
+        :value="formatNumber(stats?.totals.users ?? 0)"
+        hint="按客户端去重后的用户数"
+        icon="users"
+      />
+      <MetricCard
+        label="活跃群组"
+        :value="formatNumber(stats?.totals.groups ?? 0)"
+        hint="按客户端区分同群号"
+        icon="groups"
+      />
+      <MetricCard
+        label="平均响应"
+        :value="`${formatMs(stats?.totals.avg_ms ?? 0)} ms`"
+        hint="所有指令端到端耗时"
+        icon="clock"
+      />
     </div>
 
     <UiCard>
@@ -41,7 +83,10 @@
       <div v-if="loading && !stats" class="table-skeleton">
         <UiSkeleton height="180px" />
       </div>
-      <div v-else-if="!stats || stats.trend.length === 0" class="empty-state compact">
+      <div
+        v-else-if="!stats || stats.trend.length === 0"
+        class="empty-state compact"
+      >
         <div class="empty-state__icon"><SvgIcon name="stats" :size="22" /></div>
         <p>暂无调用数据。</p>
       </div>
@@ -52,7 +97,10 @@
           class="trend-bar"
           :title="`${point.date} · ${point.count} 次 · 平均 ${formatMs(point.avg_ms)} ms`"
         >
-          <div class="trend-bar__fill" :style="{ height: barHeight(point.count) }">
+          <div
+            class="trend-bar__fill"
+            :style="{ height: barHeight(point.count) }"
+          >
             <span class="trend-bar__value">{{ point.count }}</span>
           </div>
           <div class="trend-bar__label">{{ shortDate(point.date) }}</div>
@@ -68,8 +116,13 @@
             <p>调用次数最多的指令 · Top {{ topN }}</p>
           </div>
         </div>
-        <div v-if="!stats || stats.data.length === 0" class="empty-state compact">
-          <div class="empty-state__icon"><SvgIcon name="command" :size="22" /></div>
+        <div
+          v-if="!stats || stats.data.length === 0"
+          class="empty-state compact"
+        >
+          <div class="empty-state__icon">
+            <SvgIcon name="command" :size="22" />
+          </div>
           <p>窗口内暂无指令调用。</p>
         </div>
         <div v-else class="table-wrap">
@@ -101,16 +154,30 @@
             <p>调用最频繁的群组 · Top {{ topN }}</p>
           </div>
         </div>
-        <div v-if="!stats || stats.by_group.length === 0" class="empty-state compact">
-          <div class="empty-state__icon"><SvgIcon name="groups" :size="22" /></div>
+        <div
+          v-if="!stats || stats.by_group.length === 0"
+          class="empty-state compact"
+        >
+          <div class="empty-state__icon">
+            <SvgIcon name="groups" :size="22" />
+          </div>
           <p>窗口内暂无群组调用。</p>
         </div>
         <div v-else class="rank-list">
-          <div v-for="(row, idx) in stats.by_group" :key="row.group_id" class="rank-row">
+          <div
+            v-for="(row, idx) in stats.by_group"
+            :key="`${row.client_id}|${row.group_id}`"
+            class="rank-row"
+          >
             <span class="rank-row__idx">{{ idx + 1 }}</span>
-            <span class="rank-row__id" :title="row.group_id">{{ row.group_id === 'private' ? '私聊' : row.group_id }}</span>
+            <span class="rank-row__id" :title="formatGroupRank(row)">{{
+              formatGroupRank(row)
+            }}</span>
             <div class="rank-row__bar">
-              <div class="rank-row__fill" :style="{ width: pct(row.count, maxGroupCount) + '%' }"></div>
+              <div
+                class="rank-row__fill"
+                :style="{ width: pct(row.count, maxGroupCount) + '%' }"
+              ></div>
             </div>
             <span class="rank-row__count">{{ formatNumber(row.count) }}</span>
           </div>
@@ -124,16 +191,30 @@
             <p>调用最频繁的用户 · Top {{ topN }}</p>
           </div>
         </div>
-        <div v-if="!stats || stats.by_user.length === 0" class="empty-state compact">
-          <div class="empty-state__icon"><SvgIcon name="users" :size="22" /></div>
+        <div
+          v-if="!stats || stats.by_user.length === 0"
+          class="empty-state compact"
+        >
+          <div class="empty-state__icon">
+            <SvgIcon name="users" :size="22" />
+          </div>
           <p>窗口内暂无用户调用。</p>
         </div>
         <div v-else class="rank-list">
-          <div v-for="(row, idx) in stats.by_user" :key="row.user_id" class="rank-row">
+          <div
+            v-for="(row, idx) in stats.by_user"
+            :key="`${row.client_id}|${row.user_id}`"
+            class="rank-row"
+          >
             <span class="rank-row__idx">{{ idx + 1 }}</span>
-            <span class="rank-row__id" :title="row.user_id">{{ row.user_id }}</span>
+            <span class="rank-row__id" :title="formatUserRank(row)">{{
+              formatUserRank(row)
+            }}</span>
             <div class="rank-row__bar">
-              <div class="rank-row__fill" :style="{ width: pct(row.count, maxUserCount) + '%' }"></div>
+              <div
+                class="rank-row__fill"
+                :style="{ width: pct(row.count, maxUserCount) + '%' }"
+              ></div>
             </div>
             <span class="rank-row__count">{{ formatNumber(row.count) }}</span>
           </div>
@@ -147,17 +228,69 @@
             <p>不同平台来源的调用占比。</p>
           </div>
         </div>
-        <div v-if="!stats || stats.by_platform.length === 0" class="empty-state compact">
+        <div
+          v-if="!stats || stats.by_platform.length === 0"
+          class="empty-state compact"
+        >
           <div class="empty-state__icon"><SvgIcon name="bot" :size="22" /></div>
           <p>暂无平台数据。</p>
         </div>
         <div v-else class="rank-list">
-          <div v-for="row in stats.by_platform" :key="row.platform" class="rank-row">
+          <div
+            v-for="row in stats.by_platform"
+            :key="row.platform"
+            class="rank-row"
+          >
             <span class="rank-row__id">{{ row.platform }}</span>
             <div class="rank-row__bar">
-              <div class="rank-row__fill" :style="{ width: pct(row.count, totalPlatformCount) + '%' }"></div>
+              <div
+                class="rank-row__fill"
+                :style="{ width: pct(row.count, totalPlatformCount) + '%' }"
+              ></div>
             </div>
-            <span class="rank-row__count">{{ formatNumber(row.count) }}（{{ pct(row.count, totalPlatformCount).toFixed(1) }}%）</span>
+            <span class="rank-row__count"
+              >{{ formatNumber(row.count) }}（{{
+                pct(row.count, totalPlatformCount).toFixed(1)
+              }}%）</span
+            >
+          </div>
+        </div>
+      </UiCard>
+
+      <UiCard>
+        <div class="card-heading">
+          <div>
+            <h2>客户端分布</h2>
+            <p>按 OneBot self_id 区分多个反向 WS 账号。</p>
+          </div>
+        </div>
+        <div
+          v-if="!stats || stats.by_client.length === 0"
+          class="empty-state compact"
+        >
+          <div class="empty-state__icon"><SvgIcon name="bot" :size="22" /></div>
+          <p>暂无客户端数据。</p>
+        </div>
+        <div v-else class="rank-list">
+          <div
+            v-for="row in stats.by_client"
+            :key="clientOptionKey(row.client_id)"
+            class="rank-row"
+          >
+            <span class="rank-row__id" :title="formatClient(row.client_id)">{{
+              formatClient(row.client_id)
+            }}</span>
+            <div class="rank-row__bar">
+              <div
+                class="rank-row__fill"
+                :style="{ width: pct(row.count, totalClientCount) + '%' }"
+              ></div>
+            </div>
+            <span class="rank-row__count"
+              >{{ formatNumber(row.count) }}（{{
+                pct(row.count, totalClientCount).toFixed(1)
+              }}%）</span
+            >
           </div>
         </div>
       </UiCard>
@@ -167,9 +300,16 @@
       <div class="card-heading">
         <div>
           <h2>最近调用</h2>
-          <p>最近的指令调用流水（仅展示最近 {{ recentLimit }} 条，用于排查与审计）。</p>
+          <p>
+            最近的指令调用流水（仅展示最近
+            {{ recentLimit }} 条，用于排查与审计）。
+          </p>
         </div>
-        <select v-model.number="recentLimit" class="stats-select" @change="loadRecent">
+        <select
+          v-model.number="recentLimit"
+          class="stats-select"
+          @change="loadRecent"
+        >
           <option :value="20">20 条</option>
           <option :value="50">50 条</option>
         </select>
@@ -188,6 +328,7 @@
               <th>时间</th>
               <th>指令</th>
               <th>平台</th>
+              <th>客户端</th>
               <th>群组</th>
               <th>用户</th>
               <th>参数</th>
@@ -196,12 +337,17 @@
           </thead>
           <tbody>
             <tr v-for="row in recent" :key="row.id">
-              <td class="muted-text" :title="row.created_at">{{ formatTime(row.created_at) }}</td>
+              <td class="muted-text" :title="row.created_at">
+                {{ formatTime(row.created_at) }}
+              </td>
               <td class="font-medium">{{ row.command }}</td>
-              <td>{{ row.platform || '-' }}</td>
-              <td>{{ row.group_id || '私聊' }}</td>
-              <td>{{ row.user_id || '-' }}</td>
-              <td class="muted-text args-cell" :title="row.args">{{ row.args || '-' }}</td>
+              <td>{{ row.platform || "-" }}</td>
+              <td>{{ formatClient(row.client_id) }}</td>
+              <td>{{ row.group_id || "私聊" }}</td>
+              <td>{{ row.user_id || "-" }}</td>
+              <td class="muted-text args-cell" :title="row.args">
+                {{ row.args || "-" }}
+              </td>
               <td class="text-right">{{ row.response_ms }} ms</td>
             </tr>
           </tbody>
@@ -212,122 +358,185 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { getCommandStats, getRecentCommands } from '../api/client'
-import type { CommandStatsResponse, RecentCommand } from '../api/types'
-import MetricCard from '../components/MetricCard.vue'
-import PageHeader from '../components/PageHeader.vue'
-import SvgIcon from '../components/icons/SvgIcon.vue'
-import UiAlert from '../components/ui/UiAlert.vue'
-import UiButton from '../components/ui/UiButton.vue'
-import UiCard from '../components/ui/UiCard.vue'
-import UiSkeleton from '../components/ui/UiSkeleton.vue'
+import { computed, onMounted, ref, watch } from "vue";
+import { getCommandStats, getRecentCommands } from "../api/client";
+import type {
+  CommandStatsGroupPoint,
+  CommandStatsResponse,
+  CommandStatsUserPoint,
+  RecentCommand,
+} from "../api/types";
+import MetricCard from "../components/MetricCard.vue";
+import PageHeader from "../components/PageHeader.vue";
+import SvgIcon from "../components/icons/SvgIcon.vue";
+import UiAlert from "../components/ui/UiAlert.vue";
+import UiButton from "../components/ui/UiButton.vue";
+import UiCard from "../components/ui/UiCard.vue";
+import UiSkeleton from "../components/ui/UiSkeleton.vue";
 
-const days = ref(7)
-const topN = ref(10)
-const recentLimit = ref(20)
+const allClientsValue = "__all__";
+const days = ref(7);
+const topN = ref(10);
+const recentLimit = ref(20);
+const selectedClient = ref(allClientsValue);
 
-const stats = ref<CommandStatsResponse | null>(null)
-const recent = ref<RecentCommand[]>([])
-const loading = ref(false)
-const recentLoading = ref(false)
-const error = ref('')
+const stats = ref<CommandStatsResponse | null>(null);
+const recent = ref<RecentCommand[]>([]);
+const clientOptions = ref<string[]>([]);
+const loading = ref(false);
+const recentLoading = ref(false);
+const error = ref("");
 
-const windowHint = computed(() => `过去 ${days.value} 天`)
+const windowHint = computed(
+  () =>
+    `过去 ${days.value} 天 · ${selectedClient.value === allClientsValue ? "全部客户端" : formatClient(selectedClient.value)}`,
+);
 
 const topCommands = computed(() => {
-  if (!stats.value) return []
-  return stats.value.data.slice(0, topN.value)
-})
+  if (!stats.value) return [];
+  return stats.value.data.slice(0, topN.value);
+});
 
 const maxTrendCount = computed(() => {
-  if (!stats.value || stats.value.trend.length === 0) return 1
-  return Math.max(1, ...stats.value.trend.map((p) => p.count))
-})
+  if (!stats.value || stats.value.trend.length === 0) return 1;
+  return Math.max(1, ...stats.value.trend.map((p) => p.count));
+});
 
 const maxGroupCount = computed(() => {
-  if (!stats.value || stats.value.by_group.length === 0) return 1
-  return Math.max(1, ...stats.value.by_group.map((p) => p.count))
-})
+  if (!stats.value || stats.value.by_group.length === 0) return 1;
+  return Math.max(1, ...stats.value.by_group.map((p) => p.count));
+});
 
 const maxUserCount = computed(() => {
-  if (!stats.value || stats.value.by_user.length === 0) return 1
-  return Math.max(1, ...stats.value.by_user.map((p) => p.count))
-})
+  if (!stats.value || stats.value.by_user.length === 0) return 1;
+  return Math.max(1, ...stats.value.by_user.map((p) => p.count));
+});
 
 const totalPlatformCount = computed(() => {
-  if (!stats.value) return 1
-  const sum = stats.value.by_platform.reduce((acc, p) => acc + p.count, 0)
-  return sum > 0 ? sum : 1
-})
+  if (!stats.value) return 1;
+  const sum = stats.value.by_platform.reduce((acc, p) => acc + p.count, 0);
+  return sum > 0 ? sum : 1;
+});
 
-watch(recentLimit, () => loadRecent())
+const totalClientCount = computed(() => {
+  if (!stats.value) return 1;
+  const sum = stats.value.by_client.reduce((acc, p) => acc + p.count, 0);
+  return sum > 0 ? sum : 1;
+});
 
-onMounted(loadAll)
+watch(recentLimit, () => loadRecent());
+
+onMounted(loadAll);
 
 async function loadAll() {
-  await Promise.all([loadStats(), loadRecent()])
+  await Promise.all([loadStats(), loadRecent()]);
 }
 
 async function loadStats() {
-  loading.value = true
-  error.value = ''
+  loading.value = true;
+  error.value = "";
   try {
-    stats.value = await getCommandStats(days.value, topN.value)
+    if (selectedClient.value !== allClientsValue) {
+      const allStats = await getCommandStats(days.value, topN.value);
+      rememberClients(allStats.by_client.map((row) => row.client_id));
+    }
+    stats.value = await getCommandStats(
+      days.value,
+      topN.value,
+      apiSelectedClient(),
+    );
+    rememberClients(stats.value.by_client.map((row) => row.client_id));
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '加载统计失败。'
+    error.value = err instanceof Error ? err.message : "加载统计失败。";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function loadRecent() {
-  recentLoading.value = true
+  recentLoading.value = true;
   try {
-    const result = await getRecentCommands(recentLimit.value)
-    recent.value = result.data ?? []
+    const result = await getRecentCommands(
+      recentLimit.value,
+      apiSelectedClient(),
+    );
+    recent.value = result.data ?? [];
+    rememberClients(recent.value.map((row) => row.client_id));
   } catch (err) {
     if (!error.value) {
-      error.value = err instanceof Error ? err.message : '加载最近调用失败。'
+      error.value = err instanceof Error ? err.message : "加载最近调用失败。";
     }
   } finally {
-    recentLoading.value = false
+    recentLoading.value = false;
   }
 }
 
+function apiSelectedClient(): string | undefined {
+  return selectedClient.value === allClientsValue
+    ? undefined
+    : selectedClient.value;
+}
+
+function rememberClients(values: string[]) {
+  const set = new Set(clientOptions.value);
+  for (const value of values) set.add(value ?? "");
+  clientOptions.value = Array.from(set).sort((a, b) => {
+    if (a === "") return 1;
+    if (b === "") return -1;
+    return a.localeCompare(b, "zh-CN", { numeric: true });
+  });
+}
+
+function clientOptionKey(value: string): string {
+  return value === "" ? "__unknown__" : value;
+}
+
+function formatClient(value: string | null | undefined): string {
+  return value ? `OneBot ${value}` : "未知客户端";
+}
+
+function formatGroupRank(row: CommandStatsGroupPoint): string {
+  const group = row.group_id === "private" ? "私聊" : row.group_id;
+  return `${formatClient(row.client_id)} · ${group}`;
+}
+
+function formatUserRank(row: CommandStatsUserPoint): string {
+  return `${formatClient(row.client_id)} · ${row.user_id || "unknown"}`;
+}
+
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat('zh-CN').format(value)
+  return new Intl.NumberFormat("zh-CN").format(value);
 }
 
 function formatMs(value: number): string {
-  if (!Number.isFinite(value)) return '0'
-  if (value >= 1000) return value.toFixed(0)
-  if (value >= 100) return value.toFixed(1)
-  return value.toFixed(2)
+  if (!Number.isFinite(value)) return "0";
+  if (value >= 1000) return value.toFixed(0);
+  if (value >= 100) return value.toFixed(1);
+  return value.toFixed(2);
 }
 
 function pct(value: number, total: number): number {
-  if (total <= 0) return 0
-  return (value / total) * 100
+  if (total <= 0) return 0;
+  return (value / total) * 100;
 }
 
 function barHeight(count: number): string {
-  const ratio = count / maxTrendCount.value
-  const pctValue = Math.max(ratio * 100, count > 0 ? 4 : 0)
-  return `${pctValue}%`
+  const ratio = count / maxTrendCount.value;
+  const pctValue = Math.max(ratio * 100, count > 0 ? 4 : 0);
+  return `${pctValue}%`;
 }
 
 function shortDate(date: string): string {
-  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(date)
-  if (!m) return date
-  return `${m[1]}/${m[2]}`
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(date);
+  if (!m) return date;
+  return `${m[1]}/${m[2]}`;
 }
 
 function formatTime(value: string): string {
-  if (!value) return '-'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
-  return d.toLocaleString('zh-CN', { hour12: false })
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("zh-CN", { hour12: false });
 }
 </script>
 
@@ -351,7 +560,9 @@ function formatTime(value: string): string {
 .stats-grid {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
-.text-right { text-align: right; }
+.text-right {
+  text-align: right;
+}
 
 .trend-chart {
   display: grid;
@@ -374,16 +585,22 @@ function formatTime(value: string): string {
   width: 80%;
   max-width: 36px;
   margin-top: auto;
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0.85), rgba(129, 140, 248, 0.55));
+  background: linear-gradient(
+    180deg,
+    rgba(99, 102, 241, 0.85),
+    rgba(129, 140, 248, 0.55)
+  );
   border-radius: 6px 6px 2px 2px;
   position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: center;
   min-height: 0;
-  transition: filter .15s;
+  transition: filter 0.15s;
 }
-.trend-bar__fill:hover { filter: brightness(1.05); }
+.trend-bar__fill:hover {
+  filter: brightness(1.05);
+}
 .trend-bar__value {
   position: absolute;
   top: -18px;
@@ -417,7 +634,8 @@ function formatTime(value: string): string {
   font-size: 12px;
 }
 .rank-row__id {
-  font-family: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-family:
+    ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
   font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
@@ -431,9 +649,13 @@ function formatTime(value: string): string {
 }
 .rank-row__fill {
   height: 100%;
-  background: linear-gradient(90deg, rgba(99, 102, 241, 0.85), rgba(129, 140, 248, 0.55));
+  background: linear-gradient(
+    90deg,
+    rgba(99, 102, 241, 0.85),
+    rgba(129, 140, 248, 0.55)
+  );
   border-radius: 999px;
-  transition: width .25s ease;
+  transition: width 0.25s ease;
 }
 .rank-row__count {
   font-variant-numeric: tabular-nums;
@@ -447,7 +669,8 @@ function formatTime(value: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-family:
+    ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
   font-size: 12.5px;
 }
 </style>

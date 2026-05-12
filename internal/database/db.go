@@ -82,6 +82,17 @@ func New(cfg config.DatabaseConfig) (*DB, error) {
 			log.Warn().Err(err).Msg("Failed to drop legacy single-server user index")
 		}
 	}
+	if db.Migrator().HasIndex(&models.Group{}, "idx_platform_group") {
+		if err := db.Migrator().DropIndex(&models.Group{}, "idx_platform_group"); err != nil {
+			log.Warn().Err(err).Msg("Failed to drop legacy group index")
+		}
+	}
+	if err := backfillClientIDColumns(db); err != nil {
+		log.Warn().Err(err).Msg("Failed to backfill client_id columns")
+	}
+	if err := backfillClientAwareGroups(db); err != nil {
+		log.Warn().Err(err).Msg("Failed to backfill groups from command stats")
+	}
 	// After AutoMigrate, ensure the built-in default template exists and seed it
 	// with the legacy gateway defaults if applicable (one-time migration).
 	if err := seedDefaultFilterTemplate(db, legacyUserRules, legacyGroupRules); err != nil {
@@ -102,6 +113,42 @@ func (d *DB) Close() error {
 		return err
 	}
 	return sqlDB.Close()
+}
+
+func backfillClientIDColumns(db *gorm.DB) error {
+	if db.Migrator().HasTable(&models.CommandStat{}) && db.Migrator().HasColumn(&models.CommandStat{}, "client_id") {
+		if err := db.Model(&models.CommandStat{}).Where("client_id IS NULL").Update("client_id", "").Error; err != nil {
+			return err
+		}
+	}
+	if db.Migrator().HasTable(&models.Group{}) && db.Migrator().HasColumn(&models.Group{}, "client_id") {
+		if err := db.Model(&models.Group{}).Where("client_id IS NULL").Update("client_id", "").Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// backfillClientAwareGroups creates groups from historical command stats so
+// installs that already have /stats data immediately get /groups rows too.
+func backfillClientAwareGroups(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&models.CommandStat{}) || !db.Migrator().HasTable(&models.Group{}) {
+		return nil
+	}
+	return db.Exec(`
+		INSERT OR IGNORE INTO groups (platform, client_id, group_id, name, enabled, config, created_at)
+		SELECT
+			COALESCE(NULLIF(platform, ''), 'unknown') AS platform,
+			COALESCE(client_id, '') AS client_id,
+			group_id,
+			'' AS name,
+			1 AS enabled,
+			'{}' AS config,
+			MIN(created_at) AS created_at
+		FROM command_stats
+		WHERE group_id <> '' AND group_id <> '0'
+		GROUP BY platform, client_id, group_id
+	`).Error
 }
 
 // readLegacyGatewayDefaults reads default_user_id_rules and default_group_id_rules

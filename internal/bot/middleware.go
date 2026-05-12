@@ -41,18 +41,35 @@ func RecordCommand(db *database.DB, command string, ctx *zero.Ctx, startTime tim
 
 // RecordCommandRegion records a command invocation with the game server region used.
 func RecordCommandRegion(db *database.DB, command string, region string, ctx *zero.Ctx, startTime time.Time) {
+	if db == nil || ctx == nil || ctx.Event == nil {
+		return
+	}
 	elapsed := time.Since(startTime).Milliseconds()
+	clientID := ""
+	if ctx.Event.SelfID != 0 {
+		clientID = fmt.Sprintf("%d", ctx.Event.SelfID)
+	}
+	groupID := ""
+	if ctx.Event.GroupID != 0 {
+		groupID = fmt.Sprintf("%d", ctx.Event.GroupID)
+	}
 
 	stat := &models.CommandStat{
 		Command:    command,
 		Platform:   "onebot",
+		ClientID:   clientID,
 		UserID:     fmt.Sprintf("%d", ctx.Event.UserID),
-		GroupID:    fmt.Sprintf("%d", ctx.Event.GroupID),
+		GroupID:    groupID,
 		Region:     region,
 		Args:       fmt.Sprintf("%v", ctx.State["args"]),
 		ResponseMs: elapsed,
 	}
 
+	if groupID != "" {
+		if err := db.EnsureGroup("onebot", clientID, groupID, ""); err != nil {
+			log.Warn().Err(err).Str("client_id", clientID).Str("group_id", groupID).Msg("Failed to ensure group")
+		}
+	}
 	if err := db.RecordCommandStat(stat); err != nil {
 		log.Warn().Err(err).Str("command", command).Msg("Failed to record command stat")
 	}

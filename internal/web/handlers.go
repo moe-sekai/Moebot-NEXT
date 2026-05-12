@@ -323,7 +323,8 @@ func (s *Server) handleRendererPreviewImage(c *fiber.Ctx) error {
 // handleRecentCommands returns recent command invocation rows.
 func (s *Server) handleRecentCommands(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
-	commands, err := s.DB.ListRecentCommands(limit)
+	clientID := optionalQueryString(c, "client_id")
+	commands, err := s.DB.ListRecentCommands(limit, clientID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to list recent commands")
 	}
@@ -1111,9 +1112,15 @@ func (s *Server) handleListGroups(c *fiber.Ctx) error {
 	}
 	offset := (page - 1) * limit
 
-	groups, total, err := s.DB.ListGroups(offset, limit)
+	clientID := optionalQueryString(c, "client_id")
+	groups, total, err := s.DB.ListGroups(offset, limit, clientID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to list groups")
+	}
+
+	clients, err := s.DB.ListGroupClients()
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to list group clients")
 	}
 
 	statsDays, _ := strconv.Atoi(c.Query("stats_days", "7"))
@@ -1124,10 +1131,10 @@ func (s *Server) handleListGroups(c *fiber.Ctx) error {
 		statsDays = 90
 	}
 	since := time.Now().AddDate(0, 0, -statsDays)
-	statsRows, _ := s.DB.GetGroupCommandStats(since)
+	statsRows, _ := s.DB.GetGroupCommandStats(since, clientID)
 	statsMap := make(map[string]database.GroupCommandStat, len(statsRows))
 	for _, row := range statsRows {
-		statsMap[row.Platform+"|"+row.GroupID] = row
+		statsMap[groupStatsKey(row.Platform, row.ClientID, row.GroupID)] = row
 	}
 
 	data := make([]fiber.Map, 0, len(groups))
@@ -1135,13 +1142,14 @@ func (s *Server) handleListGroups(c *fiber.Ctx) error {
 		row := fiber.Map{
 			"id":         g.ID,
 			"platform":   g.Platform,
+			"client_id":  g.ClientID,
 			"group_id":   g.GroupID,
 			"name":       g.Name,
 			"enabled":    g.Enabled,
 			"config":     g.Config,
 			"created_at": g.CreatedAt,
 		}
-		if stat, ok := statsMap[g.Platform+"|"+g.GroupID]; ok {
+		if stat, ok := statsMap[groupStatsKey(g.Platform, g.ClientID, g.GroupID)]; ok {
 			row["stats"] = fiber.Map{
 				"count":     stat.Count,
 				"last_used": nullableTime(stat.LastUsed),
@@ -1155,10 +1163,11 @@ func (s *Server) handleListGroups(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"data":  data,
-		"total": total,
-		"page":  page,
-		"limit": limit,
+		"data":    data,
+		"total":   total,
+		"page":    page,
+		"limit":   limit,
+		"clients": clients,
 	})
 }
 
@@ -1233,7 +1242,7 @@ func (s *Server) handleGroupRecentCommands(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, "Group not found")
 	}
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
-	rows, err := s.DB.ListGroupRecentCommands(group.Platform, group.GroupID, limit)
+	rows, err := s.DB.ListGroupRecentCommands(group.Platform, group.ClientID, group.GroupID, limit)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to load commands")
 	}
@@ -1292,32 +1301,37 @@ func (s *Server) handleCommandStats(c *fiber.Ctx) error {
 		days = 365
 	}
 	since := time.Now().AddDate(0, 0, -days)
+	clientID := optionalQueryString(c, "client_id")
 
-	stats, err := s.DB.GetCommandStats(since)
+	stats, err := s.DB.GetCommandStats(since, clientID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats")
 	}
-	totals, err := s.DB.GetCommandStatsTotals(since)
+	totals, err := s.DB.GetCommandStatsTotals(since, clientID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats totals")
 	}
-	trend, err := s.DB.GetCommandStatsTrend(since)
+	trend, err := s.DB.GetCommandStatsTrend(since, clientID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats trend")
 	}
-	byPlatform, err := s.DB.GetCommandStatsByPlatform(since)
+	byPlatform, err := s.DB.GetCommandStatsByPlatform(since, clientID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats by platform")
+	}
+	byClient, err := s.DB.GetCommandStatsByClient(since, clientID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats by client")
 	}
 	topN, _ := strconv.Atoi(c.Query("top", "10"))
 	if topN <= 0 {
 		topN = 10
 	}
-	byGroup, err := s.DB.GetCommandStatsByGroup(since, topN)
+	byGroup, err := s.DB.GetCommandStatsByGroup(since, clientID, topN)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats by group")
 	}
-	byUser, err := s.DB.GetCommandStatsByUser(since, topN)
+	byUser, err := s.DB.GetCommandStatsByUser(since, clientID, topN)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stats by user")
 	}
@@ -1326,9 +1340,11 @@ func (s *Server) handleCommandStats(c *fiber.Ctx) error {
 		"data":        stats,
 		"since":       since,
 		"days":        days,
+		"client_id":   clientIDValue(clientID),
 		"totals":      totals,
 		"trend":       trend,
 		"by_platform": byPlatform,
+		"by_client":   byClient,
 		"by_group":    byGroup,
 		"by_user":     byUser,
 	})
@@ -1423,6 +1439,28 @@ func statusText(ok bool) string {
 		return "ok"
 	}
 	return "error"
+}
+
+func optionalQueryString(c *fiber.Ctx, key string) *string {
+	if c == nil {
+		return nil
+	}
+	if _, ok := c.Queries()[key]; !ok {
+		return nil
+	}
+	value := strings.TrimSpace(c.Query(key))
+	return &value
+}
+
+func clientIDValue(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func groupStatsKey(platform, clientID, groupID string) string {
+	return strings.TrimSpace(platform) + "|" + strings.TrimSpace(clientID) + "|" + strings.TrimSpace(groupID)
 }
 
 func nullableTime(t time.Time) any {
