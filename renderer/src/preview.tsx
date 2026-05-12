@@ -25,6 +25,7 @@ import { GachaList } from "./templates/GachaList";
 import { VirtualLiveList } from "./templates/VirtualLiveList";
 import { SuitePanel } from "./templates/SuitePanel";
 import { SuiteCardBox } from "./templates/SuiteCardBox";
+import { CharacterRankMission } from "./templates/CharacterRankMission";
 
 export type RenderPreviewStatus = "ready" | "draft";
 
@@ -219,6 +220,28 @@ const PREVIEW_META: RenderPreviewMeta[] = [
 		command: "/suite cards",
 		templatePath: "packages/renderer/src/templates/SuiteCardBox.tsx",
 		viewerSource: "Moebot Renderer: Suite card collection payload",
+		status: "ready",
+		width: 800,
+		height: 980,
+	},
+	{
+		id: "character-rank-mission",
+		name: "CR任务进度图",
+		description: "用于 /cr任务 的角色任务进度总览图片。",
+		command: "/cr任务 miku",
+		templatePath: "packages/renderer/src/templates/CharacterRankMission.tsx",
+		viewerSource: "Moebot Renderer: CR mission payload",
+		status: "ready",
+		width: 800,
+		height: 900,
+	},
+	{
+		id: "character-rank-mission-all",
+		name: "CR任务档位表",
+		description: "用于 /cr任务 [角色] all [任务名] 的单项任务档位表图片。",
+		command: "/cr任务 miku all 队长次数",
+		templatePath: "packages/renderer/src/templates/CharacterRankMission.tsx",
+		viewerSource: "Moebot Renderer: CR mission payload",
 		status: "ready",
 		width: 800,
 		height: 980,
@@ -782,6 +805,31 @@ function createPreviewElement(id: string) {
 					cards={createSuiteCardBoxPreviewCards()}
 				/>
 			);
+		case "character-rank-mission":
+			return (
+				<CharacterRankMission
+					title="初音未来 CR任务"
+					subtitle="总览 · 共 8 项任务"
+					assetSource="main-jp"
+					profile={{ name: "Moebot Tester", rank: 398, updateText: "2026-05-06 12:30", source: "Haruki Suite" }}
+					characterId={21}
+					character="初音未来"
+					rows={createCharacterRankMissionPreviewRows()}
+				/>
+			);
+		case "character-rank-mission-all":
+			return (
+				<CharacterRankMission
+					title="初音未来 队长次数 档位表"
+					subtitle="当前进度 1280"
+					mode="all"
+					assetSource="main-jp"
+					profile={{ name: "Moebot Tester", rank: 398, updateText: "2026-05-06 12:30", source: "Haruki Suite" }}
+					characterId={21}
+					character="初音未来"
+					allRows={createCharacterRankMissionAllPreviewRows()}
+				/>
+			);
 		case "help-card":
 			return (
 				<HelpCard
@@ -984,6 +1032,31 @@ function createDeckPreviewCards() {
 			level: 50,
 		},
 	];
+}
+
+function createCharacterRankMissionPreviewRows() {
+	return [
+		{ missionType: "play_live", title: "队长次数", current: 1280, upper: 10000, level: 18, levelMax: 30, nextNeed: 1500, nextExp: 10, progress: 0.128 },
+		{ missionType: "play_live_ex", title: "队长次数(EX)", current: 320, upper: 3000, level: 5, levelMax: 30, nextNeed: 360, nextExp: 5, progress: 0.106, isEx: true },
+		{ missionType: "waiting_room", title: "休息室次数", current: 42, upper: 500, level: 7, levelMax: 20, nextNeed: 50, nextExp: 5, progress: 0.084 },
+		{ missionType: "collect_costume_3d", title: "服装", current: 16, upper: 80, level: 8, levelMax: 15, nextNeed: 20, nextExp: 10, progress: 0.2 },
+		{ missionType: "collect_stamp", title: "表情", current: 9, upper: 20, level: 4, levelMax: 10, nextNeed: 10, nextExp: 5, progress: 0.45 },
+		{ missionType: "read_area_talk", title: "区域对话", current: 88, upper: 120, level: 12, levelMax: 15, nextNeed: 95, nextExp: 5, progress: 0.733 },
+		{ missionType: "collect_member", title: "卡面", current: 54, upper: 120, level: 14, levelMax: 25, nextNeed: 60, nextExp: 10, progress: 0.45 },
+		{ missionType: "master_rank_up_rare", title: "专精等级升级次数（★4&生日卡）", current: 28, upper: 50, level: 9, levelMax: 12, nextNeed: 30, nextExp: 10, progress: 0.56 },
+	];
+}
+
+function createCharacterRankMissionAllPreviewRows() {
+	const requirements = [10, 30, 50, 100, 150, 200, 300, 400, 600, 800, 1000, 1500];
+	return requirements.map((requirement, index) => ({
+		seq: index + 1,
+		requirement,
+		accRequirement: requirement,
+		exp: index < 4 ? 5 : 10,
+		accExp: (index < 4 ? index + 1 : 4) * 5 + Math.max(0, index - 3) * 10,
+		reached: 1280 >= requirement,
+	}));
 }
 
 function createSuiteCardBoxPreviewCards() {
