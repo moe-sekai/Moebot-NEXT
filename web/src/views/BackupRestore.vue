@@ -82,11 +82,21 @@
           <span>临时目录</span>
           <input v-model.trim="configForm.temp_dir" class="ui-input" placeholder="./data/backups/tmp" />
         </label>
+        <label class="settings-field settings-field--full">
+          <span>排除规则（每行一个）</span>
+          <textarea
+            v-model="excludePatternsText"
+            class="ui-textarea"
+            rows="4"
+            placeholder="cache/**&#10;backups/tmp/**&#10;*.tmp&#10;*.restore-backup-*"
+          />
+        </label>
       </div>
 
       <div class="settings-preview" style="margin-top: 14px;">
         <div><span>目标</span><code>{{ targetText }}</code></div>
         <div><span>密钥状态</span><code>AK {{ configForm.access_key_set ? '已保存' : '未保存' }} · SK {{ configForm.secret_key_set ? '已保存' : '未保存' }} · STS {{ configForm.session_token_set ? '已保存' : '未保存' }}</code></div>
+        <div><span>排除</span><code>{{ parsedExcludePatterns.length ? parsedExcludePatterns.join(' / ') : '不排除额外路径' }}</code></div>
         <div><span>说明</span><code>密钥输入框留空不会覆盖旧值；如需清空请勾选下方清空项后保存。</code></div>
       </div>
 
@@ -193,6 +203,7 @@ const objects = ref<BackupObject[]>([])
 const configForm = reactive<BackupPublicConfig>({
   data_dir: './data',
   temp_dir: './data/backups/tmp',
+  exclude_patterns: ['cache/**', 'backups/tmp/**', '*.tmp', '*.restore-backup-*'],
   endpoint: '',
   region: '',
   bucket: '',
@@ -207,6 +218,18 @@ const configForm = reactive<BackupPublicConfig>({
 
 const secrets = reactive({ access_key: '', secret_key: '', session_token: '' })
 const clearSecrets = reactive({ access_key: false, secret_key: false, session_token: false })
+const excludePatternsText = ref('cache/**\nbackups/tmp/**\n*.tmp\n*.restore-backup-*')
+const parsedExcludePatterns = computed(() => {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of excludePatternsText.value.split(/[\r\n]+/)) {
+    const item = raw.trim().replace(/^\/+|\/+$/g, '')
+    if (!item || seen.has(item)) continue
+    seen.add(item)
+    out.push(item)
+  }
+  return out
+})
 
 const targetText = computed(() => {
   const scheme = configForm.use_ssl ? 'https' : 'http'
@@ -233,7 +256,9 @@ async function loadAll() {
 
 async function loadConfig() {
   try {
-    Object.assign(configForm, await getBackupConfig())
+    const cfg = await getBackupConfig()
+    Object.assign(configForm, cfg)
+    excludePatternsText.value = (cfg.exclude_patterns ?? []).join('\n')
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载备份配置失败。'
   }
@@ -247,6 +272,7 @@ async function saveConfig() {
     const resp = await updateBackupConfig({
       data_dir: configForm.data_dir,
       temp_dir: configForm.temp_dir,
+      exclude_patterns: parsedExcludePatterns.value,
       endpoint: configForm.endpoint,
       region: configForm.region,
       bucket: configForm.bucket,

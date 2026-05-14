@@ -48,6 +48,10 @@ func TestBackupConfigRedactsSecrets(t *testing.T) {
 	if body["access_key_set"] != true || body["secret_key_set"] != true || body["session_token_set"] != true || body["configured"] != true {
 		t.Fatalf("secret flags = %+v", body)
 	}
+	excludes := body["exclude_patterns"].([]any)
+	if len(excludes) == 0 || excludes[0] != "cache/**" {
+		t.Fatalf("exclude patterns = %+v", excludes)
+	}
 }
 
 func TestUpdateBackupConfigKeepsSecretsWhenEmpty(t *testing.T) {

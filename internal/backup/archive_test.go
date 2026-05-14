@@ -25,12 +25,18 @@ func TestCreateAndExtractArchive(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dataDir, "plugins", "moesekai.yml"), []byte("plugin"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(dataDir, "cache", "images"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "cache", "images", "thumb.png"), []byte("cache"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(tempDir, "skip.tmp"), []byte("skip"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	archive := filepath.Join(dir, "backup.tar.gz")
-	if err := CreateArchive(dataDir, archive, tempDir); err != nil {
+	if err := CreateArchiveWithOptions(dataDir, archive, ArchiveOptions{TempDir: tempDir, ExcludePatterns: []string{"cache/**"}}); err != nil {
 		t.Fatalf("CreateArchive() error = %v", err)
 	}
 	extractDir := filepath.Join(dir, "restore")
@@ -46,6 +52,9 @@ func TestCreateAndExtractArchive(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(extractDir, "backups", "tmp", "skip.tmp")); !os.IsNotExist(err) {
 		t.Fatalf("temp dir should be excluded, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, "cache", "images", "thumb.png")); !os.IsNotExist(err) {
+		t.Fatalf("cache dir should be excluded, stat err = %v", err)
 	}
 }
 

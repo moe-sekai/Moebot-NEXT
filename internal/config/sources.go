@@ -806,6 +806,21 @@ func normalizeBackupConfig(cfg *BackupConfig) {
 	if cfg.TempDir == "" {
 		cfg.TempDir = "./data/backups/tmp"
 	}
+	if len(cfg.ExcludePatterns) == 0 {
+		cfg.ExcludePatterns = DefaultBackupExcludePatterns()
+	} else {
+		cleaned := make([]string, 0, len(cfg.ExcludePatterns))
+		seen := map[string]bool{}
+		for _, pattern := range cfg.ExcludePatterns {
+			pattern = strings.Trim(strings.TrimSpace(pattern), "/")
+			if pattern == "" || seen[pattern] {
+				continue
+			}
+			seen[pattern] = true
+			cleaned = append(cleaned, pattern)
+		}
+		cfg.ExcludePatterns = cleaned
+	}
 	cfg.S3.Endpoint = strings.TrimSpace(cfg.S3.Endpoint)
 	cfg.S3.Region = strings.TrimSpace(cfg.S3.Region)
 	cfg.S3.Bucket = strings.TrimSpace(cfg.S3.Bucket)

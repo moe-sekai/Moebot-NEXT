@@ -33,6 +33,12 @@ backup:
   # Docker 内等价于 /app/data；本地运行默认 ./data
   data_dir: "./data"
   temp_dir: "./data/backups/tmp"
+  # 默认只备份关键数据：配置、数据库、插件数据、master 等；不上传缓存/临时文件。
+  exclude_patterns:
+    - "cache/**"
+    - "backups/tmp/**"
+    - "*.tmp"
+    - "*.restore-backup-*"
   s3:
     # S3 兼容存储 endpoint，例如：s3.amazonaws.com / minio.example.com:9000
     endpoint: ""

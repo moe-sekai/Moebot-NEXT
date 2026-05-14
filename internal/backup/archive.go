@@ -11,9 +11,20 @@ import (
 	"strings"
 )
 
+// ArchiveOptions controls data archive creation.
+type ArchiveOptions struct {
+	TempDir         string
+	ExcludePatterns []string
+}
+
 // CreateArchive writes a gzip-compressed tar archive of srcDir to destPath.
 // Paths inside the archive are relative to srcDir.
 func CreateArchive(srcDir, destPath, tempDir string) error {
+	return CreateArchiveWithOptions(srcDir, destPath, ArchiveOptions{TempDir: tempDir})
+}
+
+// CreateArchiveWithOptions writes a gzip-compressed tar archive of srcDir to destPath.
+func CreateArchiveWithOptions(srcDir, destPath string, opts ArchiveOptions) error {
 	srcAbs, err := filepath.Abs(srcDir)
 	if err != nil {
 		return fmt.Errorf("resolve data dir: %w", err)
@@ -34,8 +45,8 @@ func CreateArchive(srcDir, destPath, tempDir string) error {
 		return fmt.Errorf("resolve archive path: %w", err)
 	}
 	tempAbs := ""
-	if strings.TrimSpace(tempDir) != "" {
-		if v, err := filepath.Abs(tempDir); err == nil {
+	if strings.TrimSpace(opts.TempDir) != "" {
+		if v, err := filepath.Abs(opts.TempDir); err == nil {
 			tempAbs = v
 		}
 	}
@@ -59,7 +70,14 @@ func CreateArchive(srcDir, destPath, tempDir string) error {
 		if err != nil {
 			return err
 		}
-		if shouldSkipPath(srcAbs, abs, destAbs, tempAbs, d) {
+		rel := ""
+		if abs != srcAbs {
+			rel, err = filepath.Rel(srcAbs, abs)
+			if err != nil {
+				return err
+			}
+		}
+		if shouldSkipPath(srcAbs, abs, rel, destAbs, tempAbs, d, opts.ExcludePatterns) {
 			if d.IsDir() && abs != srcAbs {
 				return filepath.SkipDir
 			}
@@ -70,10 +88,6 @@ func CreateArchive(srcDir, destPath, tempDir string) error {
 		}
 
 		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(srcAbs, abs)
 		if err != nil {
 			return err
 		}
@@ -116,7 +130,7 @@ func CreateArchive(srcDir, destPath, tempDir string) error {
 	})
 }
 
-func shouldSkipPath(_ string, pathAbs, destAbs, tempAbs string, d os.DirEntry) bool {
+func shouldSkipPath(_ string, pathAbs, relPath, destAbs, tempAbs string, d os.DirEntry, excludePatterns []string) bool {
 	if samePath(pathAbs, destAbs) || isWithin(pathAbs, destAbs) {
 		return true
 	}
@@ -129,6 +143,43 @@ func shouldSkipPath(_ string, pathAbs, destAbs, tempAbs string, d os.DirEntry) b
 	}
 	if strings.HasSuffix(name, ".tmp") {
 		return true
+	}
+	return matchAnyExcludePattern(relPath, d.IsDir(), excludePatterns)
+}
+
+func matchAnyExcludePattern(relPath string, isDir bool, patterns []string) bool {
+	rel := filepath.ToSlash(filepath.Clean(relPath))
+	if rel == "." || rel == "" {
+		return false
+	}
+	for _, pattern := range patterns {
+		pattern = strings.Trim(strings.TrimSpace(filepath.ToSlash(pattern)), "/")
+		if pattern == "" {
+			continue
+		}
+		if strings.HasSuffix(pattern, "/**") {
+			base := strings.TrimSuffix(pattern, "/**")
+			if rel == base || strings.HasPrefix(rel, base+"/") {
+				return true
+			}
+			continue
+		}
+		if strings.HasSuffix(pattern, "/") {
+			base := strings.TrimSuffix(pattern, "/")
+			if rel == base || (isDir && strings.HasPrefix(rel, base+"/")) {
+				return true
+			}
+			continue
+		}
+		if ok, _ := filepath.Match(pattern, rel); ok {
+			return true
+		}
+		if ok, _ := filepath.Match(pattern, filepath.Base(rel)); ok {
+			return true
+		}
+		if rel == pattern || strings.HasPrefix(rel, pattern+"/") {
+			return true
+		}
 	}
 	return false
 }

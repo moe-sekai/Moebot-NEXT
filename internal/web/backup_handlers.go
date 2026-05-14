@@ -12,20 +12,21 @@ import (
 )
 
 type backupConfigRequest struct {
-	DataDir           *string `json:"data_dir"`
-	TempDir           *string `json:"temp_dir"`
-	Endpoint          *string `json:"endpoint"`
-	Region            *string `json:"region"`
-	Bucket            *string `json:"bucket"`
-	Prefix            *string `json:"prefix"`
-	AccessKey         *string `json:"access_key"`
-	SecretKey         *string `json:"secret_key"`
-	SessionToken      *string `json:"session_token"`
-	UseSSL            *bool   `json:"use_ssl"`
-	ForcePathStyle    *bool   `json:"force_path_style"`
-	ClearAccessKey    bool    `json:"clear_access_key"`
-	ClearSecretKey    bool    `json:"clear_secret_key"`
-	ClearSessionToken bool    `json:"clear_session_token"`
+	DataDir           *string  `json:"data_dir"`
+	TempDir           *string  `json:"temp_dir"`
+	ExcludePatterns   []string `json:"exclude_patterns"`
+	Endpoint          *string  `json:"endpoint"`
+	Region            *string  `json:"region"`
+	Bucket            *string  `json:"bucket"`
+	Prefix            *string  `json:"prefix"`
+	AccessKey         *string  `json:"access_key"`
+	SecretKey         *string  `json:"secret_key"`
+	SessionToken      *string  `json:"session_token"`
+	UseSSL            *bool    `json:"use_ssl"`
+	ForcePathStyle    *bool    `json:"force_path_style"`
+	ClearAccessKey    bool     `json:"clear_access_key"`
+	ClearSecretKey    bool     `json:"clear_secret_key"`
+	ClearSessionToken bool     `json:"clear_session_token"`
 }
 
 type backupCreateRequest struct {
@@ -81,6 +82,9 @@ func applyBackupConfigRequest(target *config.BackupConfig, req backupConfigReque
 	}
 	if req.TempDir != nil {
 		target.TempDir = strings.TrimSpace(*req.TempDir)
+	}
+	if req.ExcludePatterns != nil {
+		target.ExcludePatterns = append([]string{}, req.ExcludePatterns...)
 	}
 	if req.Endpoint != nil {
 		target.S3.Endpoint = strings.TrimSpace(*req.Endpoint)

@@ -92,9 +92,20 @@ type DatabaseConfig struct {
 
 // BackupConfig controls backup/restore of the runtime data directory.
 type BackupConfig struct {
-	DataDir string         `yaml:"data_dir"`
-	TempDir string         `yaml:"temp_dir"`
-	S3      BackupS3Config `yaml:"s3"`
+	DataDir         string         `yaml:"data_dir"`
+	TempDir         string         `yaml:"temp_dir"`
+	ExcludePatterns []string       `yaml:"exclude_patterns"`
+	S3              BackupS3Config `yaml:"s3"`
+}
+
+// DefaultBackupExcludePatterns returns volatile/generated paths excluded from data backups by default.
+func DefaultBackupExcludePatterns() []string {
+	return []string{
+		"cache/**",
+		"backups/tmp/**",
+		"*.tmp",
+		"*.restore-backup-*",
+	}
 }
 
 // BackupS3Config holds S3-compatible object storage settings.
@@ -267,8 +278,9 @@ func DefaultConfig() *Config {
 			Path: "./data/moebot.db",
 		},
 		Backup: BackupConfig{
-			DataDir: "./data",
-			TempDir: "./data/backups/tmp",
+			DataDir:         "./data",
+			TempDir:         "./data/backups/tmp",
+			ExcludePatterns: DefaultBackupExcludePatterns(),
 			S3: BackupS3Config{
 				Prefix:         "moebot-next/backups",
 				UseSSL:         true,

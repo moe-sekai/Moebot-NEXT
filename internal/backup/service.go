@@ -30,6 +30,7 @@ func (s *Service) PublicConfig() PublicConfig {
 	return PublicConfig{
 		DataDir:         cfg.DataDir,
 		TempDir:         cfg.TempDir,
+		ExcludePatterns: append([]string{}, cfg.ExcludePatterns...),
 		Endpoint:        cfg.S3.Endpoint,
 		Region:          cfg.S3.Region,
 		Bucket:          cfg.S3.Bucket,
@@ -105,7 +106,7 @@ func (s *Service) Create(ctx context.Context, note string) (*CreateResult, error
 	archiveName := "moebot-data-" + stamp + ".tar.gz"
 	archivePath := filepath.Join(cfg.TempDir, archiveName+".tmp")
 	defer os.Remove(archivePath)
-	if err := CreateArchive(dataDir, archivePath, cfg.TempDir); err != nil {
+	if err := CreateArchiveWithOptions(dataDir, archivePath, ArchiveOptions{TempDir: cfg.TempDir, ExcludePatterns: cfg.ExcludePatterns}); err != nil {
 		return nil, err
 	}
 	info, err := os.Stat(archivePath)
@@ -202,6 +203,9 @@ func (s *Service) effectiveConfig() config.BackupConfig {
 	}
 	if cfg.TempDir == "" {
 		cfg.TempDir = "./data/backups/tmp"
+	}
+	if len(cfg.ExcludePatterns) == 0 {
+		cfg.ExcludePatterns = config.DefaultBackupExcludePatterns()
 	}
 	cfg.S3.Prefix = strings.Trim(strings.TrimSpace(cfg.S3.Prefix), "/")
 	if cfg.S3.Prefix == "" {

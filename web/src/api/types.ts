@@ -408,6 +408,7 @@ export interface MasterdataReloadResponse {
 export interface BackupPublicConfig {
   data_dir: string;
   temp_dir: string;
+  exclude_patterns: string[];
   endpoint: string;
   region: string;
   bucket: string;
@@ -423,6 +424,7 @@ export interface BackupPublicConfig {
 export interface BackupConfigPayload {
   data_dir?: string;
   temp_dir?: string;
+  exclude_patterns?: string[];
   endpoint?: string;
   region?: string;
   bucket?: string;
