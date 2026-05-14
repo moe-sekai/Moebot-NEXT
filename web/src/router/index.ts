@@ -43,6 +43,7 @@ const router = createRouter({
     { path: '/users', name: 'users', component: Users },
     { path: '/logs', name: 'logs', component: Logs },
     { path: '/stats', name: 'stats', component: Stats },
+    { path: '/backup', name: 'backup', component: () => import('../views/BackupRestore.vue') },
     { path: '/about', name: 'about', component: About },
 
     // 插件框架

@@ -716,6 +716,7 @@ func NormalizeConfig(cfg *Config) {
 	if cfg.Renderer.ChartPrecision <= 0 {
 		cfg.Renderer.ChartPrecision = DefaultChartRendererPrecision
 	}
+	normalizeBackupConfig(&cfg.Backup)
 	if cfg.SekaiAPI.BaseURL == "" {
 		cfg.SekaiAPI.BaseURL = DefaultSekaiAPIURL
 	}
@@ -790,6 +791,34 @@ func NormalizeConfig(cfg *Config) {
 		if _, ok := cfg.GameServers[region]; !ok {
 			cfg.GameServers[region] = defaults[region]
 		}
+	}
+}
+
+func normalizeBackupConfig(cfg *BackupConfig) {
+	if cfg == nil {
+		return
+	}
+	cfg.DataDir = strings.TrimSpace(cfg.DataDir)
+	if cfg.DataDir == "" {
+		cfg.DataDir = "./data"
+	}
+	cfg.TempDir = strings.TrimSpace(cfg.TempDir)
+	if cfg.TempDir == "" {
+		cfg.TempDir = "./data/backups/tmp"
+	}
+	cfg.S3.Endpoint = strings.TrimSpace(cfg.S3.Endpoint)
+	cfg.S3.Region = strings.TrimSpace(cfg.S3.Region)
+	cfg.S3.Bucket = strings.TrimSpace(cfg.S3.Bucket)
+	cfg.S3.Prefix = strings.Trim(strings.TrimSpace(cfg.S3.Prefix), "/")
+	if cfg.S3.Prefix == "" {
+		cfg.S3.Prefix = "moebot-next/backups"
+	}
+	cfg.S3.AccessKey = strings.TrimSpace(cfg.S3.AccessKey)
+	cfg.S3.SecretKey = strings.TrimSpace(cfg.S3.SecretKey)
+	cfg.S3.SessionToken = strings.TrimSpace(cfg.S3.SessionToken)
+	if !cfg.S3.UseSSL && !cfg.S3.ForcePathStyle && cfg.S3.Endpoint == "" && cfg.S3.Bucket == "" && cfg.S3.AccessKey == "" && cfg.S3.SecretKey == "" {
+		cfg.S3.UseSSL = true
+		cfg.S3.ForcePathStyle = true
 	}
 }
 

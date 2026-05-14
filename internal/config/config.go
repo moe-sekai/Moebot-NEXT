@@ -16,6 +16,7 @@ type Config struct {
 	Bot         BotConfig                   `yaml:"bot"`
 	Web         WebConfig                   `yaml:"web"`
 	Database    DatabaseConfig              `yaml:"database"`
+	Backup      BackupConfig                `yaml:"backup"`
 	Masterdata  MasterdataConfig            `yaml:"masterdata"`
 	SekaiAPI    SekaiAPIConfig              `yaml:"sekai_api"`
 	SuiteAPI    SuiteAPIConfig              `yaml:"suite_api"`
@@ -87,6 +88,26 @@ type AuthConfig struct {
 // DatabaseConfig holds SQLite database settings.
 type DatabaseConfig struct {
 	Path string `yaml:"path"`
+}
+
+// BackupConfig controls backup/restore of the runtime data directory.
+type BackupConfig struct {
+	DataDir string         `yaml:"data_dir"`
+	TempDir string         `yaml:"temp_dir"`
+	S3      BackupS3Config `yaml:"s3"`
+}
+
+// BackupS3Config holds S3-compatible object storage settings.
+type BackupS3Config struct {
+	Endpoint       string `yaml:"endpoint"`
+	Region         string `yaml:"region"`
+	Bucket         string `yaml:"bucket"`
+	Prefix         string `yaml:"prefix"`
+	AccessKey      string `yaml:"access_key"`
+	SecretKey      string `yaml:"secret_key"`
+	SessionToken   string `yaml:"session_token"`
+	UseSSL         bool   `yaml:"use_ssl"`
+	ForcePathStyle bool   `yaml:"force_path_style"`
 }
 
 // MasterdataConfig holds masterdata loading settings.
@@ -244,6 +265,15 @@ func DefaultConfig() *Config {
 		},
 		Database: DatabaseConfig{
 			Path: "./data/moebot.db",
+		},
+		Backup: BackupConfig{
+			DataDir: "./data",
+			TempDir: "./data/backups/tmp",
+			S3: BackupS3Config{
+				Prefix:         "moebot-next/backups",
+				UseSSL:         true,
+				ForcePathStyle: true,
+			},
 		},
 		Masterdata: MasterdataConfig{
 			URL:             "https://sk.exmeaning.com/master",

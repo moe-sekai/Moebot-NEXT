@@ -1,5 +1,11 @@
 import axios from "axios";
 import type {
+  BackupActionResponse,
+  BackupConfigPayload,
+  BackupCreateResult,
+  BackupListResponse,
+  BackupPublicConfig,
+  BackupRestoreResult,
   CommandAliasConfig,
   CommandAliasPayload,
   CommandAliasUpdateResponse,
@@ -597,6 +603,63 @@ export async function importFilterYAML(yaml: string, replaceAll: boolean) {
     "/filter/import-yaml",
     { yaml, replace_all: replaceAll },
   );
+  return data;
+}
+
+// --- Backup / restore ---
+
+export async function getBackupConfig(): Promise<BackupPublicConfig> {
+  const { data } = await api.get<BackupPublicConfig>("/backup/config");
+  return data;
+}
+
+export async function updateBackupConfig(
+  payload: BackupConfigPayload,
+): Promise<BackupActionResponse<unknown>> {
+  const { data } = await api.put<BackupActionResponse<unknown>>(
+    "/backup/config",
+    payload,
+  );
+  return data;
+}
+
+export async function testBackupConnection(): Promise<BackupActionResponse> {
+  const { data } = await api.post<BackupActionResponse>("/backup/test", null, {
+    timeout: 30_000,
+  });
+  return data;
+}
+
+export async function listBackups(): Promise<BackupListResponse> {
+  const { data } = await api.get<BackupListResponse>("/backup/objects", {
+    timeout: 30_000,
+  });
+  return data;
+}
+
+export async function createBackup(note = "") {
+  const { data } = await api.post<BackupActionResponse<BackupCreateResult>>(
+    "/backup",
+    { note },
+    { timeout: 0 },
+  );
+  return data;
+}
+
+export async function restoreBackup(key: string) {
+  const { data } = await api.post<BackupActionResponse<BackupRestoreResult>>(
+    "/backup/restore",
+    { key, confirm: "RESTORE" },
+    { timeout: 0 },
+  );
+  return data;
+}
+
+export async function deleteBackup(key: string) {
+  const { data } = await api.delete<BackupActionResponse>("/backup", {
+    data: { key, confirm: "DELETE" },
+    timeout: 120_000,
+  });
   return data;
 }
 

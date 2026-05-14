@@ -221,6 +221,8 @@ func ensureCoreRuntimeDirs(cfg *config.Config) error {
 	dirs := []string{
 		filepath.Dir(cfg.Database.Path),
 		cfg.Renderer.Cache.Path,
+		cfg.Backup.DataDir,
+		cfg.Backup.TempDir,
 		pluginsDataDir(cfg),
 	}
 	for _, dir := range dirs {

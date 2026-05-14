@@ -405,6 +405,71 @@ export interface MasterdataReloadResponse {
   counts: MasterdataCounts;
 }
 
+export interface BackupPublicConfig {
+  data_dir: string;
+  temp_dir: string;
+  endpoint: string;
+  region: string;
+  bucket: string;
+  prefix: string;
+  use_ssl: boolean;
+  force_path_style: boolean;
+  access_key_set: boolean;
+  secret_key_set: boolean;
+  session_token_set: boolean;
+  configured: boolean;
+}
+
+export interface BackupConfigPayload {
+  data_dir?: string;
+  temp_dir?: string;
+  endpoint?: string;
+  region?: string;
+  bucket?: string;
+  prefix?: string;
+  access_key?: string;
+  secret_key?: string;
+  session_token?: string;
+  use_ssl?: boolean;
+  force_path_style?: boolean;
+  clear_access_key?: boolean;
+  clear_secret_key?: boolean;
+  clear_session_token?: boolean;
+}
+
+export interface BackupObject {
+  key: string;
+  name: string;
+  size: number;
+  last_modified: string;
+}
+
+export interface BackupListResponse {
+  data: BackupObject[];
+  total: number;
+}
+
+export interface BackupCreateResult {
+  object: BackupObject;
+  archive_size: number;
+  duration_ms: number;
+}
+
+export interface BackupRestoreResult {
+  key: string;
+  backup_data_dir: string;
+  restored_data_dir: string;
+  duration_ms: number;
+  restart_needed: boolean;
+}
+
+export interface BackupActionResponse<T = unknown> {
+  ok: boolean;
+  message: string;
+  config?: BackupPublicConfig;
+  result?: T;
+}
+
 export type SearchType =
   | "cards"
   | "musics"

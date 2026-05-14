@@ -29,6 +29,24 @@ web:
 database:
   path: "./data/moebot.db"
 
+backup:
+  # Docker 内等价于 /app/data；本地运行默认 ./data
+  data_dir: "./data"
+  temp_dir: "./data/backups/tmp"
+  s3:
+    # S3 兼容存储 endpoint，例如：s3.amazonaws.com / minio.example.com:9000
+    endpoint: ""
+    # MinIO 可留空；AWS/R2/其他云厂商按服务要求填写
+    region: ""
+    bucket: ""
+    prefix: "moebot-next/backups"
+    access_key: ""
+    secret_key: ""
+    session_token: ""
+    use_ssl: true
+    # MinIO / 多数 S3 兼容服务建议开启 path-style
+    force_path_style: true
+
 renderer:
   host: "127.0.0.1"
   port: 13001

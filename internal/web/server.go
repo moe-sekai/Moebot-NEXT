@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"moebot-next/internal/backup"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
 	"moebot-next/internal/filter"
@@ -35,6 +36,7 @@ type Server struct {
 	B30        *b30.Client
 	Logs       *logbuffer.Buffer
 	Filter     *filter.Manager
+	Backup     *backup.Service
 	startedAt  time.Time
 }
 
@@ -72,6 +74,7 @@ func New(cfg *config.Config, db *database.DB, store *masterdata.Store, rendererC
 		Loader:     loader,
 		Renderer:   rendererClient,
 		B30:        b30.NewClient(cfg.B30),
+		Backup:     backup.New(cfg, db),
 		startedAt:  time.Now(),
 	}
 
@@ -140,6 +143,15 @@ func (s *Server) registerRoutes() {
 
 	// Logs
 	api.Get("/logs", s.handleListLogs)
+
+	// Backup / restore
+	api.Get("/backup/config", s.handleBackupConfig)
+	api.Put("/backup/config", s.handleUpdateBackupConfig)
+	api.Post("/backup/test", s.handleBackupTest)
+	api.Get("/backup/objects", s.handleListBackups)
+	api.Post("/backup", s.handleCreateBackup)
+	api.Post("/backup/restore", s.handleRestoreBackup)
+	api.Delete("/backup", s.handleDeleteBackup)
 
 	// Filter (OneBot gateway)
 	api.Get("/filter/status", s.handleFilterStatus)

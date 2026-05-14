@@ -13,6 +13,7 @@ services:
       TZ: Asia/Shanghai
     volumes:
       # 持久化数据库 / 缓存 / 下载的 master 数据 / 配置文件
+      # 控制台「备份恢复」会以 /app/data 为源目录上传到 S3 兼容存储
       - ./data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]

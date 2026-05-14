@@ -41,4 +41,7 @@ Moebot-NEXT-Go/
 - 首次启动时，entrypoint 脚本会自动从 `config.example.yml` 复制配置到 `data/config.yml`
 - 如需修改配置，直接编辑 `data/config.yml` 文件
 - 数据目录 `/app/data` 已在 Dockerfile 中通过 `VOLUME` 声明
-- 建议定期备份 `data` 目录
+- 控制台「备份恢复」页面可以把 `/app/data` 打包上传到 S3 兼容存储（MinIO / R2 / AWS S3 等）
+- 使用 MinIO 等兼容服务时，通常填写 `endpoint`（如 `minio.example.com:9000`）并保持 `force_path_style: true`
+- 恢复远端备份后请重启容器：`docker compose restart moebot`
+- 建议定期备份 `data` 目录；备份包包含 `data/config.yml`，请确保备份桶为私有桶并使用最小权限密钥

@@ -43,6 +43,7 @@ export const consoleNavItems: ConsoleNavItem[] = [
 
   // 系统
   { path: '/stats', name: 'stats', label: '调用统计', subtitle: 'Command Stats', icon: 'stats', section: 'system' },
+  { path: '/backup', name: 'backup', label: '备份恢复', subtitle: 'S3 Backup', icon: 'database', section: 'system' },
   { path: '/logs', name: 'logs', label: '日志', subtitle: 'Logs', icon: 'logs', section: 'system' },
   { path: '/about', name: 'about', label: '关于', subtitle: 'About', icon: 'about', section: 'system' },
 ]
@@ -142,6 +143,11 @@ export const pageDescriptions: Record<string, { title: string; subtitle: string;
     title: '调用统计',
     subtitle: '查看指令调用次数、响应耗时、活跃群组与用户分布。',
     eyebrow: 'Command Stats',
+  },
+  backup: {
+    title: '备份恢复',
+    subtitle: '将 data 目录备份到 S3 兼容对象存储，或从远端归档恢复。',
+    eyebrow: 'S3 Backup',
   },
   logs: {
     title: '日志',
