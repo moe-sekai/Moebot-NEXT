@@ -124,7 +124,7 @@ function AllTable({ rows }: { rows: MissionAllRow[] }) {
 		return <EmptyState text="暂无可展示的任务档位" />;
 	}
 	return (
-		<div style={{ display: "flex", flexDirection: "column", borderRadius: theme.borderRadius.xl, overflow: "hidden", border: `1px solid ${theme.colors.border}` }}>
+		<div style={{ display: "flex", flexDirection: "column", border: `1px solid ${theme.colors.border}` }}>
 			<TableHeader />
 			{rows.map((row, index) => <AllTableRow key={`${row.seq ?? index}`} row={row} />)}
 		</div>
