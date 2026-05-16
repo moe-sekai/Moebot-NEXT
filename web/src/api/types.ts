@@ -254,6 +254,7 @@ export interface PublicConfig {
     budget: {
       max_concurrency: number;
       queue_limit: number;
+      prepare_concurrency: number;
     };
   };
   assets: PublicAssetsConfig;
@@ -332,6 +333,7 @@ export interface UpdateRendererPayload {
   budget?: {
     max_concurrency?: number;
     queue_limit?: number;
+    prepare_concurrency?: number;
   };
 }
 
@@ -339,6 +341,7 @@ export interface RendererBudgetStats {
   ok: boolean;
   maxConcurrency: number;
   queueLimit: number;
+  prepareConcurrency: number;
   inFlight: number;
   queued: number;
   completed: number;
@@ -346,9 +349,14 @@ export interface RendererBudgetStats {
   avgWaitMs: number;
   peakInFlight: number;
   peakQueued: number;
+  workerCount?: number;
+  busyWorkers?: number;
+  spawned?: number;
+  restarted?: number;
   limits: {
     hardMaxConcurrency: number;
     hardMaxQueue: number;
+    hardMaxPrepareConcurrency?: number;
   };
   message?: string;
 }
@@ -356,6 +364,7 @@ export interface RendererBudgetStats {
 export interface RendererBudgetUpdatePayload {
   max_concurrency?: number;
   queue_limit?: number;
+  prepare_concurrency?: number;
 }
 
 export interface RendererBudgetActionResponse {

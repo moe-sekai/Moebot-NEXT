@@ -221,16 +221,16 @@
             <span>限制同时进行的渲染数和等待队列。低内存机器请保守，超过队列上限直接 503。</span>
           </div>
           <UiBadge :variant="budgetStats ? 'success' : 'outline'">
-            {{ budgetStats ? `运行 ${budgetStats.inFlight}/${budgetStats.maxConcurrency} · 排队 ${budgetStats.queued}/${budgetStats.queueLimit}` : '未加载' }}
+            {{ budgetStats ? `Worker ${budgetStats.inFlight}/${budgetStats.maxConcurrency} · 排队 ${budgetStats.queued}/${budgetStats.queueLimit}` : '未加载' }}
           </UiBadge>
         </div>
         <div v-if="budgetStats" class="renderer-meta">
           <span>已完成 {{ budgetStats.completed }} · 拒绝 {{ budgetStats.rejected }} · 平均等待 {{ budgetStats.avgWaitMs }}ms</span>
-          <span>峰值并发 {{ budgetStats.peakInFlight }} · 峰值队列 {{ budgetStats.peakQueued }}</span>
+          <span>峰值并发 {{ budgetStats.peakInFlight }} · 峰值队列 {{ budgetStats.peakQueued }} · Worker {{ budgetStats.workerCount ?? budgetStats.maxConcurrency }} 个</span>
         </div>
         <div class="renderer-form">
           <label class="renderer-field">
-            <span>最大并发渲染数</span>
+            <span>渲染 Worker 数</span>
             <input
               v-model.number="budgetForm.maxConcurrency"
               class="ui-textarea"
@@ -251,11 +251,22 @@
               step="1"
             />
           </label>
+          <label class="renderer-field">
+            <span>单 Worker 准备并发</span>
+            <input
+              v-model.number="budgetForm.prepareConcurrency"
+              class="ui-textarea"
+              type="number"
+              min="1"
+              :max="budgetStats?.limits.hardMaxPrepareConcurrency ?? 32"
+              step="1"
+            />
+          </label>
           <div class="renderer-field renderer-field--readonly renderer-field--full">
             <span>建议</span>
             <strong>
-              16G 灵车建议并发 1-2、队列 4-8；CPU 充裕时可调到 3-4。超出队列直接 503，避免雪崩。
-              范围：并发 1–{{ budgetStats?.limits.hardMaxConcurrency ?? 64 }} · 队列 0–{{ budgetStats?.limits.hardMaxQueue ?? 1024 }}
+              16G / 12v 服务器建议 Worker 4、队列 16、单 Worker 准备并发 4；内存稳定后可尝试 Worker 6。
+              范围：Worker 1–{{ budgetStats?.limits.hardMaxConcurrency ?? 32 }} · 队列 0–{{ budgetStats?.limits.hardMaxQueue ?? 1024 }} · 准备并发 1–{{ budgetStats?.limits.hardMaxPrepareConcurrency ?? 32 }}
             </strong>
           </div>
         </div>
@@ -459,7 +470,7 @@ const renderCacheForm = reactive({ maxBytesMB: 256, maxEntries: 1024 })
 const budgetStats = ref<RendererBudgetStats | null>(null)
 const budgetLoading = ref(false)
 const budgetSaving = ref(false)
-const budgetForm = reactive({ maxConcurrency: 2, queueLimit: 8 })
+const budgetForm = reactive({ maxConcurrency: 2, queueLimit: 8, prepareConcurrency: 4 })
 
 async function loadRendererConfig() {
   try {
@@ -472,6 +483,7 @@ async function loadRendererConfig() {
     if (cfg.renderer.budget) {
       budgetForm.maxConcurrency = cfg.renderer.budget.max_concurrency || 2
       budgetForm.queueLimit = cfg.renderer.budget.queue_limit ?? 8
+      budgetForm.prepareConcurrency = cfg.renderer.budget.prepare_concurrency || 4
     }
     rendererFormOriginal.value = JSON.stringify(rendererForm)
   } catch (err) {
@@ -557,6 +569,7 @@ async function refreshBudgetStats(silent = false) {
     budgetStats.value = stats
     if (stats.maxConcurrency > 0) budgetForm.maxConcurrency = stats.maxConcurrency
     if (stats.queueLimit >= 0) budgetForm.queueLimit = stats.queueLimit
+    if (stats.prepareConcurrency > 0) budgetForm.prepareConcurrency = stats.prepareConcurrency
   } catch (err) {
     if (!silent) rendererError.value = err instanceof Error ? err.message : '获取渲染并发预算失败。'
   } finally {
@@ -571,13 +584,16 @@ async function saveBudget() {
   try {
     const maxConcurrency = Math.max(1, Math.round(budgetForm.maxConcurrency))
     const queueLimit = Math.max(0, Math.round(budgetForm.queueLimit))
+    const prepareConcurrency = Math.max(1, Math.round(budgetForm.prepareConcurrency))
     const resp = await updateRendererBudget({
       max_concurrency: maxConcurrency,
       queue_limit: queueLimit,
+      prepare_concurrency: prepareConcurrency,
     })
     budgetStats.value = resp.stats
     budgetForm.maxConcurrency = resp.stats.maxConcurrency
     budgetForm.queueLimit = resp.stats.queueLimit
+    budgetForm.prepareConcurrency = resp.stats.prepareConcurrency
     rendererSuccess.value = resp.message || '渲染并发预算已更新并立即生效。'
   } catch (err) {
     rendererError.value = err instanceof Error ? err.message : '更新渲染并发预算失败。'

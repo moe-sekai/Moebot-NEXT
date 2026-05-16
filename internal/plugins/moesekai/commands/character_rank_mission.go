@@ -139,13 +139,6 @@ func sendCharacterRankMissionOrText(ctx *zero.Ctx, deps *Deps, payload character
 	}
 
 	logger := log.With().Str("template", "character_rank_mission").Str("mode", payload.Mode).Int("character_id", payload.CharacterID).Str("mission_type", payload.MissionType).Int("rows", len(payload.Rows)).Int("all_rows_rendered", len(payload.AllRows)).Int("all_rows_total", payload.AllRowsTotal).Int("page", payload.Page).Int("total_pages", payload.TotalPages).Logger()
-	ok, status, healthErr := deps.Renderer.HealthWithTimeout(2 * time.Second)
-	if !ok {
-		logger.Warn().Err(healthErr).Int("status", status).Msg("CR mission renderer health check failed; falling back to text")
-		ctx.SendChain(message.Text(fallback))
-		return
-	}
-
 	started := time.Now()
 	logger.Info().Msg("Rendering CR mission payload")
 	png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "character_rank_mission", Data: payload})

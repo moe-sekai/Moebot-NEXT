@@ -75,7 +75,7 @@ func registerMusicDetailCommand(deps *Deps, command string) {
 				return
 			}
 			payload := renderpayloads.BuildMusicDetailPayloadWithAssets(runtime.Store, *result.Music, runtime.Assets)
-			if deps.Renderer != nil && deps.Renderer.Health() {
+			if deps.Renderer != nil {
 				png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "music_detail", Data: payload})
 				if err == nil {
 					if result.Message != "" {
@@ -137,7 +137,7 @@ func registerChartCommand(deps *Deps) {
 
 			payload := renderpayloads.BuildMusicDetailPayloadWithAssets(runtime.Store, *result.Music, runtime.Assets)
 			payload = selectedDifficultyPayload(payload, options.Difficulty, runtime.Profile.Assets.ChartSourceURL)
-			if deps.Renderer != nil && deps.Renderer.Health() {
+			if deps.Renderer != nil {
 				if payload.ChartURL != "" {
 					if png, err := deps.Renderer.RenderChartURL(payload.ChartURL); err == nil {
 						ctx.SendChain(message.ImageBytes(png))
@@ -180,7 +180,7 @@ func sendMusicList(ctx *zero.Ctx, deps *Deps, store *masterdata.Store, resolver 
 	}
 	shown := musicsearch.LimitMusics(musics, musicsearch.DefaultListLimit)
 	payload := renderpayloads.BuildMusicListPayloadWithAssets(title, subtitle, shown, store, assetResolver, page, totalPages, total)
-	if deps.Renderer != nil && deps.Renderer.Health() {
+	if deps.Renderer != nil {
 		png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "music_list", Data: payload})
 		if err == nil {
 			ctx.SendChain(message.ImageBytes(png))

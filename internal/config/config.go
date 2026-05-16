@@ -203,16 +203,19 @@ type RenderCacheConfig struct {
 }
 
 // RendererBudgetConfig 限制 Bun 渲染服务的并发量，避免在低内存机器上 OOM。
-//   - MaxConcurrency：同时进行的渲染请求数；<=0 时使用默认 2。
-//   - QueueLimit：等待中的请求数上限；超过直接 503，<0 视为 0（不允许排队）。
+//   - MaxConcurrency：渲染 worker 数；<=0 时使用默认 2。
+//   - QueueLimit：等待中的请求数上限；超过直接 503，<0 视为默认 8。
+//   - PrepareConcurrency：单个 worker 内卡面/图片准备并发；<=0 时使用默认 4。
 type RendererBudgetConfig struct {
-	MaxConcurrency int `yaml:"max_concurrency"`
-	QueueLimit     int `yaml:"queue_limit"`
+	MaxConcurrency     int `yaml:"max_concurrency"`
+	QueueLimit         int `yaml:"queue_limit"`
+	PrepareConcurrency int `yaml:"prepare_concurrency"`
 }
 
 const (
-	DefaultRendererMaxConcurrency = 2
-	DefaultRendererQueueLimit     = 8
+	DefaultRendererMaxConcurrency     = 2
+	DefaultRendererQueueLimit         = 8
+	DefaultRendererPrepareConcurrency = 4
 )
 
 // RendererFontConfig holds the user-selected primary font family names for renderer text.
@@ -329,8 +332,9 @@ func DefaultConfig() *Config {
 				TTLHours:  0,
 			},
 			Budget: RendererBudgetConfig{
-				MaxConcurrency: DefaultRendererMaxConcurrency,
-				QueueLimit:     DefaultRendererQueueLimit,
+				MaxConcurrency:     DefaultRendererMaxConcurrency,
+				QueueLimit:         DefaultRendererQueueLimit,
+				PrepareConcurrency: DefaultRendererPrepareConcurrency,
 			},
 		},
 		Assets: AssetsConfig{

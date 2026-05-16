@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { performance } from 'node:perf_hooks'
 import { setImmediate as setImmediatePromise } from 'node:timers/promises'
 import { join } from 'node:path'
@@ -281,7 +281,7 @@ async function generateComposite(input: NormalizedCardThumbnailCompositeRequest,
       return null
     }
     const svg = renderCompositeSvg(input, source)
-    await writeFile(compositePath(input), svg)
+    await writeFileAtomic(compositePath(input), svg)
     memoryComposites.add(compositeKey(input))
     failedComposites.delete(compositeKey(input))
     return Buffer.from(svg)
@@ -295,7 +295,7 @@ async function generateComposite(input: NormalizedCardThumbnailCompositeRequest,
 async function generateCompositeFromSource(input: NormalizedCardThumbnailCompositeRequest, source: string): Promise<{ ok: boolean; bytes: number }> {
   try {
     const svg = renderCompositeSvg(input, source)
-    await writeFile(compositePath(input), svg)
+    await writeFileAtomic(compositePath(input), svg)
     memoryComposites.add(compositeKey(input))
     failedComposites.delete(compositeKey(input))
     return { ok: true, bytes: Buffer.byteLength(svg) }
@@ -431,6 +431,15 @@ function normalizeConcurrency(value: unknown): number {
   const numberValue = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(numberValue) || numberValue <= 0) return 10
   return Math.max(1, Math.min(32, Math.round(numberValue)))
+}
+
+async function writeFileAtomic(path: string, data: string): Promise<void> {
+  const tmpPath = `${path}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+  await writeFile(tmpPath, data)
+  await rename(tmpPath, path).catch(async (error) => {
+    await unlink(tmpPath).catch(() => {})
+    throw error
+  })
 }
 
 async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {

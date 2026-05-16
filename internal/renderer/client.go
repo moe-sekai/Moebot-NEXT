@@ -167,6 +167,9 @@ func normalizeBudget(b config.RendererBudgetConfig) config.RendererBudgetConfig 
 	if b.QueueLimit < 0 {
 		b.QueueLimit = config.DefaultRendererQueueLimit
 	}
+	if b.PrepareConcurrency <= 0 {
+		b.PrepareConcurrency = config.DefaultRendererPrepareConcurrency
+	}
 	return b
 }
 
@@ -803,19 +806,25 @@ func (c *Client) Fonts() config.RendererFontConfig {
 
 // BudgetStats 是 Bun 渲染服务返回的并发预算运行时统计。
 type BudgetStats struct {
-	OK             bool `json:"ok"`
-	MaxConcurrency int  `json:"maxConcurrency"`
-	QueueLimit     int  `json:"queueLimit"`
-	InFlight       int  `json:"inFlight"`
-	Queued         int  `json:"queued"`
-	Completed      int  `json:"completed"`
-	Rejected       int  `json:"rejected"`
-	AvgWaitMs      int  `json:"avgWaitMs"`
-	PeakInFlight   int  `json:"peakInFlight"`
-	PeakQueued     int  `json:"peakQueued"`
-	Limits         struct {
-		HardMaxConcurrency int `json:"hardMaxConcurrency"`
-		HardMaxQueue       int `json:"hardMaxQueue"`
+	OK                 bool `json:"ok"`
+	MaxConcurrency     int  `json:"maxConcurrency"`
+	QueueLimit         int  `json:"queueLimit"`
+	PrepareConcurrency int  `json:"prepareConcurrency"`
+	InFlight           int  `json:"inFlight"`
+	Queued             int  `json:"queued"`
+	Completed          int  `json:"completed"`
+	Rejected           int  `json:"rejected"`
+	AvgWaitMs          int  `json:"avgWaitMs"`
+	PeakInFlight       int  `json:"peakInFlight"`
+	PeakQueued         int  `json:"peakQueued"`
+	WorkerCount        int  `json:"workerCount"`
+	BusyWorkers        int  `json:"busyWorkers"`
+	Spawned            int  `json:"spawned"`
+	Restarted          int  `json:"restarted"`
+	Limits             struct {
+		HardMaxConcurrency        int `json:"hardMaxConcurrency"`
+		HardMaxQueue              int `json:"hardMaxQueue"`
+		HardMaxPrepareConcurrency int `json:"hardMaxPrepareConcurrency"`
 	} `json:"limits"`
 	Message string `json:"message,omitempty"`
 }
@@ -842,12 +851,13 @@ func (c *Client) GetBudgetStats() (*BudgetStats, error) {
 }
 
 // SetBudget 同时更新缓存的预算配置（用于下次进程重启）并热更新 Bun 渲染服务。
-// QueueLimit < 0 表示不修改；MaxConcurrency <= 0 表示不修改。
+// QueueLimit < 0 表示不修改；MaxConcurrency/PrepareConcurrency <= 0 表示使用默认值。
 func (c *Client) SetBudget(b config.RendererBudgetConfig) (*BudgetStats, error) {
 	c.budget = normalizeBudget(b)
 	payload := map[string]int{
-		"maxConcurrency": c.budget.MaxConcurrency,
-		"queueLimit":     c.budget.QueueLimit,
+		"maxConcurrency":     c.budget.MaxConcurrency,
+		"queueLimit":         c.budget.QueueLimit,
+		"prepareConcurrency": c.budget.PrepareConcurrency,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -889,6 +899,9 @@ func rendererBudgetEnv(b config.RendererBudgetConfig) []string {
 	}
 	if b.QueueLimit >= 0 {
 		env = append(env, fmt.Sprintf("RENDER_QUEUE_LIMIT=%d", b.QueueLimit))
+	}
+	if b.PrepareConcurrency > 0 {
+		env = append(env, fmt.Sprintf("RENDER_PREPARE_CONCURRENCY=%d", b.PrepareConcurrency))
 	}
 	return env
 }

@@ -5,6 +5,31 @@ import type { SkillReferenceChooseStrategy } from "../sekai-calculator/deck-info
 import type { LiveType } from "../sekai-calculator/live-score/live-calculator";
 import type { MasterDataMap, UserDataMap } from "./data-provider";
 
+export interface DeckRecommendSnapshotRequest {
+	region: string;
+	master?: DeckRecommendMasterSnapshot | null;
+	musicMetas?: DeckRecommendMusicMetasSnapshot | null;
+}
+
+export interface DeckRecommendMasterSnapshot {
+	version: string;
+	data: MasterDataMap;
+}
+
+export interface DeckRecommendMusicMetasSnapshot {
+	version: string;
+	data: MusicMeta[];
+}
+
+export interface DeckRecommendSnapshotResponse {
+	ok: boolean;
+	region: string;
+	master?: { version: string; keyCount: number; updatedAt: number };
+	musicMetas?: { version: string; count: number; updatedAt: number };
+	error?: string;
+	message?: string;
+}
+
 export interface DeckRecommendOptions {
 	mode?: "event" | "strongest" | "challenge" | "bonus" | "mysekai" | string;
 	eventId: number;

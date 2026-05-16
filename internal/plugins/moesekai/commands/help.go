@@ -43,7 +43,7 @@ func RegisterHelp(deps *Deps) {
 	for _, cmd := range parserCommands(deps, "帮助") {
 		Engine.OnCommand(cmd.Name).SetBlock(true).Handle(func(ctx *zero.Ctx) {
 			payload := buildHelpCardPayload(deps)
-			if deps != nil && deps.Renderer != nil && deps.Renderer.Health() {
+			if deps != nil && deps.Renderer != nil {
 				if png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "help_card", Data: payload}); err == nil {
 					ctx.SendChain(message.ImageBytes(png))
 					return

@@ -185,7 +185,7 @@ func registerProfileInfoCommands(deps *Deps) {
 				profile, err := runtime.Sekai.GetProfile(user.GameID)
 				if err == nil {
 					payload := renderpayloads.BuildProfileCardPayloadWithAssets(runtime.Store, *profile, runtime.Assets)
-					if deps.Renderer != nil && deps.Renderer.Health() {
+					if deps.Renderer != nil {
 						png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "profile_card", Data: payload})
 						if err == nil {
 							ctx.SendChain(message.ImageBytes(png))

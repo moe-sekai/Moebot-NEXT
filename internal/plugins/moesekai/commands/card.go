@@ -47,7 +47,7 @@ func RegisterCard(deps *Deps) {
 
 			if result.Mode == cardquery.ModeList {
 				payload := renderpayloads.BuildCardListPayloadWithAssets("卡牌查询", cardListSubtitle(keyword, result.Query), result.Cards, runtime.Store, runtime.Assets, result.Page, result.TotalPages, result.Total)
-				if deps.Renderer != nil && deps.Renderer.Health() {
+				if deps.Renderer != nil {
 					png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "card_list", Data: payload})
 					if err == nil {
 						ctx.SendChain(message.ImageBytes(png))
@@ -62,7 +62,7 @@ func RegisterCard(deps *Deps) {
 
 			card := result.Cards[0]
 			payload := renderpayloads.BuildCardDetailPayloadWithAssets(runtime.Store, card, runtime.Assets)
-			if deps.Renderer != nil && deps.Renderer.Health() {
+			if deps.Renderer != nil {
 				png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "card_detail", Data: payload})
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))

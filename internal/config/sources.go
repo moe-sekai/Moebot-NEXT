@@ -716,6 +716,15 @@ func NormalizeConfig(cfg *Config) {
 	if cfg.Renderer.ChartPrecision <= 0 {
 		cfg.Renderer.ChartPrecision = DefaultChartRendererPrecision
 	}
+	if cfg.Renderer.Budget.MaxConcurrency <= 0 {
+		cfg.Renderer.Budget.MaxConcurrency = DefaultRendererMaxConcurrency
+	}
+	if cfg.Renderer.Budget.QueueLimit < 0 {
+		cfg.Renderer.Budget.QueueLimit = DefaultRendererQueueLimit
+	}
+	if cfg.Renderer.Budget.PrepareConcurrency <= 0 {
+		cfg.Renderer.Budget.PrepareConcurrency = DefaultRendererPrepareConcurrency
+	}
 	normalizeBackupConfig(&cfg.Backup)
 	if cfg.SekaiAPI.BaseURL == "" {
 		cfg.SekaiAPI.BaseURL = DefaultSekaiAPIURL

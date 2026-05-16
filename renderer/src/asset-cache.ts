@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export interface AssetCacheOptions {
@@ -284,8 +284,9 @@ export class RendererAssetCache {
         if (buffer.length === 0) {
           throw new Error('empty image body')
         }
-        await writeFile(this.getPath(url), buffer)
-        this.failedUrls.delete(url)
+		await writeFileAtomic(this.getPath(url), buffer)
+		this.failedUrls.delete(url)
+
         void this.cleanup(false)
         return { url, status: 'downloaded' }
       } finally {
@@ -393,6 +394,15 @@ function uniqueRemoteUrls(urls: string[]): string[] {
     result.push(url)
   }
   return result
+}
+
+async function writeFileAtomic(path: string, data: Buffer): Promise<void> {
+  const tmpPath = `${path}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+  await writeFile(tmpPath, data)
+  await rename(tmpPath, path).catch(async (error) => {
+    await unlink(tmpPath).catch(() => {})
+    throw error
+  })
 }
 
 async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {

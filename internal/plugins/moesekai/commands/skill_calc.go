@@ -80,7 +80,7 @@ func handleSkillCalc(deps *Deps, ctx *zero.Ctx) {
 		UsageHint:   "倍率 = (车头 + 其余平均/5 + 100) / 100",
 	}
 
-	if deps != nil && deps.Renderer != nil && deps.Renderer.Health() {
+	if deps != nil && deps.Renderer != nil {
 		if png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "skill_calc", Data: payload}); err == nil {
 			ctx.SendChain(message.ImageBytes(png))
 			return

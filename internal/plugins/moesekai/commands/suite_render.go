@@ -77,7 +77,7 @@ var musicComboRewards = map[string]map[int]musicAchievementReward{
 }
 
 func sendSuitePanelOrText(ctx *zero.Ctx, deps *Deps, payload renderpayloads.SuitePanelPayload, fallback string) {
-	if deps != nil && deps.Renderer != nil && deps.Renderer.Health() {
+	if deps != nil && deps.Renderer != nil {
 		png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "suite_panel", Data: payload})
 		if err == nil {
 			ctx.SendChain(message.ImageBytes(png))
@@ -88,7 +88,7 @@ func sendSuitePanelOrText(ctx *zero.Ctx, deps *Deps, payload renderpayloads.Suit
 }
 
 func sendSuiteCardBoxOrText(ctx *zero.Ctx, deps *Deps, payload renderpayloads.SuiteCardBoxPayload, fallback string) {
-	if deps != nil && deps.Renderer != nil && deps.Renderer.Health() {
+	if deps != nil && deps.Renderer != nil {
 		png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "suite_card_box", Data: payload, Precision: 1})
 		if err == nil {
 			ctx.SendChain(message.ImageBytes(png))

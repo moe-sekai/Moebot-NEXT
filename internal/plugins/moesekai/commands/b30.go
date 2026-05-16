@@ -97,7 +97,7 @@ func best30Title(region string) string {
 }
 
 func sendBest30OrText(ctx *zero.Ctx, deps *Deps, payload renderpayloads.Best30Payload, fallback string) {
-	if deps != nil && deps.Renderer != nil && deps.Renderer.Health() {
+	if deps != nil && deps.Renderer != nil {
 		png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "best30", Data: payload, Precision: 1.2})
 		if err == nil {
 			ctx.SendChain(message.ImageBytes(png))

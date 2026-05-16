@@ -46,7 +46,7 @@ func RegisterEvent(deps *Deps) {
 
 			if listMode || len(events) > 1 {
 				payload := renderpayloads.BuildEventListPayloadWithAssets("活动查询", eventSubtitle(keyword), events, runtime.Store, runtime.Assets, page, totalPages, total)
-				if deps.Renderer != nil && deps.Renderer.Health() {
+				if deps.Renderer != nil {
 					png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "event_list", Data: payload})
 					if err == nil {
 						ctx.SendChain(message.ImageBytes(png))
@@ -61,7 +61,7 @@ func RegisterEvent(deps *Deps) {
 
 			event := events[0]
 			payload := renderpayloads.BuildEventInfoPayloadWithAssets(runtime.Store, event, runtime.Assets)
-			if deps.Renderer != nil && deps.Renderer.Health() {
+			if deps.Renderer != nil {
 				png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "event_info", Data: payload})
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))

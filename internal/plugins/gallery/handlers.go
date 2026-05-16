@@ -323,7 +323,7 @@ func (p *pluginImpl) sendGalleryGrid(ctx *zero.Ctx, gallName string, pics []Gall
 	}
 	pageSlice := pics[start:end]
 
-	if p.rendererCl == nil || !p.rendererCl.Health() {
+	if p.rendererCl == nil {
 		// 渲染服务不可用：发文本列表
 		var pids []string
 		for _, pic := range pageSlice {
@@ -414,7 +414,7 @@ func (p *pluginImpl) sendGalleryListCard(ctx *zero.Ctx, galleries []GalleryInfo)
 		return strings.Join(lines, "\n")
 	}
 
-	if p.rendererCl == nil || !p.rendererCl.Health() {
+	if p.rendererCl == nil {
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text(buildTextFallback()))
 		return
 	}

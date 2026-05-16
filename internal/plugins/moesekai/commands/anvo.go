@@ -220,7 +220,7 @@ func buildAnvoPayload(region string, cid int, profile anvoProfile, entries []anv
 }
 
 func sendAnvoOrText(ctx *zero.Ctx, deps *Deps, payload anvoListPayload, fallback string) {
-	if deps.Renderer != nil && deps.Renderer.Health() {
+	if deps.Renderer != nil {
 		if png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "anvo_list", Data: payload}); err == nil {
 			ctx.SendChain(message.ImageBytes(png))
 			return

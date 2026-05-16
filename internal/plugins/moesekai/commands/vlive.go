@@ -40,7 +40,7 @@ func RegisterVirtualLive(deps *Deps) {
 				return
 			}
 			payload := renderpayloads.BuildVirtualLiveListPayloadWithAssets("虚拟 Live", virtualLiveSubtitle(keyword), lives, runtime.Store, runtime.Assets, page, totalPages, total)
-			if deps.Renderer != nil && deps.Renderer.Health() {
+			if deps.Renderer != nil {
 				png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "virtual_live_list", Data: payload})
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))

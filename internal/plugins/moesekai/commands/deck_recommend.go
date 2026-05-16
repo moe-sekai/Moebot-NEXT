@@ -150,7 +150,7 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 			if !requireSuite(ctx, runtime, "组卡") {
 				return
 			}
-			if deps.Renderer == nil || !deps.Renderer.Health() {
+			if deps.Renderer == nil {
 				ctx.SendChain(message.Text("组卡/渲染服务暂不可用，请稍后再试"))
 				return
 			}

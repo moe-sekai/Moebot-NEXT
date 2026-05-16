@@ -223,8 +223,8 @@ func (s *Server) handleRendererBudgetUpdate(c *fiber.Ctx) error {
 	if err := c.BodyParser(&payload); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid payload: "+err.Error())
 	}
-	if payload.MaxConcurrency == nil && payload.QueueLimit == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "至少需要提供 max_concurrency 或 queue_limit")
+	if payload.MaxConcurrency == nil && payload.QueueLimit == nil && payload.PrepareConcurrency == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "至少需要提供 max_concurrency、queue_limit 或 prepare_concurrency")
 	}
 	next := s.Config.Renderer.Budget
 	if payload.MaxConcurrency != nil {
@@ -238,6 +238,12 @@ func (s *Server) handleRendererBudgetUpdate(c *fiber.Ctx) error {
 			return fiber.NewError(fiber.StatusBadRequest, "渲染队列上限不能为负数")
 		}
 		next.QueueLimit = *payload.QueueLimit
+	}
+	if payload.PrepareConcurrency != nil {
+		if *payload.PrepareConcurrency <= 0 {
+			return fiber.NewError(fiber.StatusBadRequest, "单 worker 准备并发必须大于 0")
+		}
+		next.PrepareConcurrency = *payload.PrepareConcurrency
 	}
 	stats, err := s.Renderer.SetBudget(next)
 	if err != nil {
@@ -402,8 +408,9 @@ type rendererSettingsRequest struct {
 }
 
 type rendererBudgetSettingsRequest struct {
-	MaxConcurrency *int `json:"max_concurrency"`
-	QueueLimit     *int `json:"queue_limit"`
+	MaxConcurrency     *int `json:"max_concurrency"`
+	QueueLimit         *int `json:"queue_limit"`
+	PrepareConcurrency *int `json:"prepare_concurrency"`
 }
 
 type rendererFontSettingsRequest struct {
@@ -694,6 +701,12 @@ func (s *Server) handleUpdatePublicConfig(c *fiber.Ctx) error {
 				}
 				next.Renderer.Budget.QueueLimit = *req.Renderer.Budget.QueueLimit
 			}
+			if req.Renderer.Budget.PrepareConcurrency != nil {
+				if *req.Renderer.Budget.PrepareConcurrency <= 0 {
+					return fiber.NewError(fiber.StatusBadRequest, "单 worker 准备并发必须大于 0")
+				}
+				next.Renderer.Budget.PrepareConcurrency = *req.Renderer.Budget.PrepareConcurrency
+			}
 		}
 	}
 
@@ -959,8 +972,9 @@ func (s *Server) publicConfigMap() fiber.Map {
 				"ttl_hours":   s.Config.Renderer.Cache.TTLHours,
 			},
 			"budget": fiber.Map{
-				"max_concurrency": s.Config.Renderer.Budget.MaxConcurrency,
-				"queue_limit":     s.Config.Renderer.Budget.QueueLimit,
+				"max_concurrency":     s.Config.Renderer.Budget.MaxConcurrency,
+				"queue_limit":         s.Config.Renderer.Budget.QueueLimit,
+				"prepare_concurrency": s.Config.Renderer.Budget.PrepareConcurrency,
 			},
 		},
 		"assets": assetMap,

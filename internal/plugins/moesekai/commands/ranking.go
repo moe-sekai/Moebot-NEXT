@@ -730,7 +730,7 @@ func sendRankingImageWithTemplate(ctx *zero.Ctx, client *renderer.Client, templa
 }
 
 func sendGenericImage(ctx *zero.Ctx, client *renderer.Client, template string, payload any) bool {
-	if client == nil || !client.Health() {
+	if client == nil {
 		return false
 	}
 	png, err := client.Render(renderer.RenderRequest{Template: template, Data: payload})

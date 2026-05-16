@@ -50,7 +50,7 @@ func registerGachaCommand(deps *Deps, command string) {
 
 			if listMode || len(gachas) > 1 {
 				payload := renderpayloads.BuildGachaListPayloadWithAssets("卡池查询", gachaSubtitleForCommand(keyword), gachas, runtime.Store, runtime.Assets, page, totalPages, total)
-				if deps.Renderer != nil && deps.Renderer.Health() {
+				if deps.Renderer != nil {
 					png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "gacha_list", Data: payload})
 					if err == nil {
 						ctx.SendChain(message.ImageBytes(png))
@@ -65,7 +65,7 @@ func registerGachaCommand(deps *Deps, command string) {
 
 			gacha := gachas[0]
 			payload := renderpayloads.BuildGachaInfoPayloadWithAssets(runtime.Store, gacha, runtime.Assets)
-			if deps.Renderer != nil && deps.Renderer.Health() {
+			if deps.Renderer != nil {
 				png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "gacha_info", Data: payload})
 				if err == nil {
 					ctx.SendChain(message.ImageBytes(png))
