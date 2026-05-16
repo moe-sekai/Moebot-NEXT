@@ -48,6 +48,9 @@ func TestBackupConfigRedactsSecrets(t *testing.T) {
 	if body["access_key_set"] != true || body["secret_key_set"] != true || body["session_token_set"] != true || body["configured"] != true {
 		t.Fatalf("secret flags = %+v", body)
 	}
+	if body["schedule_enabled"] != false || body["schedule_interval_hours"] != float64(24) {
+		t.Fatalf("schedule fields = %+v", body)
+	}
 	excludes := body["exclude_patterns"].([]any)
 	if len(excludes) == 0 || excludes[0] != "cache/**" {
 		t.Fatalf("exclude patterns = %+v", excludes)
@@ -71,7 +74,7 @@ func TestUpdateBackupConfigKeepsSecretsWhenEmpty(t *testing.T) {
 	defer db.Close()
 	server := New(cfg, db, nil, nil, cfgPath, nil)
 
-	payload := []byte(`{"endpoint":"minio.example.test:9000","bucket":"moebot","access_key":"","secret_key":"","session_token":""}`)
+	payload := []byte(`{"endpoint":"minio.example.test:9000","bucket":"moebot","access_key":"","secret_key":"","session_token":"","schedule_enabled":true,"schedule_interval_hours":12}`)
 	req := httptestRequest(http.MethodPut, "/api/backup/config", bytes.NewReader(payload))
 	mustAuthorizeRequest(t, server, req)
 	resp, err := server.App.Test(req, -1)
@@ -86,6 +89,9 @@ func TestUpdateBackupConfigKeepsSecretsWhenEmpty(t *testing.T) {
 	}
 	if cfg.Backup.S3.AccessKey != "old-ak" || cfg.Backup.S3.SecretKey != "old-sk" || cfg.Backup.S3.SessionToken != "old-token" {
 		t.Fatalf("secrets changed unexpectedly: %+v", cfg.Backup.S3)
+	}
+	if !cfg.Backup.Schedule.Enabled || cfg.Backup.Schedule.IntervalHours != 12 {
+		t.Fatalf("schedule not updated: %+v", cfg.Backup.Schedule)
 	}
 }
 

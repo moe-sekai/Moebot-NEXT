@@ -39,6 +39,10 @@ backup:
     - "backups/tmp/**"
     - "*.tmp"
     - "*.restore-backup-*"
+  schedule:
+    # 开启后由主进程按固定间隔自动创建 S3 备份；24 表示每天一次。
+    enabled: false
+    interval_hours: 24
   s3:
     # S3 兼容存储 endpoint，例如：s3.amazonaws.com / minio.example.com:9000
     endpoint: ""

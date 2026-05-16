@@ -118,6 +118,54 @@
     <UiCard>
       <div class="card-heading">
         <div>
+          <h2>定期备份设置</h2>
+          <p>开启后主进程会按固定间隔自动创建 S3 备份；例如间隔 24 小时就是每天一次。</p>
+        </div>
+        <UiBadge :variant="configForm.schedule_enabled ? 'success' : 'secondary'">
+          {{ scheduleStatusText }}
+        </UiBadge>
+      </div>
+
+      <div class="settings-form settings-form--region">
+        <div class="settings-field backup-toggle-field">
+          <span>自动备份</span>
+          <label class="backup-check backup-check--switch">
+            <input v-model="configForm.schedule_enabled" type="checkbox" />
+            {{ configForm.schedule_enabled ? '已启用' : '已关闭' }}
+          </label>
+        </div>
+        <label class="settings-field">
+          <span>间隔小时</span>
+          <input
+            v-model.number="configForm.schedule_interval_hours"
+            class="ui-input"
+            type="number"
+            min="1"
+            step="1"
+            placeholder="24"
+          />
+        </label>
+        <div class="settings-field settings-field--full schedule-presets">
+          <span>快捷设置</span>
+          <div class="renderer-actions">
+            <UiButton variant="outline" size="sm" @click="setScheduleHours(6)">每 6 小时</UiButton>
+            <UiButton variant="outline" size="sm" @click="setScheduleHours(12)">每 12 小时</UiButton>
+            <UiButton variant="outline" size="sm" @click="setScheduleHours(24)">每天一次</UiButton>
+            <UiButton variant="outline" size="sm" @click="setScheduleHours(168)">每周一次</UiButton>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-preview" style="margin-top: 14px;">
+        <div><span>当前计划</span><code>{{ scheduleSummaryText }}</code></div>
+        <div><span>保存方式</span><code>点击“保存配置”后立即生效，无需重启。</code></div>
+        <div><span>执行要求</span><code>{{ configForm.configured ? 'S3 已配置，自动任务可正常上传。' : 'S3 尚未配置完整，自动执行时会失败并等待下次。' }}</code></div>
+      </div>
+    </UiCard>
+
+    <UiCard>
+      <div class="card-heading">
+        <div>
           <h2>创建备份</h2>
           <p>会先将数据目录打成 <code>.tar.gz</code>，再上传到 S3 兼容存储。运行中备份会包含 SQLite WAL 文件。</p>
         </div>
@@ -126,6 +174,7 @@
       <div class="settings-preview">
         <div><span>数据目录</span><code>{{ configForm.data_dir || '-' }}</code></div>
         <div><span>临时目录</span><code>{{ configForm.temp_dir || '-' }}</code></div>
+        <div><span>定期备份</span><code>{{ scheduleSummaryText }}</code></div>
         <div><span>最近结果</span><code>{{ lastResult || '暂无' }}</code></div>
       </div>
     </UiCard>
@@ -210,6 +259,8 @@ const configForm = reactive<BackupPublicConfig>({
   prefix: 'moebot-next/backups',
   use_ssl: true,
   force_path_style: true,
+  schedule_enabled: false,
+  schedule_interval_hours: 24,
   access_key_set: false,
   secret_key_set: false,
   session_token_set: false,
@@ -239,6 +290,13 @@ const targetText = computed(() => {
   return `${scheme}://${endpoint}/${bucket}/${prefix}`
 })
 
+const normalizedScheduleHours = computed(() => normalizeScheduleHours(configForm.schedule_interval_hours))
+const scheduleStatusText = computed(() => (configForm.schedule_enabled ? '自动备份已启用' : '自动备份关闭'))
+const scheduleSummaryText = computed(() => {
+  if (!configForm.schedule_enabled) return '已关闭'
+  return `每 ${normalizedScheduleHours.value} 小时自动备份一次${normalizedScheduleHours.value === 24 ? '（每天一次）' : ''}`
+})
+
 onMounted(() => {
   void loadAll()
 })
@@ -258,6 +316,7 @@ async function loadConfig() {
   try {
     const cfg = await getBackupConfig()
     Object.assign(configForm, cfg)
+    configForm.schedule_interval_hours = normalizeScheduleHours(configForm.schedule_interval_hours)
     excludePatternsText.value = (cfg.exclude_patterns ?? []).join('\n')
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载备份配置失败。'
@@ -279,6 +338,8 @@ async function saveConfig() {
       prefix: configForm.prefix,
       use_ssl: configForm.use_ssl,
       force_path_style: configForm.force_path_style,
+      schedule_enabled: configForm.schedule_enabled,
+      schedule_interval_hours: normalizedScheduleHours.value,
       access_key: secrets.access_key,
       secret_key: secrets.secret_key,
       session_token: secrets.session_token,
@@ -287,6 +348,7 @@ async function saveConfig() {
       clear_session_token: clearSecrets.session_token,
     })
     if (resp.config) Object.assign(configForm, resp.config)
+    configForm.schedule_interval_hours = normalizeScheduleHours(configForm.schedule_interval_hours)
     secrets.access_key = ''
     secrets.secret_key = ''
     secrets.session_token = ''
@@ -381,6 +443,16 @@ async function remove(key: string) {
   }
 }
 
+function normalizeScheduleHours(value: number): number {
+  if (!Number.isFinite(value)) return 24
+  return Math.max(1, Math.floor(value))
+}
+
+function setScheduleHours(hours: number) {
+  configForm.schedule_interval_hours = normalizeScheduleHours(hours)
+  configForm.schedule_enabled = true
+}
+
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -406,6 +478,23 @@ function formatTime(value: string): string {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.backup-check--switch {
+  min-height: 36px;
+  color: var(--foreground);
+}
+
+.backup-toggle-field {
+  justify-content: flex-start;
+}
+
+.schedule-presets > span {
+  display: block;
+  margin-bottom: 8px;
   color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 850;

@@ -12,21 +12,23 @@ import (
 )
 
 type backupConfigRequest struct {
-	DataDir           *string  `json:"data_dir"`
-	TempDir           *string  `json:"temp_dir"`
-	ExcludePatterns   []string `json:"exclude_patterns"`
-	Endpoint          *string  `json:"endpoint"`
-	Region            *string  `json:"region"`
-	Bucket            *string  `json:"bucket"`
-	Prefix            *string  `json:"prefix"`
-	AccessKey         *string  `json:"access_key"`
-	SecretKey         *string  `json:"secret_key"`
-	SessionToken      *string  `json:"session_token"`
-	UseSSL            *bool    `json:"use_ssl"`
-	ForcePathStyle    *bool    `json:"force_path_style"`
-	ClearAccessKey    bool     `json:"clear_access_key"`
-	ClearSecretKey    bool     `json:"clear_secret_key"`
-	ClearSessionToken bool     `json:"clear_session_token"`
+	DataDir               *string  `json:"data_dir"`
+	TempDir               *string  `json:"temp_dir"`
+	ExcludePatterns       []string `json:"exclude_patterns"`
+	Endpoint              *string  `json:"endpoint"`
+	Region                *string  `json:"region"`
+	Bucket                *string  `json:"bucket"`
+	Prefix                *string  `json:"prefix"`
+	AccessKey             *string  `json:"access_key"`
+	SecretKey             *string  `json:"secret_key"`
+	SessionToken          *string  `json:"session_token"`
+	UseSSL                *bool    `json:"use_ssl"`
+	ForcePathStyle        *bool    `json:"force_path_style"`
+	ScheduleEnabled       *bool    `json:"schedule_enabled"`
+	ScheduleIntervalHours *int     `json:"schedule_interval_hours"`
+	ClearAccessKey        bool     `json:"clear_access_key"`
+	ClearSecretKey        bool     `json:"clear_secret_key"`
+	ClearSessionToken     bool     `json:"clear_session_token"`
 }
 
 type backupCreateRequest struct {
@@ -66,6 +68,9 @@ func (s *Server) handleUpdateBackupConfig(c *fiber.Ctx) error {
 	}
 	*s.Config = next
 	s.Backup = backup.New(s.Config, s.DB)
+	if s.BackupScheduler != nil {
+		s.BackupScheduler.Restart()
+	}
 	return c.JSON(fiber.Map{
 		"ok":      true,
 		"message": "备份配置已保存",
@@ -103,6 +108,12 @@ func applyBackupConfigRequest(target *config.BackupConfig, req backupConfigReque
 	}
 	if req.ForcePathStyle != nil {
 		target.S3.ForcePathStyle = *req.ForcePathStyle
+	}
+	if req.ScheduleEnabled != nil {
+		target.Schedule.Enabled = *req.ScheduleEnabled
+	}
+	if req.ScheduleIntervalHours != nil {
+		target.Schedule.IntervalHours = *req.ScheduleIntervalHours
 	}
 	if req.ClearAccessKey {
 		target.S3.AccessKey = ""

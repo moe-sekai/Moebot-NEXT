@@ -16,6 +16,7 @@ import (
 	"moebot-next/internal/models"
 	"moebot-next/internal/plugin"
 
+	"moebot-next/internal/backup"
 	"moebot-next/internal/config"
 	"moebot-next/internal/database"
 	"moebot-next/internal/logbuffer"
@@ -134,9 +135,14 @@ func runOnce(cfgPath string) bool {
 	}
 	defer filterManager.Stop()
 
+	backupScheduler := backup.NewScheduler(cfg, db)
+	backupScheduler.Start()
+	defer backupScheduler.Stop()
+
 	webServer := web.New(cfg, db, nil, rendererClient, cfgPath, nil)
 	webServer.Logs = logBuffer
 	webServer.Filter = filterManager
+	webServer.BackupScheduler = backupScheduler
 
 	pluginDataDir := pluginsDataDir(cfg)
 	if err := os.MkdirAll(pluginDataDir, 0o755); err != nil {

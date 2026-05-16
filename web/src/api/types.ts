@@ -424,6 +424,8 @@ export interface BackupPublicConfig {
   prefix: string;
   use_ssl: boolean;
   force_path_style: boolean;
+  schedule_enabled: boolean;
+  schedule_interval_hours: number;
   access_key_set: boolean;
   secret_key_set: boolean;
   session_token_set: boolean;
@@ -443,6 +445,8 @@ export interface BackupConfigPayload {
   session_token?: string;
   use_ssl?: boolean;
   force_path_style?: boolean;
+  schedule_enabled?: boolean;
+  schedule_interval_hours?: number;
   clear_access_key?: boolean;
   clear_secret_key?: boolean;
   clear_session_token?: boolean;

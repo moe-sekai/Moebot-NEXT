@@ -25,19 +25,20 @@ import (
 
 // Server holds the Fiber app and dependencies.
 type Server struct {
-	App        *fiber.App
-	Config     *config.Config
-	ConfigPath string
-	DB         *database.DB
-	Store      *masterdata.Store
-	Loader     *masterdata.Loader
-	Servers    *servers.Manager
-	Renderer   *renderer.Client
-	B30        *b30.Client
-	Logs       *logbuffer.Buffer
-	Filter     *filter.Manager
-	Backup     *backup.Service
-	startedAt  time.Time
+	App             *fiber.App
+	Config          *config.Config
+	ConfigPath      string
+	DB              *database.DB
+	Store           *masterdata.Store
+	Loader          *masterdata.Loader
+	Servers         *servers.Manager
+	Renderer        *renderer.Client
+	B30             *b30.Client
+	Logs            *logbuffer.Buffer
+	Filter          *filter.Manager
+	Backup          *backup.Service
+	BackupScheduler *backup.Scheduler
+	startedAt       time.Time
 }
 
 // New creates a new web server.

@@ -830,6 +830,9 @@ func normalizeBackupConfig(cfg *BackupConfig) {
 		}
 		cfg.ExcludePatterns = cleaned
 	}
+	if cfg.Schedule.IntervalHours <= 0 {
+		cfg.Schedule.IntervalHours = 24
+	}
 	cfg.S3.Endpoint = strings.TrimSpace(cfg.S3.Endpoint)
 	cfg.S3.Region = strings.TrimSpace(cfg.S3.Region)
 	cfg.S3.Bucket = strings.TrimSpace(cfg.S3.Bucket)

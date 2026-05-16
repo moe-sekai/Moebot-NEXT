@@ -28,19 +28,21 @@ func New(cfg *config.Config, db *database.DB) *Service {
 func (s *Service) PublicConfig() PublicConfig {
 	cfg := s.effectiveConfig()
 	return PublicConfig{
-		DataDir:         cfg.DataDir,
-		TempDir:         cfg.TempDir,
-		ExcludePatterns: append([]string{}, cfg.ExcludePatterns...),
-		Endpoint:        cfg.S3.Endpoint,
-		Region:          cfg.S3.Region,
-		Bucket:          cfg.S3.Bucket,
-		Prefix:          cfg.S3.Prefix,
-		UseSSL:          cfg.S3.UseSSL,
-		ForcePathStyle:  cfg.S3.ForcePathStyle,
-		AccessKeySet:    cfg.S3.AccessKey != "",
-		SecretKeySet:    cfg.S3.SecretKey != "",
-		SessionTokenSet: cfg.S3.SessionToken != "",
-		Configured:      backupS3Configured(cfg.S3),
+		DataDir:               cfg.DataDir,
+		TempDir:               cfg.TempDir,
+		ExcludePatterns:       append([]string{}, cfg.ExcludePatterns...),
+		Endpoint:              cfg.S3.Endpoint,
+		Region:                cfg.S3.Region,
+		Bucket:                cfg.S3.Bucket,
+		Prefix:                cfg.S3.Prefix,
+		UseSSL:                cfg.S3.UseSSL,
+		ForcePathStyle:        cfg.S3.ForcePathStyle,
+		ScheduleEnabled:       cfg.Schedule.Enabled,
+		ScheduleIntervalHours: cfg.Schedule.IntervalHours,
+		AccessKeySet:          cfg.S3.AccessKey != "",
+		SecretKeySet:          cfg.S3.SecretKey != "",
+		SessionTokenSet:       cfg.S3.SessionToken != "",
+		Configured:            backupS3Configured(cfg.S3),
 	}
 }
 
@@ -206,6 +208,9 @@ func (s *Service) effectiveConfig() config.BackupConfig {
 	}
 	if len(cfg.ExcludePatterns) == 0 {
 		cfg.ExcludePatterns = config.DefaultBackupExcludePatterns()
+	}
+	if cfg.Schedule.IntervalHours <= 0 {
+		cfg.Schedule.IntervalHours = 24
 	}
 	cfg.S3.Prefix = strings.Trim(strings.TrimSpace(cfg.S3.Prefix), "/")
 	if cfg.S3.Prefix == "" {

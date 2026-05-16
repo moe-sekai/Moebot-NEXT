@@ -92,10 +92,17 @@ type DatabaseConfig struct {
 
 // BackupConfig controls backup/restore of the runtime data directory.
 type BackupConfig struct {
-	DataDir         string         `yaml:"data_dir"`
-	TempDir         string         `yaml:"temp_dir"`
-	ExcludePatterns []string       `yaml:"exclude_patterns"`
-	S3              BackupS3Config `yaml:"s3"`
+	DataDir         string               `yaml:"data_dir"`
+	TempDir         string               `yaml:"temp_dir"`
+	ExcludePatterns []string             `yaml:"exclude_patterns"`
+	Schedule        BackupScheduleConfig `yaml:"schedule"`
+	S3              BackupS3Config       `yaml:"s3"`
+}
+
+// BackupScheduleConfig controls automatic periodic backups.
+type BackupScheduleConfig struct {
+	Enabled       bool `yaml:"enabled"`
+	IntervalHours int  `yaml:"interval_hours"`
 }
 
 // DefaultBackupExcludePatterns returns volatile/generated paths excluded from data backups by default.
@@ -284,6 +291,10 @@ func DefaultConfig() *Config {
 			DataDir:         "./data",
 			TempDir:         "./data/backups/tmp",
 			ExcludePatterns: DefaultBackupExcludePatterns(),
+			Schedule: BackupScheduleConfig{
+				Enabled:       false,
+				IntervalHours: 24,
+			},
 			S3: BackupS3Config{
 				Prefix:         "moebot-next/backups",
 				UseSSL:         true,
