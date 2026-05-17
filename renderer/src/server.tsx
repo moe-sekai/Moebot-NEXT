@@ -470,11 +470,17 @@ Bun.serve({
 				// 命中缓存则直接返回，省掉 worker + createElement + satori + resvg 整条链路。
 				const cached = getCachedRender(body.template, body.data, width, height, precision);
 				if (cached) {
-					console.info(`[renderer] render cache hit template=${body.template} elapsed=${Date.now() - renderStarted}ms bytes=${cached.png.length}`);
+					const elapsed = Date.now() - renderStarted;
+					console.info(`[renderer] render cache hit template=${body.template} elapsed=${elapsed}ms bytes=${cached.png.length}`);
 					return new Response(new Uint8Array(cached.png), {
 						headers: {
 							...cached.headers,
 							"x-render-cache": "hit",
+							"x-render-total-ms": String(elapsed),
+							"x-render-fonts-ms": "0",
+							"x-render-images-ms": "0",
+							"x-render-satori-ms": "0",
+							"x-render-resvg-ms": "0",
 						},
 					});
 				}

@@ -955,7 +955,7 @@ func buildDeckRecommendPayload(runtime *servers.Runtime, mode string, calc *rend
 	if calc == nil {
 		return nil
 	}
-	return map[string]any{"title": deckRecommendTitle(mode), "regionLabel": runtime.Label, "profile": calc.Profile, "event": calc.Event, "music": calc.Music, "options": calc.Options, "algorithm": calc.Algorithm, "warnings": calc.Warnings, "decks": calc.Decks, "assetSource": assetSourceForRuntime(runtime.Assets)}
+	return map[string]any{"title": deckRecommendTitle(mode), "regionLabel": runtime.Label, "profile": calc.Profile, "event": calc.Event, "music": calc.Music, "options": calc.Options, "algorithm": calc.Algorithm, "costMs": calc.CostMS, "warnings": calc.Warnings, "decks": calc.Decks, "assetSource": assetSourceForRuntime(runtime.Assets)}
 }
 
 func parseDeckFixedToken(token string, options *renderer.DeckRecommendOptions) error {

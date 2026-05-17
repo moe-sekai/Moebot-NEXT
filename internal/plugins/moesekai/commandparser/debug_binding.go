@@ -2127,7 +2127,7 @@ func buildSuiteDebugDeckRecommendPayload(runtime *servers.Runtime, mode string, 
 	if calc == nil {
 		return nil
 	}
-	return map[string]any{"title": suiteDebugDeckRecommendTitle(mode), "regionLabel": runtime.Label, "profile": calc.Profile, "event": calc.Event, "music": calc.Music, "options": calc.Options, "algorithm": calc.Algorithm, "warnings": calc.Warnings, "decks": calc.Decks, "assetSource": suiteDebugAssetSourceForRuntime(runtime.Assets)}
+	return map[string]any{"title": suiteDebugDeckRecommendTitle(mode), "regionLabel": runtime.Label, "profile": calc.Profile, "event": calc.Event, "music": calc.Music, "options": calc.Options, "algorithm": calc.Algorithm, "costMs": calc.CostMS, "warnings": calc.Warnings, "decks": calc.Decks, "assetSource": suiteDebugAssetSourceForRuntime(runtime.Assets)}
 }
 
 func suiteDebugRowsFromGachaHistory(profile suiteDebugGachaHistoryProfile, store *masterdata.Store, limit int) ([]renderpayloads.SuiteSectionRowPayload, []renderpayloads.SuiteStatPayload) {

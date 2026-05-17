@@ -298,10 +298,11 @@ function getCachedCalculation(cacheKey: string): DeckRecommendCalculateResponse 
 	}
 	calculateCache.delete(cacheKey);
 	calculateCache.set(cacheKey, entry);
+	const displayCostMs = Number((entry.response.trace as any)?.displayCostMs ?? entry.response.costMs ?? 0);
 	return {
 		...entry.response,
-		costMs: 0,
-		trace: { ...(entry.response.trace ?? {}), cache: "hit" },
+		costMs: displayCostMs,
+		trace: { ...(entry.response.trace ?? {}), cache: "hit", displayCostMs },
 	};
 }
 
@@ -309,7 +310,7 @@ function storeCachedCalculation(cacheKey: string, response: DeckRecommendCalcula
 	if (!response.ok) return;
 	calculateCache.set(cacheKey, {
 		expiresAt: Date.now() + CALCULATE_CACHE_TTL_MS,
-		response: { ...response, trace: { ...(response.trace ?? {}), cache: "miss" } },
+		response: { ...response, trace: { ...(response.trace ?? {}), cache: "miss", displayCostMs: response.costMs } },
 	});
 	while (calculateCache.size > CALCULATE_CACHE_MAX_ENTRIES) {
 		const oldest = calculateCache.keys().next().value;
