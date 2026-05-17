@@ -1,61 +1,41 @@
 package commands
 
 import (
-	"encoding/binary"
-	"hash/fnv"
-	"sort"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"strconv"
-	"strings"
-	"time"
 
 	"moebot-next/internal/config"
+	"moebot-next/internal/plugins/moesekai/deckrecommenddata"
 )
 
-// deckRecommendMasterDataVersion returns a stable fingerprint for the cached
-// master data tables that back the JP deck recommender. The fingerprint
-// changes whenever any cache entry was refetched (its updatedAt advances)
-// and stays the same while every entry is still served from cache. The
-// renderer client uses it to decide whether to re-upload the snapshot.
+// deckRecommendMasterDataVersion returns a stable upstream-content fingerprint
+// for the JP deck recommender snapshot. It intentionally avoids cache entry
+// updatedAt timestamps, because local TTL refreshes should not force a 30MB+
+// snapshot re-upload when the upstream masterdata did not change.
 func deckRecommendMasterDataVersion(resolved config.ResolvedMasterdata) string {
-	prefix := resolved.Region + "|" + resolved.Source + "|" + resolved.URL + "|"
-	deckMasterDataCache.Lock()
-	defer deckMasterDataCache.Unlock()
-	type entry struct {
-		key       string
-		updatedAt int64
+	version, _ := deckrecommenddata.SnapshotVersion(resolved)
+	if version != "" {
+		return version
 	}
-	collected := make([]entry, 0, len(deckMasterDataCache.items))
-	for k, v := range deckMasterDataCache.items {
-		if strings.HasPrefix(k, prefix) {
-			collected = append(collected, entry{k, v.updatedAt.UnixNano()})
-		}
-	}
-	if len(collected) == 0 {
-		// Cache empty: caller will populate it; use current time so the version
-		// changes once data lands and triggers an upload on the next call.
-		return "empty-" + strconv.FormatInt(time.Now().UnixNano(), 16)
-	}
-	sort.Slice(collected, func(i, j int) bool { return collected[i].key < collected[j].key })
-	h := fnv.New64a()
-	for _, e := range collected {
-		h.Write([]byte(e.key))
-		h.Write([]byte{0})
-		var buf [8]byte
-		binary.BigEndian.PutUint64(buf[:], uint64(e.updatedAt))
-		h.Write(buf[:])
-	}
-	return strconv.FormatUint(h.Sum64(), 16)
+	return deckrecommenddata.LocalMasterBundleVersion
 }
 
-// deckRecommendMusicMetaVersion returns a fingerprint for the in-memory music
-// meta cache. It bumps every time fetchMusicMetas refreshes the cache.
+// deckRecommendMusicMetaVersion returns a content fingerprint for the in-memory
+// music meta cache. It stays stable across TTL refreshes with identical data.
 func deckRecommendMusicMetaVersion() string {
 	musicMetaCache.Lock()
 	defer musicMetaCache.Unlock()
-	if musicMetaCache.updatedAt.IsZero() {
+	if len(musicMetaCache.data) == 0 {
 		return ""
 	}
-	return strconv.FormatInt(musicMetaCache.updatedAt.UnixNano(), 16)
+	body, err := json.Marshal(musicMetaCache.data)
+	if err != nil {
+		return strconv.FormatInt(musicMetaCache.updatedAt.UnixNano(), 16)
+	}
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:8])
 }
 
 // deckRecommendResolvedMasterdata returns the JP masterdata endpoint

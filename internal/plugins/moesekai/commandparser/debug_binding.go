@@ -25,6 +25,8 @@ import (
 	"moebot-next/internal/plugins/moesekai/servers"
 	"moebot-next/internal/plugins/moesekai/suite"
 	"moebot-next/internal/renderer"
+
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -1166,19 +1168,8 @@ func (s *Service) buildDeckRecommendDebugPayload(def Definition, runtime *server
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	userData, err := loadSuiteDebugDeckRecommendUserData(runtime.Suite, gameID)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	masterMap, warnings := buildSuiteDebugDeckRecommendMasterData(runtime)
-	userData = filterDeckRecommendUserDataWithJPMaster(userData, masterMap, runtime.Store)
-	musicMetas, err := fetchSuiteDebugMusicMetas()
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("获取歌曲分数元数据失败：%w", err)
-	}
-	// Push master / musicMetas snapshot to the renderer once per
-	// content-version. Mirrors the OneBot deck recommend pipeline so the
-	// request body below only ships userData/options.
+	start := time.Now()
+	stageStart := start
 	snapshotRegion := runtime.Region
 	if snapshotRegion == "" {
 		snapshotRegion = "jp"
@@ -1187,11 +1178,40 @@ func (s *Service) buildDeckRecommendDebugPayload(def Definition, runtime *server
 	if resolved, resolveErr := suiteDebugDeckRecommendResolvedMasterdata(); resolveErr == nil {
 		masterVersion = suiteDebugDeckRecommendMasterDataVersion(resolved)
 	}
+	versionMS := time.Since(stageStart)
+
+	stageStart = time.Now()
+	userData, err := loadSuiteDebugDeckRecommendUserData(runtime.Suite, gameID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	userDataMS := time.Since(stageStart)
+
+	stageStart = time.Now()
+	masterMap, warnings, masterCacheHit := suiteDebugDeckRecommendMasterSnapshotData(runtime, snapshotRegion, masterVersion)
+	masterMS := time.Since(stageStart)
+
+	stageStart = time.Now()
+	userData = filterDeckRecommendUserDataWithJPMaster(userData, masterMap, runtime.Store)
+	filterMS := time.Since(stageStart)
+
+	stageStart = time.Now()
+	musicMetas, err := fetchSuiteDebugMusicMetas()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("获取歌曲分数元数据失败：%w", err)
+	}
 	musicMetasVersion := suiteDebugDeckRecommendMusicMetaVersion()
-	if err := s.Renderer.EnsureDeckRecommendSnapshot(snapshotRegion, masterVersion, func() map[string]any { return masterMap }, musicMetasVersion, func() []map[string]any { return musicMetas }); err != nil {
+	musicMS := time.Since(stageStart)
+
+	stageStart = time.Now()
+	snapshotStatus, err := s.Renderer.EnsureDeckRecommendSnapshot(snapshotRegion, masterVersion, func() map[string]any { return masterMap }, musicMetasVersion, func() []map[string]any { return musicMetas })
+	if err != nil {
 		return nil, nil, nil, fmt.Errorf("组卡数据快照同步失败：%w", err)
 	}
+	snapshotMS := time.Since(stageStart)
+
 	profile := suiteProfileFromSuiteDebugUserData(userData, gameID)
+	stageStart = time.Now()
 	request := renderer.DeckRecommendCalculateRequest{
 		Region:      snapshotRegion,
 		RegionLabel: runtime.Label,
@@ -1208,6 +1228,25 @@ func (s *Service) buildDeckRecommendDebugPayload(def Definition, runtime *server
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("组卡计算失败：%w", err)
 	}
+	calculateMS := time.Since(stageStart)
+	log.Info().
+		Str("mode", mode).
+		Str("region", snapshotRegion).
+		Str("master_version", masterVersion).
+		Bool("master_cache_hit", masterCacheHit).
+		Bool("snapshot_master_uploaded", snapshotStatus.MasterUploaded).
+		Bool("snapshot_music_metas_uploaded", snapshotStatus.MusicMetasUploaded).
+		Bool("snapshot_shared", snapshotStatus.Shared).
+		Dur("version_ms", versionMS).
+		Dur("suite_ms", userDataMS).
+		Dur("master_ms", masterMS).
+		Dur("filter_ms", filterMS).
+		Dur("music_meta_ms", musicMS).
+		Dur("snapshot_ms", snapshotMS).
+		Dur("calculate_request_ms", calculateMS).
+		Int("renderer_calculate_cost_ms", calc.CostMS).
+		Dur("total_ms", time.Since(start)).
+		Msg("Deck recommend debug payload completed")
 	calc.Warnings = append(calc.Warnings, warnings...)
 	payload := buildSuiteDebugDeckRecommendPayload(runtime, mode, calc)
 	selected := suiteDebugSelected(def, runtime, suiteDebugUserGamedataFromMap(userData), "deck_recommend")
@@ -1865,17 +1904,22 @@ func loadSuiteDebugDeckRecommendUserData(client *suite.Client, gameID string) (m
 	}
 }
 
+func suiteDebugDeckRecommendMasterSnapshotData(runtime *servers.Runtime, region string, version string) (map[string]any, []string, bool) {
+	if snap, ok := deckrecommenddata.GetMasterSnapshot(region, version); ok {
+		return snap.Data, snap.Warnings, true
+	}
+	masterMap, warnings := buildSuiteDebugDeckRecommendMasterData(runtime)
+	deckrecommenddata.StoreMasterSnapshot(region, version, masterMap, warnings)
+	return masterMap, warnings, false
+}
+
 func buildSuiteDebugDeckRecommendMasterData(runtime *servers.Runtime) (map[string]any, []string) {
 	out := map[string]any{}
 	warnings := []string{}
 	if runtime == nil {
 		return out, []string{"runtime 不可用"}
 	}
-	jpCfg := config.MasterdataConfig{
-		Region: config.RegionJP,
-		Source: config.MasterdataSourceMoeSekai,
-	}
-	resolved, err := config.ResolveMasterdata(jpCfg, config.RegionJP)
+	resolved, err := suiteDebugDeckRecommendResolvedMasterdata()
 	if err != nil {
 		return out, append(warnings, "JP masterdata endpoint 解析失败")
 	}

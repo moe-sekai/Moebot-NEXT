@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"moebot-next/internal/plugins/moesekai/assets"
 	"moebot-next/internal/config"
+	"moebot-next/internal/plugins/moesekai/assets"
 	"moebot-next/internal/plugins/moesekai/masterdata"
 	"moebot-next/internal/plugins/moesekai/suite"
 )
@@ -594,5 +594,31 @@ func TestLoadDeckRecommendMasterDataUsesLocalWorldBloomData(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Fatal("local WL1 data should not be empty")
+	}
+}
+
+func TestDeckRecommendMasterDataVersionStableAcrossCacheRefresh(t *testing.T) {
+	resolved := config.ResolvedMasterdata{
+		Region: config.RegionJP,
+		Source: config.MasterdataSourceMoeSekai,
+		URL:    "https://example.invalid/master",
+	}
+	first := deckRecommendMasterDataVersion(resolved)
+	cacheKey := resolved.Region + "|" + resolved.Source + "|" + resolved.URL + "|cards"
+	deckMasterDataCache.Lock()
+	deckMasterDataCache.items = map[string]deckMasterCacheEntry{
+		cacheKey: {data: []any{map[string]any{"id": 1}}, updatedAt: time.Now()},
+	}
+	deckMasterDataCache.Unlock()
+	second := deckRecommendMasterDataVersion(resolved)
+	deckMasterDataCache.Lock()
+	deckMasterDataCache.items[cacheKey] = deckMasterCacheEntry{data: []any{map[string]any{"id": 1}}, updatedAt: time.Now().Add(time.Hour)}
+	deckMasterDataCache.Unlock()
+	third := deckRecommendMasterDataVersion(resolved)
+	if first == "" || second == "" || third == "" {
+		t.Fatalf("versions should not be empty: %q %q %q", first, second, third)
+	}
+	if second != third {
+		t.Fatalf("version changed after cache timestamp refresh: %q != %q", second, third)
 	}
 }

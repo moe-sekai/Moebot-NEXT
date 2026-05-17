@@ -40,6 +40,21 @@ type Client struct {
 	deckRecommendSnapshotMu       sync.Mutex
 	deckRecommendMasterVersion    map[string]string
 	deckRecommendMusicMetaVersion map[string]string
+	deckRecommendSnapshotInflight map[string]*deckRecommendSnapshotInflight
+}
+
+type DeckRecommendSnapshotEnsureStatus struct {
+	MasterUploaded     bool
+	MusicMetasUploaded bool
+	MasterVersion      string
+	MusicMetasVersion  string
+	Shared             bool
+}
+
+type deckRecommendSnapshotInflight struct {
+	done   chan struct{}
+	status DeckRecommendSnapshotEnsureStatus
+	err    error
 }
 
 // RenderRequest is sent to the renderer service.
@@ -373,10 +388,11 @@ func (c *Client) UploadDeckRecommendSnapshot(req DeckRecommendSnapshotRequest) (
 // version differs from what we last pushed for this region. Pass empty
 // strings / nil to skip a part. Safe to call before every deck recommend
 // request; the no-op case is just a mutex acquire.
-func (c *Client) EnsureDeckRecommendSnapshot(region string, masterVersion string, masterFn func() map[string]any, musicMetasVersion string, musicMetasFn func() []map[string]any) error {
+func (c *Client) EnsureDeckRecommendSnapshot(region string, masterVersion string, masterFn func() map[string]any, musicMetasVersion string, musicMetasFn func() []map[string]any) (DeckRecommendSnapshotEnsureStatus, error) {
 	if region == "" {
 		region = "jp"
 	}
+	status := DeckRecommendSnapshotEnsureStatus{MasterVersion: masterVersion, MusicMetasVersion: musicMetasVersion}
 
 	c.deckRecommendSnapshotMu.Lock()
 	if c.deckRecommendMasterVersion == nil {
@@ -385,13 +401,36 @@ func (c *Client) EnsureDeckRecommendSnapshot(region string, masterVersion string
 	if c.deckRecommendMusicMetaVersion == nil {
 		c.deckRecommendMusicMetaVersion = map[string]string{}
 	}
+	if c.deckRecommendSnapshotInflight == nil {
+		c.deckRecommendSnapshotInflight = map[string]*deckRecommendSnapshotInflight{}
+	}
 	masterStale := masterVersion != "" && c.deckRecommendMasterVersion[region] != masterVersion
 	musicStale := musicMetasVersion != "" && c.deckRecommendMusicMetaVersion[region] != musicMetasVersion
+	if !masterStale && !musicStale {
+		c.deckRecommendSnapshotMu.Unlock()
+		return status, nil
+	}
+	inflightKey := region + "|" + masterVersion + "|" + musicMetasVersion
+	if inflight := c.deckRecommendSnapshotInflight[inflightKey]; inflight != nil {
+		c.deckRecommendSnapshotMu.Unlock()
+		<-inflight.done
+		shared := inflight.status
+		shared.MasterUploaded = false
+		shared.MusicMetasUploaded = false
+		shared.Shared = true
+		return shared, inflight.err
+	}
+	inflight := &deckRecommendSnapshotInflight{done: make(chan struct{})}
+	c.deckRecommendSnapshotInflight[inflightKey] = inflight
 	c.deckRecommendSnapshotMu.Unlock()
 
-	if !masterStale && !musicStale {
-		return nil
-	}
+	defer func() {
+		c.deckRecommendSnapshotMu.Lock()
+		inflight.status = status
+		delete(c.deckRecommendSnapshotInflight, inflightKey)
+		close(inflight.done)
+		c.deckRecommendSnapshotMu.Unlock()
+	}()
 
 	req := DeckRecommendSnapshotRequest{Region: region}
 	if masterStale && masterFn != nil {
@@ -407,20 +446,23 @@ func (c *Client) EnsureDeckRecommendSnapshot(region string, masterVersion string
 		}
 	}
 	if req.Master == nil && req.MusicMetas == nil {
-		return nil
+		return status, nil
 	}
 
 	resp, err := c.UploadDeckRecommendSnapshot(req)
 	if err != nil {
-		return err
+		inflight.err = err
+		return status, err
 	}
 
 	c.deckRecommendSnapshotMu.Lock()
 	if resp.Master != nil {
 		c.deckRecommendMasterVersion[region] = resp.Master.Version
+		status.MasterUploaded = true
 	}
 	if resp.MusicMetas != nil {
 		c.deckRecommendMusicMetaVersion[region] = resp.MusicMetas.Version
+		status.MusicMetasUploaded = true
 	}
 	c.deckRecommendSnapshotMu.Unlock()
 
@@ -428,10 +470,10 @@ func (c *Client) EnsureDeckRecommendSnapshot(region string, masterVersion string
 		Str("region", region).
 		Str("master_version", masterVersion).
 		Str("music_metas_version", musicMetasVersion).
-		Bool("master_uploaded", resp.Master != nil).
-		Bool("music_metas_uploaded", resp.MusicMetas != nil).
+		Bool("master_uploaded", status.MasterUploaded).
+		Bool("music_metas_uploaded", status.MusicMetasUploaded).
 		Msg("Renderer deck recommend snapshot refreshed")
-	return nil
+	return status, nil
 }
 
 // CalculateDeckRecommend runs the embedded TypeScript deck recommender in the renderer service.
