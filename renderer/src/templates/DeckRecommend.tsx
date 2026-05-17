@@ -172,7 +172,6 @@ function CardMini({ entry, source }: { entry: any; source: string }) {
 				rarity={rarity}
 				attr={card.attr ?? "cute"}
 				imageUrl={trained ? trainedUrl : normalUrl}
-				compositeImageUrl={card.compositeImageUrl}
 				compositeLayers={card.compositeLayers}
 				isTrained={trained}
 				mastery={masterRank}

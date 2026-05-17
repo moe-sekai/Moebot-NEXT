@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { BaseDeckRecommend, RecommendAlgorithm, RecommendTarget, type DeckRecommendConfig } from "../sekai-calculator/deck-recommend/base-deck-recommend";
 import { ChallengeLiveDeckRecommend } from "../sekai-calculator/deck-recommend/challenge-live-deck-recommend";
 import { EventBonusDeckRecommend } from "../sekai-calculator/deck-recommend/event-bonus-deck-recommend";
@@ -14,6 +15,11 @@ import type {
 	DeckRecommendOptions,
 	DeckRecommendResultDeck,
 } from "./types";
+
+const CALCULATE_CACHE_TTL_MS = 5 * 60 * 1000;
+const CALCULATE_CACHE_MAX_ENTRIES = 128;
+
+const calculateCache = new Map<string, { expiresAt: number; response: DeckRecommendCalculateResponse }>();
 
 function normalizeMode(value: unknown): string {
 	switch (String(value || "event").toLowerCase()) {
@@ -114,6 +120,14 @@ function buildConfig(req: DeckRecommendCalculateRequest): DeckRecommendConfig {
 		fixedCharacters: options.fixedCharacters ?? [],
 		cardConfig: options.cardConfig ?? {},
 		algorithm: algorithm === "all" ? RecommendAlgorithm.GA : algorithm,
+		gaConfig: {
+			seed: stableDeckRecommendSeed(req),
+			popSize: 2000,
+			parentSize: 240,
+			eliteSize: 8,
+			maxIter: 400,
+			maxIterNoImprove: 6,
+		},
 		timeoutMs: Math.max(1000, Number(options.timeoutMs || 15000)),
 		target: normalizeTarget(options.target),
 		skillReferenceChooseStrategy: normalizeSkillReferenceStrategy(options.skillReferenceChooseStrategy),
@@ -244,6 +258,66 @@ async function recommendByMode(mode: string, provider: MemoryDeckRecommendDataPr
 	return await recommender.recommendEventDeck(Number(req.options.eventId), liveType, config, Number(req.options.supportCharacterId || 0));
 }
 
+function stableDeckRecommendSeed(req: DeckRecommendCalculateRequest): number {
+	let hash = 2166136261;
+	const update = (value: unknown) => {
+		const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
+		for (let i = 0; i < text.length; i++) {
+			hash ^= text.charCodeAt(i);
+			hash = Math.imul(hash, 16777619) >>> 0;
+		}
+	};
+	update(req.region ?? "jp");
+	update(req.options ?? {});
+	update((req.userData as any)?.upload_time ?? null);
+	update((req.userData as any)?.userGamedata?.userId ?? (req.profile as any)?.userId ?? null);
+	return hash === 0 ? 1 : hash;
+}
+
+function calculateCacheKey(req: DeckRecommendCalculateRequest, masterVersion: string, musicMetasVersion: string): string {
+	const payload = JSON.stringify({
+		region: req.region ?? "jp",
+		masterVersion,
+		musicMetasVersion,
+		options: req.options ?? {},
+		userData: req.userData ?? {},
+		cardAssets: req.cardAssets ?? {},
+		event: req.event ?? null,
+		music: req.music ?? null,
+		profile: req.profile ?? null,
+	});
+	return createHash("sha256").update(payload).digest("hex");
+}
+
+function getCachedCalculation(cacheKey: string): DeckRecommendCalculateResponse | undefined {
+	const entry = calculateCache.get(cacheKey);
+	if (!entry) return undefined;
+	if (entry.expiresAt <= Date.now()) {
+		calculateCache.delete(cacheKey);
+		return undefined;
+	}
+	calculateCache.delete(cacheKey);
+	calculateCache.set(cacheKey, entry);
+	return {
+		...entry.response,
+		costMs: 0,
+		trace: { ...(entry.response.trace ?? {}), cache: "hit" },
+	};
+}
+
+function storeCachedCalculation(cacheKey: string, response: DeckRecommendCalculateResponse) {
+	if (!response.ok) return;
+	calculateCache.set(cacheKey, {
+		expiresAt: Date.now() + CALCULATE_CACHE_TTL_MS,
+		response: { ...response, trace: { ...(response.trace ?? {}), cache: "miss" } },
+	});
+	while (calculateCache.size > CALCULATE_CACHE_MAX_ENTRIES) {
+		const oldest = calculateCache.keys().next().value;
+		if (oldest === undefined) break;
+		calculateCache.delete(oldest);
+	}
+}
+
 function logDeckRecommendDeckSummary(deck: any, req: DeckRecommendCalculateRequest, mode: string, index: number) {
 	const cards = Array.isArray(deck?.cards) ? deck.cards : [];
 	console.debug("[DeckRecommend] deck summary", {
@@ -287,11 +361,14 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 		// Resolve masterData/musicMetas: prefer inline body (legacy), fall back to
 		// the per-region snapshot store populated via /deck-recommend/snapshot.
 		const region = String(req.region ?? "jp");
+		let masterVersion = "inline";
+		let musicMetasVersion = "inline";
 		let masterData = req.masterData;
 		if (!masterData || Object.keys(masterData).length === 0) {
 			const snap = getMasterSnapshot(region);
 			if (!snap) throw new Error(`masterData snapshot is not registered for region "${region}"; upload via POST /deck-recommend/snapshot first`);
 			masterData = snap.data;
+			masterVersion = snap.version;
 			req.masterData = masterData;
 		}
 		let musicMetas = req.musicMetas;
@@ -299,10 +376,17 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 			const snap = getMusicMetasSnapshot(region);
 			if (snap) {
 				musicMetas = snap.data;
+				musicMetasVersion = snap.version;
 				req.musicMetas = musicMetas;
 			}
 		}
 		mark("snapshotResolveMs");
+		const cacheKey = calculateCacheKey(req, masterVersion, musicMetasVersion);
+		const cached = getCachedCalculation(cacheKey);
+		if (cached) {
+			cached.trace = { ...(cached.trace ?? {}), snapshotResolveMs: trace.snapshotResolveMs ?? 0, totalMs: Math.round(performance.now() - start) };
+			return cached;
+		}
 		const provider = new MemoryDeckRecommendDataProvider({
 			userData: req.userData,
 			masterData,
@@ -387,7 +471,8 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 		});
 		mark("resultBuildMs");
 		trace.totalMs = Math.round(performance.now() - start);
-		return {
+		trace.cache = "miss";
+		const response: DeckRecommendCalculateResponse = {
 			ok: true,
 			region: req.region,
 			regionLabel: req.regionLabel,
@@ -401,6 +486,8 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 			decks: resultDecks,
 			trace,
 		};
+		storeCachedCalculation(cacheKey, response);
+		return response;
 	} catch (error) {
 		trace.totalMs = Math.round(performance.now() - start);
 		return {
