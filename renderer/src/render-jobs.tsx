@@ -1,5 +1,5 @@
 import { getAssetBaseUrl } from "../shared";
-import { getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, type CardThumbnailCompositeLayer, type CardThumbnailCompositeRequest } from "./card-thumbnail-composites";
+import { getCardThumbnailCompositeDataUri, getCardThumbnailCompositeLayersFromSvg, getCardThumbnailCompositeSvg, type CardThumbnailCompositeLayer, type CardThumbnailCompositeRequest } from "./card-thumbnail-composites";
 import { calculateDeckRecommend } from "./deck-recommend/calculate";
 import type { DeckRecommendCalculateRequest, DeckRecommendCalculateResponse } from "./deck-recommend/types";
 import { renderWithTrace } from "./engine";
@@ -482,9 +482,9 @@ function normalizeDeckRecommend(data: any) {
 
 async function prepareDeckRecommend(data: ReturnType<typeof normalizeDeckRecommend>) {
 	const cards = (data.decks ?? []).flatMap((deck: any) => (deck.cards ?? []).map((entry: any) => entry.card ?? entry));
-	await hydrateCardCompositeLayersForCards(cards, {
+	await hydrateCardCompositeDataUrisForCards(cards, {
 		assetSource: data.assetSource,
-		sizes: [58],
+		size: 58,
 		allowDownload: true,
 	});
 	return data;
@@ -600,6 +600,7 @@ function normalizeSuiteCard(card: any) {
 		thumbnailUrl: toPngImageUrl(card.thumbnailUrl ?? card.ThumbnailURL),
 		trainedThumbnailUrl: toPngImageUrl(card.trainedThumbnailUrl ?? card.TrainedThumbnailURL),
 		compositeThumbnailUrl: card.compositeThumbnailUrl ?? card.CompositeThumbnailURL,
+		compositeImageUrl: card.compositeImageUrl ?? card.CompositeImageURL,
 		isTrained: card.isTrained ?? card.IsTrained,
 		defaultImage: card.defaultImage ?? card.DefaultImage,
 		mastery: card.mastery ?? card.Mastery,
@@ -696,6 +697,32 @@ async function prepareChurnRankingList(data: ReturnType<typeof normalizeRankingL
 		allowDownload: true,
 	});
 	return data;
+}
+
+async function hydrateCardCompositeDataUrisForCards(cards: any[], options: { assetSource?: any; size: number; allowDownload: boolean }) {
+	const entries: Array<{ card: any; source: any }> = [];
+	const unique = new Map<string, { card: any; request: CardThumbnailCompositeRequest }>();
+	for (const card of (cards ?? []).filter(Boolean)) {
+		const trained = shouldUseTrainedThumbnail(card);
+		const request = cardCompositeRequest(card, { assetSource: options.assetSource, trained, size: options.size });
+		if (!request) continue;
+		const key = JSON.stringify(request);
+		let item = unique.get(key);
+		if (!item) {
+			item = { card, request };
+			unique.set(key, item);
+		}
+		entries.push({ card, source: item.card });
+	}
+	await runPool(Array.from(unique.values()), renderPrepareConcurrency, async (item) => {
+		const dataUri = await getCardThumbnailCompositeDataUri(item.request, options.allowDownload);
+		if (dataUri) item.card.compositeImageUrl = dataUri;
+	});
+	for (const entry of entries) {
+		if (entry.source !== entry.card && entry.source.compositeImageUrl) {
+			entry.card.compositeImageUrl = entry.source.compositeImageUrl;
+		}
+	}
 }
 
 async function hydrateCardCompositeLayersForCards(cards: any[], options: { assetSource?: any; sizes: number[]; allowDownload: boolean; useBeforeTraining?: boolean }) {

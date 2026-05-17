@@ -135,6 +135,7 @@ export class MemoryDeckRecommendDataProvider implements DataProvider {
 	private readonly userData: UserDataMap;
 	private readonly masterData: MasterDataMap;
 	private readonly musicMetas: MusicMeta[];
+	private readonly masterCache = new Map<string, unknown[]>();
 
 	constructor(input: { userData?: UserDataMap; masterData?: MasterDataMap; musicMetas?: MusicMeta[] }) {
 		this.userData = applyDefaultUserDataKeys(input.userData ?? {});
@@ -143,8 +144,11 @@ export class MemoryDeckRecommendDataProvider implements DataProvider {
 	}
 
 	async getMasterData<T>(key: string): Promise<T[]> {
+		const cached = this.masterCache.get(key);
+		if (cached) return cached as T[];
 		let data = this.masterData[key] ?? [];
 		if (key === "cards") data = transformCards(data as CardWithParameters[]) as unknown[];
+		this.masterCache.set(key, data);
 		return data as T[];
 	}
 

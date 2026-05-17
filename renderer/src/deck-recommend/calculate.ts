@@ -273,6 +273,12 @@ function logDeckRecommendDeckSummary(deck: any, req: DeckRecommendCalculateReque
 
 export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest): Promise<DeckRecommendCalculateResponse> {
 	const start = performance.now();
+	let stageStart = start;
+	const trace: Record<string, number | string> = {};
+	const mark = (name: string) => {
+		trace[name] = Math.round(performance.now() - stageStart);
+		stageStart = performance.now();
+	};
 	const warnings: string[] = [];
 	try {
 		if (!req?.userData) throw new Error("userData is required");
@@ -296,12 +302,14 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 				req.musicMetas = musicMetas;
 			}
 		}
+		mark("snapshotResolveMs");
 		const provider = new MemoryDeckRecommendDataProvider({
 			userData: req.userData,
 			masterData,
 			musicMetas,
 		});
 		const config = buildConfig(req);
+		mark("providerConfigMs");
 		let liveType = normalizeLiveType(req.options.liveType);
 		const mode = normalizeMode(req.options.mode);
 		if (mode === "event") {
@@ -311,13 +319,17 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 				liveType = LiveType.CHEERFUL;
 			}
 		}
+		mark("eventResolveMs");
 		logDeckRecommendInputSummary(provider, req, req.options, liveType, config.musicMeta);
+		mark("inputLogMs");
 		const algorithms = String(req.options.algorithm || "ga").toLowerCase() === "all" && mode !== "bonus" && mode !== "mysekai"
 			? [RecommendAlgorithm.GA, RecommendAlgorithm.DFS]
 			: [config.algorithm ?? RecommendAlgorithm.GA];
 		const merged = new Map<string, any>();
 		for (const algorithm of algorithms) {
+			const algorithmStart = performance.now();
 			const decks = await recommendByMode(mode, provider, req, { ...config, algorithm }, liveType);
+			trace[`algorithm_${algorithm}_ms`] = Math.round(performance.now() - algorithmStart);
 			decks.forEach((deck, index) => logDeckRecommendDeckSummary(deck, req, mode, index));
 			for (const deck of decks) {
 				const hash = deckHash(deck);
@@ -327,8 +339,10 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 				}
 			}
 		}
+		mark("recommendMergeMs");
 		const decks = Array.from(merged.values()).sort((a, b) => resultValue(b, req.options.target, mode).value - resultValue(a, req.options.target, mode).value).slice(0, config.limit ?? 3);
 		const masterCards = await provider.getMasterData<any>("cards");
+		const masterCardsById = new Map(masterCards.map((card: any) => [Number(card.id), card]));
 		const resultDecks: DeckRecommendResultDeck[] = decks.map((deck, index) => {
 			const { value, valueLabel } = resultValue(deck, req.options.target, mode);
 			return {
@@ -344,7 +358,7 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 				power: deck.power,
 				multiLiveScoreUp: deck.multiLiveScoreUp,
 			cards: deck.cards.map((card: any) => {
-				const master = masterCards.find((it) => Number(it.id) === Number(card.cardId));
+				const master = masterCardsById.get(Number(card.cardId));
 				const asset = req.cardAssets?.[Number(card.cardId)] ?? {};
 				const rarity = master?.cardRarityType;
 				const isTrained = card.defaultImage === "special_training"
@@ -371,6 +385,8 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 			}),
 		};
 		});
+		mark("resultBuildMs");
+		trace.totalMs = Math.round(performance.now() - start);
 		return {
 			ok: true,
 			region: req.region,
@@ -383,8 +399,10 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 			event: req.event,
 			music: req.music,
 			decks: resultDecks,
+			trace,
 		};
 	} catch (error) {
+		trace.totalMs = Math.round(performance.now() - start);
 		return {
 			ok: false,
 			region: req?.region,
@@ -397,6 +415,7 @@ export async function calculateDeckRecommend(req: DeckRecommendCalculateRequest)
 			event: req?.event,
 			music: req?.music,
 			decks: [],
+			trace,
 			error: friendlyError(error),
 		};
 	}

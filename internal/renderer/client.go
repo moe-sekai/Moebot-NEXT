@@ -106,6 +106,7 @@ type PreviewRenderResult struct {
 	ImageCacheHits   string
 	ImageCacheMisses string
 	ImageCacheErrors string
+	RenderCache      string
 	StatusCode       int
 }
 
@@ -289,6 +290,7 @@ func (c *Client) RenderWithTrace(req RenderRequest) (*PreviewRenderResult, error
 		ImageCacheHits:   resp.Header.Get("x-render-image-cache-hits"),
 		ImageCacheMisses: resp.Header.Get("x-render-image-cache-misses"),
 		ImageCacheErrors: resp.Header.Get("x-render-image-cache-errors"),
+		RenderCache:      resp.Header.Get("x-render-cache"),
 		StatusCode:       resp.StatusCode,
 	}, nil
 }

@@ -109,6 +109,7 @@ type DeckRecommendCalculateResponse struct {
 	Event       any                   `json:"event,omitempty"`
 	Music       any                   `json:"music,omitempty"`
 	Decks       []DeckRecommendResult `json:"decks"`
+	Trace       map[string]any        `json:"trace,omitempty"`
 	Error       string                `json:"error,omitempty"`
 }
 

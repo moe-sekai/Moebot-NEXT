@@ -227,12 +227,12 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 			calc.Warnings = append(calc.Warnings, warnings...)
 			payload := buildDeckRecommendPayload(runtime, mode, calc)
 			stageStart = time.Now()
-			png, err := deps.Renderer.Render(renderer.RenderRequest{Template: "deck_recommend", Data: payload})
+			renderResult, err := deps.Renderer.RenderWithTrace(renderer.RenderRequest{Template: "deck_recommend", Data: payload})
 			renderMS := time.Since(stageStart)
 			if err != nil {
 				ctx.SendChain(message.Text(formatDeckRecommendText(calc)))
 			} else {
-				ctx.SendChain(message.ImageBytes(png))
+				ctx.SendChain(message.ImageBytes(renderResult.PNG))
 			}
 			log.Info().
 				Str("mode", mode).
@@ -250,7 +250,17 @@ func registerDeckRecommendMode(deps *Deps, primary string, mode string) {
 				Dur("snapshot_ms", snapshotMS).
 				Dur("calculate_request_ms", calculateMS).
 				Int("renderer_calculate_cost_ms", calc.CostMS).
+				Interface("renderer_calculate_trace", calc.Trace).
 				Dur("render_ms", renderMS).
+				Str("render_cache", renderTraceField(renderResult, func(r *renderer.PreviewRenderResult) string { return r.RenderCache })).
+				Str("render_total_ms", renderTraceField(renderResult, func(r *renderer.PreviewRenderResult) string { return r.TotalMS })).
+				Str("render_images_ms", renderTraceField(renderResult, func(r *renderer.PreviewRenderResult) string { return r.ImagesMS })).
+				Str("render_satori_ms", renderTraceField(renderResult, func(r *renderer.PreviewRenderResult) string { return r.SatoriMS })).
+				Str("render_resvg_ms", renderTraceField(renderResult, func(r *renderer.PreviewRenderResult) string { return r.ResvgMS })).
+				Str("render_image_total", renderTraceField(renderResult, func(r *renderer.PreviewRenderResult) string { return r.ImageTotal })).
+				Str("render_image_hits", renderTraceField(renderResult, func(r *renderer.PreviewRenderResult) string { return r.ImageCacheHits })).
+				Str("render_image_misses", renderTraceField(renderResult, func(r *renderer.PreviewRenderResult) string { return r.ImageCacheMisses })).
+				Str("render_size_bytes", renderTraceField(renderResult, func(r *renderer.PreviewRenderResult) string { return r.SizeBytes })).
 				Dur("total_ms", time.Since(start)).
 				Msg("Deck recommend command completed")
 			bot.RecordCommandRegion(deps.DB, recordCommand, runtime.Region, ctx, start)
@@ -945,7 +955,7 @@ func buildDeckRecommendPayload(runtime *servers.Runtime, mode string, calc *rend
 	if calc == nil {
 		return nil
 	}
-	return map[string]any{"title": deckRecommendTitle(mode), "regionLabel": runtime.Label, "profile": calc.Profile, "event": calc.Event, "music": calc.Music, "options": calc.Options, "algorithm": calc.Algorithm, "costMs": calc.CostMS, "warnings": calc.Warnings, "decks": calc.Decks, "assetSource": assetSourceForRuntime(runtime.Assets)}
+	return map[string]any{"title": deckRecommendTitle(mode), "regionLabel": runtime.Label, "profile": calc.Profile, "event": calc.Event, "music": calc.Music, "options": calc.Options, "algorithm": calc.Algorithm, "warnings": calc.Warnings, "decks": calc.Decks, "assetSource": assetSourceForRuntime(runtime.Assets)}
 }
 
 func parseDeckFixedToken(token string, options *renderer.DeckRecommendOptions) error {
@@ -1283,6 +1293,13 @@ func BuildDeckRecommendPayloadForDebug(runtime *servers.Runtime, mode string, ca
 
 func DeckRecommendTitleForDebug(mode string) string {
 	return deckRecommendTitle(mode)
+}
+
+func renderTraceField(result *renderer.PreviewRenderResult, pick func(*renderer.PreviewRenderResult) string) string {
+	if result == nil || pick == nil {
+		return ""
+	}
+	return pick(result)
 }
 
 func deckRecommendMasterSnapshotData(runtime *servers.Runtime, region string, version string) (map[string]any, []string, bool) {

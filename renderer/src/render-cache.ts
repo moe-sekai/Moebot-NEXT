@@ -130,12 +130,25 @@ function makeKey(
 ): string {
   const payload = JSON.stringify({
     t: template,
-    d: data ?? null,
+    d: stableRenderDataForCache(template, data),
     w: width ?? 0,
     h: height ?? 0,
     p: precision ?? 0,
   })
   return createHash('sha256').update(payload).digest('hex')
+}
+
+function stableRenderDataForCache(template: string, data: unknown): unknown {
+  const normalizedTemplate = String(template || '').replace(/-/g, '_')
+  if (normalizedTemplate !== 'deck_recommend' || !data || typeof data !== 'object' || Array.isArray(data)) {
+    return data ?? null
+  }
+  const out = { ...(data as Record<string, unknown>) }
+  // costMs is diagnostic text in the subtitle. It changes for identical deck
+  // results and made every /组卡 render miss the renderer cache.
+  delete out.costMs
+  delete out.CostMS
+  return out
 }
 
 export function isCacheable(template: string): boolean {

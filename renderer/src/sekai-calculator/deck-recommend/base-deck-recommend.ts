@@ -294,10 +294,12 @@ export class BaseDeckRecommend {
       effectiveScoreFunc = (_musicMeta, deckDetail) => deckDetail.multiLiveScoreUp * 10000 + deckDetail.power.total
     }
 
+    const prepareStart = Date.now()
     const honorBonus = await this.deckCalculator.getHonorBonusPower()
     const areaItemLevels = await this.areaItemService.getAreaItemLevels()
     let cards =
         await this.cardCalculator.batchGetCardDetail(userCards, cardConfig, eventConfig, areaItemLevels)
+    debugLog(`Prepared card details in ${Date.now() - prepareStart}ms: ${cards.length}/${userCards.length} cards`)
 
     // 仅在显式开启 filterOtherUnit 时，才过滤单团体 World Bloom 的主卡候选；
     // 默认不过滤，与 C++ 版保持一致。混团 WL / WL3 模拟始终不过滤主卡池。

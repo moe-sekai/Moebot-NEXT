@@ -1245,6 +1245,7 @@ func (s *Service) buildDeckRecommendDebugPayload(def Definition, runtime *server
 		Dur("snapshot_ms", snapshotMS).
 		Dur("calculate_request_ms", calculateMS).
 		Int("renderer_calculate_cost_ms", calc.CostMS).
+		Interface("renderer_calculate_trace", calc.Trace).
 		Dur("total_ms", time.Since(start)).
 		Msg("Deck recommend debug payload completed")
 	calc.Warnings = append(calc.Warnings, warnings...)
@@ -2126,7 +2127,7 @@ func buildSuiteDebugDeckRecommendPayload(runtime *servers.Runtime, mode string, 
 	if calc == nil {
 		return nil
 	}
-	return map[string]any{"title": suiteDebugDeckRecommendTitle(mode), "regionLabel": runtime.Label, "profile": calc.Profile, "event": calc.Event, "music": calc.Music, "options": calc.Options, "algorithm": calc.Algorithm, "costMs": calc.CostMS, "warnings": calc.Warnings, "decks": calc.Decks, "assetSource": suiteDebugAssetSourceForRuntime(runtime.Assets)}
+	return map[string]any{"title": suiteDebugDeckRecommendTitle(mode), "regionLabel": runtime.Label, "profile": calc.Profile, "event": calc.Event, "music": calc.Music, "options": calc.Options, "algorithm": calc.Algorithm, "warnings": calc.Warnings, "decks": calc.Decks, "assetSource": suiteDebugAssetSourceForRuntime(runtime.Assets)}
 }
 
 func suiteDebugRowsFromGachaHistory(profile suiteDebugGachaHistoryProfile, store *masterdata.Store, limit int) ([]renderpayloads.SuiteSectionRowPayload, []renderpayloads.SuiteStatPayload) {

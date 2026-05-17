@@ -109,5 +109,6 @@ export interface DeckRecommendCalculateResponse {
 	event?: any;
 	music?: any;
 	decks: DeckRecommendResultDeck[];
+	trace?: Record<string, number | string>;
 	error?: string;
 }
