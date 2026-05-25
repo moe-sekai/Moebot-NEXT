@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"gorm.io/gorm/clause"
 
 	// 注册 sqlite-vec 扩展到所有 ncruces/go-sqlite3 连接，autochat 等
 	// 插件需要 vec0 虚拟表做向量近邻检索。ncruces 走 WASM，无需 CGo。
@@ -141,14 +144,41 @@ func backfillFilterGatewayDedup(db *gorm.DB) error {
 			return err
 		}
 	}
-	if db.Migrator().HasColumn(&models.FilterGateway{}, "dedup_enabled") {
-		// 旧版本没有在控制台暴露这个开关，false 基本都是默认值而非用户主动选择；
-		// 开启它才能满足“同群多 bot 只响应一次”的默认预期。
-		if err := db.Model(&models.FilterGateway{}).Where("dedup_enabled = ?", false).Update("dedup_enabled", true).Error; err != nil {
-			return err
-		}
+	if !db.Migrator().HasColumn(&models.FilterGateway{}, "dedup_enabled") {
+		return nil
 	}
-	return nil
+	migrated, err := appMetaValue(db, "filter.dedup_default_migrated")
+	if err != nil {
+		return err
+	}
+	if migrated == "1" {
+		return nil
+	}
+	// 旧版本没有在控制台暴露这个开关，false 基本都是默认值而非用户主动选择；
+	// 仅迁移一次，之后用户在控制台手动关闭不会被下次启动重新打开。
+	if err := db.Model(&models.FilterGateway{}).Where("dedup_enabled = ?", false).Update("dedup_enabled", true).Error; err != nil {
+		return err
+	}
+	return setAppMetaValue(db, "filter.dedup_default_migrated", "1")
+}
+
+func appMetaValue(db *gorm.DB, key string) (string, error) {
+	var m models.AppMeta
+	err := db.Where("key = ?", key).First(&m).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return m.Value, nil
+}
+
+func setAppMetaValue(db *gorm.DB, key, value string) error {
+	return db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "key"}},
+		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
+	}).Create(&models.AppMeta{Key: key, Value: value}).Error
 }
 
 // backfillClientAwareGroups creates groups from historical command stats so
