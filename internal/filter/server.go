@@ -34,15 +34,27 @@ func newDedupCache(ttlSeconds int) *dedupCache {
 }
 
 // IsDup 检查 key 是否已在缓存中（未过期）。若不存在则写入并返回 false。
+//
+// 多个 upstream 可能几乎同时收到同一条群消息，因此这里必须是原子的：
+// 同一个 key 在并发进入时只能有一个调用者成功写入并返回 false。
 func (d *dedupCache) IsDup(key uint64) bool {
 	now := time.Now().UnixNano()
-	if v, ok := d.store.Load(key); ok {
-		if v.(int64) > now {
+	expireAt := now + int64(d.ttl)
+	for {
+		v, loaded := d.store.LoadOrStore(key, expireAt)
+		if !loaded {
+			return false
+		}
+		oldExpireAt := v.(int64)
+		if oldExpireAt > now {
 			return true
 		}
+		// 已过期：只有抢到 CAS 的调用者负责刷新窗口并视为新消息；
+		// 其他并发调用会重新检查刷新后的过期时间并被判为重复。
+		if d.store.CompareAndSwap(key, oldExpireAt, expireAt) {
+			return false
+		}
 	}
-	d.store.Store(key, now+int64(d.ttl))
-	return false
 }
 
 func (d *dedupCache) cleanup() {
@@ -70,18 +82,63 @@ func (d *dedupCache) Stop() {
 
 // dedupProbe 是从 OneBot 事件 JSON 中提取的去重字段。
 type dedupProbe struct {
-	PostType   string `json:"post_type"`
-	SelfID     int64  `json:"self_id"`
-	GroupID    int64  `json:"group_id"`
-	UserID     int64  `json:"user_id"`
-	Time       int64  `json:"time"`
-	RawMessage string `json:"raw_message"`
+	PostType      string          `json:"post_type"`
+	SelfID        int64           `json:"self_id"`
+	MessageType   string          `json:"message_type"`
+	GroupID       int64           `json:"group_id"`
+	UserID        int64           `json:"user_id"`
+	Time          int64           `json:"time"`
+	RawMessage    string          `json:"raw_message"`
+	Message       json.RawMessage `json:"message"`
+	MessageID     json.RawMessage `json:"message_id"`
+	MessageSeq    json.RawMessage `json:"message_seq"`
+	RealID        json.RawMessage `json:"real_id"`
+	MessageIDV12  json.RawMessage `json:"id"`
+	AltMessageV12 string          `json:"alt_message"`
+}
+
+func (p *dedupProbe) contentFingerprint() string {
+	if p.RawMessage != "" {
+		return p.RawMessage
+	}
+	if len(p.Message) > 0 && string(p.Message) != "null" {
+		return string(p.Message)
+	}
+	return p.AltMessageV12
+}
+
+func (p *dedupProbe) transportMessageID() string {
+	for _, raw := range []json.RawMessage{p.MessageID, p.MessageSeq, p.RealID, p.MessageIDV12} {
+		if len(raw) == 0 || string(raw) == "null" {
+			continue
+		}
+		return string(raw)
+	}
+	return ""
 }
 
 func dedupKey(p *dedupProbe) uint64 {
 	h := fnv.New64a()
-	fmt.Fprintf(h, "%d:%d:%d:%d:%s", p.SelfID, p.GroupID, p.UserID, p.Time, p.RawMessage)
+	// 注意：不要把 self_id 纳入 key。多个 bot 账号/OneBot 客户端加入同一群时，
+	// self_id 必然不同；把它纳入 key 会让跨 bot 的同一条消息无法去重。
+	content := p.contentFingerprint()
+	if content == "" {
+		// 仅在没有可比对内容时退回到消息 ID。不同 OneBot 实现的 message_id
+		// 口径可能不同，不能把它混入正常文本/图片消息的跨 bot 去重 key。
+		content = p.transportMessageID()
+	}
+	fmt.Fprintf(h, "%s:%d:%d:%d:%s", p.MessageType, p.GroupID, p.UserID, p.Time, content)
 	return h.Sum64()
+}
+
+func dedupCandidate(p *dedupProbe) bool {
+	if p.PostType != "message" {
+		return false
+	}
+	if p.MessageType != MessageTypeGroup || p.GroupID == 0 {
+		return false
+	}
+	return p.UserID != 0 && p.Time != 0 && (p.contentFingerprint() != "" || p.transportMessageID() != "")
 }
 
 // wsServer is the upstream side: it accepts one or more connections from
@@ -148,9 +205,16 @@ func (s *wsServer) serve(ctx context.Context, conn *websocket.Conn, selfID, remo
 		}
 		if s.dedup != nil && mt == websocket.TextMessage {
 			var p dedupProbe
-			if json.Unmarshal(data, &p) == nil && p.PostType == "message" && p.RawMessage != "" {
-				if s.dedup.IsDup(dedupKey(&p)) {
-					log.Debug().Str("self_id", selfID).Int64("group_id", p.GroupID).Msg("filter: dedup skipped duplicate message")
+			if json.Unmarshal(data, &p) == nil && dedupCandidate(&p) {
+				key := dedupKey(&p)
+				if s.dedup.IsDup(key) {
+					log.Debug().
+						Str("self_id", selfID).
+						Uint64("key", key).
+						Int64("group_id", p.GroupID).
+						Int64("user_id", p.UserID).
+						Int64("time", p.Time).
+						Msg("filter: dedup skipped duplicate group message")
 					continue
 				}
 			}

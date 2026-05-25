@@ -20,15 +20,17 @@ func (d *DB) GetOrCreateFilterGateway() (*models.FilterGateway, error) {
 	err := d.First(&gw, filterGatewayID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		gw = models.FilterGateway{
-			ID:         filterGatewayID,
-			Enabled:    true,
-			Host:       "0.0.0.0",
-			Port:       3939,
-			Suffix:     "/ws",
-			BotID:      "10000",
-			UserAgent:  "Moebot",
-			BufferSize: 4096,
-			SleepTime:  5,
+			ID:           filterGatewayID,
+			Enabled:      true,
+			Host:         "0.0.0.0",
+			Port:         3939,
+			Suffix:       "/ws",
+			BotID:        "10000",
+			UserAgent:    "Moebot",
+			BufferSize:   4096,
+			SleepTime:    5,
+			DedupEnabled: true,
+			DedupTTL:     60,
 		}
 		if err := d.Create(&gw).Error; err != nil {
 			return nil, fmt.Errorf("create default filter gateway: %w", err)

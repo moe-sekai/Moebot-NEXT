@@ -19,12 +19,12 @@ type FilterGateway struct {
 	// AccessToken, if non-empty, is required from upstream OneBot clients
 	// connecting to the gateway. Accepted via header `Authorization: Bearer <t>`
 	// / `Authorization: Token <t>` or query string `?access_token=<t>`.
-	AccessToken string    `gorm:"default:''" json:"access_token"`
-	UserAgent   string    `gorm:"default:'Moebot'" json:"user_agent"`
-	BufferSize  int       `gorm:"default:4096" json:"buffer_size"`
-	SleepTime   float32   `gorm:"default:5" json:"sleep_time"`
+	AccessToken  string    `gorm:"default:''" json:"access_token"`
+	UserAgent    string    `gorm:"default:'Moebot'" json:"user_agent"`
+	BufferSize   int       `gorm:"default:4096" json:"buffer_size"`
+	SleepTime    float32   `gorm:"default:5" json:"sleep_time"`
 	Debug        bool      `json:"debug"`
-	DedupEnabled bool      `gorm:"default:false" json:"dedup_enabled"`
+	DedupEnabled bool      `gorm:"default:true" json:"dedup_enabled"`
 	DedupTTL     int       `gorm:"default:60" json:"dedup_ttl"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

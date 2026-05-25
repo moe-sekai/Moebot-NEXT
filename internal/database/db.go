@@ -90,6 +90,9 @@ func New(cfg config.DatabaseConfig) (*DB, error) {
 	if err := backfillClientIDColumns(db); err != nil {
 		log.Warn().Err(err).Msg("Failed to backfill client_id columns")
 	}
+	if err := backfillFilterGatewayDedup(db); err != nil {
+		log.Warn().Err(err).Msg("Failed to backfill filter gateway dedup settings")
+	}
 	if err := backfillClientAwareGroups(db); err != nil {
 		log.Warn().Err(err).Msg("Failed to backfill groups from command stats")
 	}
@@ -123,6 +126,25 @@ func backfillClientIDColumns(db *gorm.DB) error {
 	}
 	if db.Migrator().HasTable(&models.Group{}) && db.Migrator().HasColumn(&models.Group{}, "client_id") {
 		if err := db.Model(&models.Group{}).Where("client_id IS NULL").Update("client_id", "").Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func backfillFilterGatewayDedup(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&models.FilterGateway{}) {
+		return nil
+	}
+	if db.Migrator().HasColumn(&models.FilterGateway{}, "dedup_ttl") {
+		if err := db.Model(&models.FilterGateway{}).Where("dedup_ttl IS NULL OR dedup_ttl <= 0").Update("dedup_ttl", 60).Error; err != nil {
+			return err
+		}
+	}
+	if db.Migrator().HasColumn(&models.FilterGateway{}, "dedup_enabled") {
+		// 旧版本没有在控制台暴露这个开关，false 基本都是默认值而非用户主动选择；
+		// 开启它才能满足“同群多 bot 只响应一次”的默认预期。
+		if err := db.Model(&models.FilterGateway{}).Where("dedup_enabled = ?", false).Update("dedup_enabled", true).Error; err != nil {
 			return err
 		}
 	}

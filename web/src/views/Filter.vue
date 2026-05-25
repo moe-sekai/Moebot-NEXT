@@ -83,6 +83,17 @@
           <input type="checkbox" v-model="gatewayDraft.debug" />
           <span>Debug 日志</span>
         </label>
+        <label class="gw-field gw-field--toggle">
+          <input type="checkbox" v-model="gatewayDraft.dedup_enabled" />
+          <span>
+            跨客户端消息去重
+            <small class="gw-field__hint">同群多个 bot 接入时，同一发送者同一消息只转发一次</small>
+          </span>
+        </label>
+        <label class="gw-field">
+          <span>去重 TTL (s)</span>
+          <input type="number" v-model.number="gatewayDraft.dedup_ttl" min="1" step="1" />
+        </label>
       </div>
       <div class="gw-actions">
         <UiButton size="sm" :loading="savingGateway" @click="saveGateway">保存网关</UiButton>

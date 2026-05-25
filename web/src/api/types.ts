@@ -931,6 +931,8 @@ export interface FilterGatewayPayload {
   buffer_size: number;
   sleep_time: number;
   debug: boolean;
+  dedup_enabled: boolean;
+  dedup_ttl: number;
 }
 
 export interface FilterEffectiveRules {
