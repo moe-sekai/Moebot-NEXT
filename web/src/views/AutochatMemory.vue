@@ -33,6 +33,9 @@
             <option value="summary">对话总结</option>
           </select>
         </Field>
+        <Field label="模板名称" hint="留空表示不过滤，显示所有模板的记忆">
+          <input v-model="form.template_name" type="text" placeholder="例如：default / assistant" />
+        </Field>
         <Field label="用户 ID">
           <input v-model.number="form.user_id" type="number" placeholder="0 表示不过滤" />
         </Field>
@@ -64,6 +67,8 @@
           <span class="badge" :class="m.type === 'summary' ? 'badge-summary' : 'badge-user'">
             {{ m.type === 'summary' ? '总结' : '用户画像' }}
           </span>
+          <span v-if="m.template_name" class="badge badge-template">{{ m.template_name }}</span>
+          <span v-else class="badge badge-template-empty">默认</span>
           <span class="meta">群 {{ m.group_id }}</span>
           <span v-if="m.type === 'user_memory'" class="meta">
             用户 {{ m.user_name || m.user_id }}
@@ -107,6 +112,7 @@ const form = reactive({
   user_id: 0,
   type: '' as '' | 'user_memory' | 'summary',
   q: '',
+  template_name: '',
   limit: 20,
 })
 
@@ -134,6 +140,7 @@ async function search() {
       user_id: form.user_id || undefined,
       type: form.type || undefined,
       q: form.q.trim() || undefined,
+      template_name: form.template_name.trim() || undefined,
       limit: form.limit,
     })
     items.value = data.items
@@ -186,4 +193,6 @@ function formatTime(ts: number) {
 .badge { font-size: 11px; padding: 3px 10px; border-radius: 999px; font-weight: 600; }
 .badge-summary { background: rgba(120, 140, 240, 0.2); color: #5868c5; }
 .badge-user { background: rgba(80, 200, 120, 0.18); color: #1e8a4a; }
+.badge-template { background: rgba(255, 180, 80, 0.22); color: #b56b00; }
+.badge-template-empty { background: rgba(160, 160, 160, 0.15); color: var(--muted-foreground); }
 </style>

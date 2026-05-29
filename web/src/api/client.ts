@@ -1090,6 +1090,7 @@ export interface AutochatMemoryItem {
   group_id: number;
   user_id: number;
   user_name?: string;
+  template_name?: string;
   type: "user_memory" | "summary";
   text: string;
   timestamp: number;
@@ -1109,6 +1110,7 @@ export interface MemoryQueryParams {
   user_id?: number;
   type?: "user_memory" | "summary" | "";
   q?: string;
+  template_name?: string;
   limit?: number;
 }
 
@@ -1118,6 +1120,7 @@ export async function queryAutochatMemory(params: MemoryQueryParams) {
   if (params.user_id) search.user_id = params.user_id;
   if (params.type) search.type = params.type;
   if (params.q) search.q = params.q;
+  if (params.template_name) search.template_name = params.template_name;
   if (params.limit) search.limit = params.limit;
   const { data } = await api.get<{
     items: AutochatMemoryItem[];

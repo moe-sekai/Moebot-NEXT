@@ -3,6 +3,7 @@ package autochat
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"moebot-next/internal/plugin"
@@ -144,15 +145,26 @@ func (p *pluginImpl) handleDeleteTemplate(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusServiceUnavailable, "autochat config not loaded")
 	}
 	delete(cfg.Chat.Templates, name)
-	// 清掉所有 GroupTemplates 中指向该模板的绑定，避免悬空引用。
+	// 收集使用该模板的群号（用于级联清理记忆）
+	var affectedGroups []string
 	for gid, tn := range cfg.Chat.GroupTemplates {
 		if tn == name {
+			affectedGroups = append(affectedGroups, gid)
 			delete(cfg.Chat.GroupTemplates, gid)
 		}
 	}
 	logTemplateKeys(cfg, "delete", name)
 	if err := plugin.WriteYAMLFrom(p.configPath, cfg); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("write config: %v", err))
+	}
+	// 级联删除记忆：1. 本地文件 2. 向量库
+	for _, gidStr := range affectedGroups {
+		if gid, err := strconv.ParseInt(gidStr, 10, 64); err == nil {
+			_ = p.memory.DeleteTemplateMemories(gid, name)
+		}
+	}
+	if vc := GetVectorClient(); vc != nil && vc.IsEnabled() {
+		_ = vc.DeleteByTemplate(name)
 	}
 	return c.JSON(fiber.Map{"ok": true, "name": name})
 }

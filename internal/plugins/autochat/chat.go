@@ -73,7 +73,7 @@ func (p *pluginImpl) repairFormat(raw string, cfg *Config) (string, error) {
 func (p *pluginImpl) processChat(ctx *zero.Ctx, groupID, userID int64, queryText string, allowTargetSelection bool) {
 	cfg := GetConfig()
 	msg := ctx.Event.Message
-	tmpl, _ := resolveTemplate(cfg, groupID)
+	tmpl, templateName := resolveTemplate(cfg, groupID)
 
 	// 模型选择：消息内 model: 前缀 > 群级 fileDB 覆盖 > 模板 Models > 全局 Models
 	modelList := append([]string{}, cfg.LLM.Models...)
@@ -204,7 +204,7 @@ formatOK:
 	}
 
 	if s := strings.TrimSpace(llmResp.DialogueSummary); s != "" {
-		_ = p.memory.AddSummary(groupID, s)
+		_ = p.memory.AddSummary(groupID, templateName, s)
 	}
 	for _, e := range llmResp.UpdateProfiles {
 		text := strings.TrimSpace(e.Value)
@@ -212,7 +212,7 @@ formatOK:
 			continue
 		}
 		if uid, err := strconv.ParseInt(strings.TrimSpace(e.QQ), 10, 64); err == nil {
-			_ = p.memory.UpdateUserMemory(groupID, uid, text)
+			_ = p.memory.UpdateUserMemory(groupID, uid, templateName, text)
 		}
 	}
 	if vc := GetVectorClient(); vc != nil && vc.IsEnabled() {
@@ -223,7 +223,7 @@ formatOK:
 			}
 			if uid, err := strconv.ParseInt(strings.TrimSpace(e.QQ), 10, 64); err == nil {
 				userName := ctx.CardOrNickName(uid)
-				go func(g, u int64, n, t string) { _ = vc.UpsertUserMemory(g, u, n, t) }(groupID, uid, userName, text)
+				go func(g, u int64, n, tn, t string) { _ = vc.UpsertUserMemory(g, u, n, tn, t) }(groupID, uid, userName, templateName, text)
 			}
 		}
 	}
@@ -293,6 +293,7 @@ func truncate(s string, n int) string {
 // buildSystemPrompt 拼装人设 / 上下文 / RAG / 输出格式约束。
 func (p *pluginImpl) buildSystemPrompt(ctx *zero.Ctx, cfg *Config, groupID, userID int64, queryText string, allowTargetSelection bool) string {
 	persona := loadPersona(cfg, groupID)
+	_, templateName := resolveTemplate(cfg, groupID)
 	msg := ctx.Event.Message
 
 	// User memories (本地画像 + 涉及到的相关用户)
@@ -309,7 +310,7 @@ func (p *pluginImpl) buildSystemPrompt(ctx *zero.Ctx, cfg *Config, groupID, user
 	}
 	var umText string
 	for uid, name := range relatedUsers {
-		t, err := p.memory.GetUserMemory(groupID, uid)
+		t, err := p.memory.GetUserMemory(groupID, uid, templateName)
 		if err == nil && t != "" {
 			umText += fmt.Sprintf("- 用户 %s (%d): %s\n", fmtUserName(name, uid), uid, t)
 		}
@@ -321,7 +322,7 @@ func (p *pluginImpl) buildSystemPrompt(ctx *zero.Ctx, cfg *Config, groupID, user
 	// RAG memories
 	var ragMemText, ragSummaryText string
 	if vc := GetVectorClient(); vc != nil && vc.IsEnabled() {
-		if recents, err := vc.QueryRecentMemories(groupID, 5); err == nil && len(recents) > 0 {
+		if recents, err := vc.QueryRecentMemories(groupID, templateName, 5); err == nil && len(recents) > 0 {
 			ragMemText = "[历史记忆片段]\n"
 			for _, m := range recents {
 				name := fmtUserName(m.UserName, m.UserID)
@@ -333,7 +334,7 @@ func (p *pluginImpl) buildSystemPrompt(ctx *zero.Ctx, cfg *Config, groupID, user
 			}
 		}
 		ragQuery := p.generateRAGSummary(groupID, queryText, cfg)
-		if sums, err := vc.QueryRelevantSummaries(groupID, ragQuery, 3); err == nil && len(sums) > 0 {
+		if sums, err := vc.QueryRelevantSummaries(groupID, templateName, ragQuery, 3); err == nil && len(sums) > 0 {
 			ragSummaryText = "[相关历史]\n"
 			for _, s := range sums {
 				ragSummaryText += "- " + s.Text + "\n"
@@ -343,7 +344,7 @@ func (p *pluginImpl) buildSystemPrompt(ctx *zero.Ctx, cfg *Config, groupID, user
 
 	// Summary memory
 	var smText string
-	if sums, err := p.memory.GetRecentSummaries(groupID, 5); err == nil && len(sums) > 0 {
+	if sums, err := p.memory.GetRecentSummaries(groupID, templateName, 5); err == nil && len(sums) > 0 {
 		smText = "[前情提要]\n"
 		for i, s := range sums {
 			smText += fmt.Sprintf("%d. %s\n", i+1, s)

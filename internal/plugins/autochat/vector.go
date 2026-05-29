@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,14 +16,15 @@ import (
 
 // MemoryVector 对应一条向量化记忆（user_memory 或 summary）。
 type MemoryVector struct {
-	ID        int64
-	GroupID   int64
-	UserID    int64
-	UserName  string
-	Type      string // user_memory | summary
-	Text      string
-	Timestamp int64
-	Score     float64
+	ID           int64
+	GroupID      int64
+	UserID       int64
+	UserName     string
+	TemplateName string
+	Type         string // user_memory | summary
+	Text         string
+	Timestamp    int64
+	Score        float64
 }
 
 // VectorClient 基于 SQLite + sqlite-vec(vec0) 的向量存储与检索。
@@ -92,6 +94,35 @@ func (v *VectorClient) ensureSchema() error {
 		return err
 	}
 
+	// 迁移：添加 template_name 列（SQLite 不支持 ADD COLUMN IF NOT EXISTS）
+	type colInfo struct {
+		CID       int
+		Name      string
+		Type      string
+		NotNull   int
+		DfltValue *string
+		PK        int
+	}
+	var cols []colInfo
+	v.db.Raw(`PRAGMA table_info(autochat_memories)`).Scan(&cols)
+	hasTemplateName := false
+	for _, col := range cols {
+		if col.Name == "template_name" {
+			hasTemplateName = true
+			break
+		}
+	}
+	if !hasTemplateName {
+		if err := v.db.Exec(`ALTER TABLE autochat_memories ADD COLUMN template_name TEXT NOT NULL DEFAULT ''`).Error; err != nil {
+			log.Warn().Err(err).Msg("[autochat][vector] 添加 template_name 列失败")
+		} else {
+			log.Info().Msg("[autochat][vector] 已迁移: 添加 template_name 列")
+		}
+	}
+	if err := v.db.Exec(`CREATE INDEX IF NOT EXISTS idx_autochat_mem_template ON autochat_memories(group_id, template_name, type, timestamp DESC)`).Error; err != nil {
+		return err
+	}
+
 	// 检查 vec 虚拟表是否存在以及维度是否匹配
 	var existsCount int64
 	v.db.Raw(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='autochat_vec'`).Scan(&existsCount)
@@ -151,7 +182,7 @@ func (v *VectorClient) generateEmbedding(text string) ([]float32, error) {
 }
 
 // upsertWithVector 插入主记录 + 向量，自动获取自增 id。
-func (v *VectorClient) upsertWithVector(groupID, userID int64, userName, typ, text string, timestamp int64, vec []float32) error {
+func (v *VectorClient) upsertWithVector(groupID, userID int64, userName, templateName, typ, text string, timestamp int64, vec []float32) error {
 	if len(vec) != v.dimensions {
 		return fmt.Errorf("vector: 维度不匹配 expect=%d got=%d", v.dimensions, len(vec))
 	}
@@ -167,8 +198,8 @@ func (v *VectorClient) upsertWithVector(groupID, userID int64, userName, typ, te
 		}
 	}()
 	res := tx.Exec(
-		`INSERT INTO autochat_memories(group_id, user_id, user_name, type, text, timestamp) VALUES(?,?,?,?,?,?)`,
-		groupID, userID, userName, typ, text, timestamp,
+		`INSERT INTO autochat_memories(group_id, user_id, user_name, template_name, type, text, timestamp) VALUES(?,?,?,?,?,?,?)`,
+		groupID, userID, userName, templateName, typ, text, timestamp,
 	)
 	if res.Error != nil {
 		tx.Rollback()
@@ -188,7 +219,7 @@ func (v *VectorClient) upsertWithVector(groupID, userID int64, userName, typ, te
 	return tx.Commit().Error
 }
 
-func (v *VectorClient) UpsertUserMemory(groupID, userID int64, userName, text string) error {
+func (v *VectorClient) UpsertUserMemory(groupID, userID int64, userName, templateName, text string) error {
 	if !v.IsEnabled() {
 		return nil
 	}
@@ -196,10 +227,10 @@ func (v *VectorClient) UpsertUserMemory(groupID, userID int64, userName, text st
 	if err != nil {
 		return err
 	}
-	return v.upsertWithVector(groupID, userID, userName, "user_memory", text, time.Now().Unix(), emb)
+	return v.upsertWithVector(groupID, userID, userName, templateName, "user_memory", text, time.Now().Unix(), emb)
 }
 
-func (v *VectorClient) UpsertSummary(groupID int64, content string) error {
+func (v *VectorClient) UpsertSummary(groupID int64, templateName, content string) error {
 	if !v.IsEnabled() {
 		return nil
 	}
@@ -207,11 +238,11 @@ func (v *VectorClient) UpsertSummary(groupID int64, content string) error {
 	if err != nil {
 		return err
 	}
-	return v.upsertWithVector(groupID, 0, "", "summary", content, time.Now().Unix(), emb)
+	return v.upsertWithVector(groupID, 0, "", templateName, "summary", content, time.Now().Unix(), emb)
 }
 
-// queryByVector 用 sqlite-vec KNN 检索 + 按 type/group 过滤。
-func (v *VectorClient) queryByVector(groupID int64, typ string, queryVec []float32, topK int) ([]MemoryVector, error) {
+// queryByVector 用 sqlite-vec KNN 检索 + 按 type/group/template 过滤。
+func (v *VectorClient) queryByVector(groupID int64, templateName, typ string, queryVec []float32, topK int) ([]MemoryVector, error) {
 	if topK <= 0 {
 		topK = v.topK
 	}
@@ -223,17 +254,18 @@ func (v *VectorClient) queryByVector(groupID int64, typ string, queryVec []float
 		return nil, err
 	}
 	type row struct {
-		ID        int64
-		GroupID   int64
-		UserID    int64
-		UserName  string
-		Type      string
-		Text      string
-		Timestamp int64
-		Distance  float64
+		ID           int64
+		GroupID      int64
+		UserID       int64
+		UserName     string
+		TemplateName string
+		Type         string
+		Text         string
+		Timestamp    int64
+		Distance     float64
 	}
 	// 先用 vec MATCH 召回较多，然后按主表过滤；vec0 不支持 join 中的非 KNN 过滤，
-	// 因此此处采用子查询：拿足够多 KNN，再按 group/type 过滤、按距离排序。
+	// 因此此处采用子查询：拿足够多 KNN，再按 group/type/template 过滤、按距离排序。
 	limit := topK * 4
 	if limit < 20 {
 		limit = 20
@@ -244,7 +276,217 @@ WITH knn AS (
   SELECT id, distance FROM autochat_vec
   WHERE embedding MATCH ? AND k = ?
 )
-SELECT m.id, m.group_id, m.user_id, m.user_name, m.type, m.text, m.timestamp, knn.distance
+SELECT m.id, m.group_id, m.user_id, m.user_name, m.template_name, m.type, m.text, m.timestamp, knn.distance
+FROM knn JOIN autochat_memories m ON m.id = knn.id
+WHERE m.group_id = ? AND m.type = ? AND m.template_name = ?
+ORDER BY knn.distance ASC
+LIMIT ?
+`
+	if err := v.db.Raw(q, blob, limit, groupID, typ, templateName, topK).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]MemoryVector, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, MemoryVector{
+			ID:           r.ID,
+			GroupID:      r.GroupID,
+			UserID:       r.UserID,
+			UserName:     r.UserName,
+			TemplateName: r.TemplateName,
+			Type:         r.Type,
+			Text:         r.Text,
+			Timestamp:    r.Timestamp,
+			Score:        1 - r.Distance, // 余弦相似度近似
+		})
+	}
+	// 兼容旧数据：如果当前模板没有结果，回退查 template_name = '' 的旧记忆
+	if len(out) == 0 && templateName != "" {
+		var fallbackRows []row
+		fbQ := strings.Replace(q, "m.template_name = ?", "m.template_name = ''", 1)
+		if err := v.db.Raw(fbQ, blob, limit, groupID, typ, topK).Scan(&fallbackRows).Error; err != nil {
+			return nil, err
+		}
+		for _, r := range fallbackRows {
+			out = append(out, MemoryVector{
+				ID:           r.ID,
+				GroupID:      r.GroupID,
+				UserID:       r.UserID,
+				UserName:     r.UserName,
+				TemplateName: r.TemplateName,
+				Type:         r.Type,
+				Text:         r.Text,
+				Timestamp:    r.Timestamp,
+				Score:        1 - r.Distance,
+			})
+		}
+	}
+	return out, nil
+}
+
+func (v *VectorClient) QueryRelevantSummaries(groupID int64, templateName, queryText string, topK int) ([]MemoryVector, error) {
+	if !v.IsEnabled() {
+		return nil, nil
+	}
+	emb, err := v.generateEmbedding(queryText)
+	if err != nil {
+		return nil, err
+	}
+	return v.queryByVector(groupID, templateName, "summary", emb, topK)
+}
+
+func (v *VectorClient) QueryMemoriesByKeyword(groupID int64, templateName, keyword string, topK int) ([]MemoryVector, error) {
+	if !v.IsEnabled() {
+		return nil, nil
+	}
+	emb, err := v.generateEmbedding(keyword)
+	if err != nil {
+		return nil, err
+	}
+	return v.queryByVector(groupID, templateName, "user_memory", emb, topK)
+}
+
+// QueryUserMemories 列出指定用户最近 topK 条记忆（按时间倒序）。
+func (v *VectorClient) QueryUserMemories(groupID, userID int64, templateName string, topK int) ([]MemoryVector, error) {
+	if !v.IsEnabled() {
+		return nil, nil
+	}
+	if topK <= 0 {
+		topK = 10
+	}
+	type row struct {
+		ID           int64
+		GroupID      int64
+		UserID       int64
+		UserName     string
+		TemplateName string
+		Type         string
+		Text         string
+		Timestamp    int64
+	}
+	var rows []row
+	if err := v.db.Raw(
+		`SELECT id, group_id, user_id, user_name, template_name, type, text, timestamp FROM autochat_memories
+		 WHERE group_id=? AND user_id=? AND template_name=? AND type='user_memory' ORDER BY timestamp DESC LIMIT ?`,
+		groupID, userID, templateName, topK,
+	).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]MemoryVector, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, MemoryVector{
+			ID: r.ID, GroupID: r.GroupID, UserID: r.UserID, UserName: r.UserName,
+			TemplateName: r.TemplateName, Type: r.Type, Text: r.Text, Timestamp: r.Timestamp,
+		})
+	}
+	// 兼容旧数据：回退查 template_name = ''
+	if len(out) == 0 && templateName != "" {
+		var fallbackRows []row
+		if err := v.db.Raw(
+			`SELECT id, group_id, user_id, user_name, template_name, type, text, timestamp FROM autochat_memories
+			 WHERE group_id=? AND user_id=? AND template_name='' AND type='user_memory' ORDER BY timestamp DESC LIMIT ?`,
+			groupID, userID, topK,
+		).Scan(&fallbackRows).Error; err != nil {
+			return nil, err
+		}
+		for _, r := range fallbackRows {
+			out = append(out, MemoryVector{
+				ID: r.ID, GroupID: r.GroupID, UserID: r.UserID, UserName: r.UserName,
+				TemplateName: r.TemplateName, Type: r.Type, Text: r.Text, Timestamp: r.Timestamp,
+			})
+		}
+	}
+	return out, nil
+}
+
+// QueryRecentMemories 群组内最近 topK 条 user_memory（不做语义检索）。
+func (v *VectorClient) QueryRecentMemories(groupID int64, templateName string, topK int) ([]MemoryVector, error) {
+	if !v.IsEnabled() {
+		return nil, nil
+	}
+	if topK <= 0 {
+		topK = 5
+	}
+	type row struct {
+		ID           int64
+		GroupID      int64
+		UserID       int64
+		UserName     string
+		TemplateName string
+		Type         string
+		Text         string
+		Timestamp    int64
+	}
+	var rows []row
+	if err := v.db.Raw(
+		`SELECT id, group_id, user_id, user_name, template_name, type, text, timestamp FROM autochat_memories
+		 WHERE group_id=? AND template_name=? AND type='user_memory' ORDER BY timestamp DESC LIMIT ?`,
+		groupID, templateName, topK,
+	).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]MemoryVector, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, MemoryVector{
+			ID: r.ID, GroupID: r.GroupID, UserID: r.UserID, UserName: r.UserName,
+			TemplateName: r.TemplateName, Type: r.Type, Text: r.Text, Timestamp: r.Timestamp,
+		})
+	}
+	// 兼容旧数据：回退查 template_name = ''
+	if len(out) == 0 && templateName != "" {
+		var fallbackRows []row
+		if err := v.db.Raw(
+			`SELECT id, group_id, user_id, user_name, template_name, type, text, timestamp FROM autochat_memories
+			 WHERE group_id=? AND template_name='' AND type='user_memory' ORDER BY timestamp DESC LIMIT ?`,
+			groupID, topK,
+		).Scan(&fallbackRows).Error; err != nil {
+			return nil, err
+		}
+		for _, r := range fallbackRows {
+			out = append(out, MemoryVector{
+				ID: r.ID, GroupID: r.GroupID, UserID: r.UserID, UserName: r.UserName,
+				TemplateName: r.TemplateName, Type: r.Type, Text: r.Text, Timestamp: r.Timestamp,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Timestamp > out[j].Timestamp })
+	return out, nil
+}
+
+// queryByVectorAllTemplates 查询所有模板的记忆（Web 管理页面使用）。
+// 不按 template_name 过滤，返回所有模板的记忆。
+func (v *VectorClient) queryByVectorAllTemplates(groupID int64, typ string, queryVec []float32, topK int) ([]MemoryVector, error) {
+	if topK <= 0 {
+		topK = v.topK
+	}
+	if topK <= 0 {
+		topK = 5
+	}
+	blob, err := serializeFloat32(queryVec)
+	if err != nil {
+		return nil, err
+	}
+	type row struct {
+		ID           int64
+		GroupID      int64
+		UserID       int64
+		UserName     string
+		TemplateName string
+		Type         string
+		Text         string
+		Timestamp    int64
+		Distance     float64
+	}
+	limit := topK * 4
+	if limit < 20 {
+		limit = 20
+	}
+	var rows []row
+	q := `
+WITH knn AS (
+  SELECT id, distance FROM autochat_vec
+  WHERE embedding MATCH ? AND k = ?
+)
+SELECT m.id, m.group_id, m.user_id, m.user_name, m.template_name, m.type, m.text, m.timestamp, knn.distance
 FROM knn JOIN autochat_memories m ON m.id = knn.id
 WHERE m.group_id = ? AND m.type = ?
 ORDER BY knn.distance ASC
@@ -256,108 +498,96 @@ LIMIT ?
 	out := make([]MemoryVector, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, MemoryVector{
-			ID:        r.ID,
-			GroupID:   r.GroupID,
-			UserID:    r.UserID,
-			UserName:  r.UserName,
-			Type:      r.Type,
-			Text:      r.Text,
-			Timestamp: r.Timestamp,
-			Score:     1 - r.Distance, // 余弦相似度近似
+			ID:           r.ID,
+			GroupID:      r.GroupID,
+			UserID:       r.UserID,
+			UserName:     r.UserName,
+			TemplateName: r.TemplateName,
+			Type:         r.Type,
+			Text:         r.Text,
+			Timestamp:    r.Timestamp,
+			Score:        1 - r.Distance,
 		})
 	}
 	return out, nil
 }
 
-func (v *VectorClient) QueryRelevantSummaries(groupID int64, queryText string, topK int) ([]MemoryVector, error) {
+// DeleteByTemplate 删除指定模板在所有群的全部记忆（主表+向量表）。
+func (v *VectorClient) DeleteByTemplate(templateName string) error {
 	if !v.IsEnabled() {
-		return nil, nil
+		return nil
 	}
-	emb, err := v.generateEmbedding(queryText)
-	if err != nil {
-		return nil, err
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	tx := v.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
 	}
-	return v.queryByVector(groupID, "summary", emb, topK)
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+	var ids []int64
+	if err := tx.Raw(`SELECT id FROM autochat_memories WHERE template_name = ?`, templateName).Scan(&ids).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if len(ids) == 0 {
+		tx.Rollback()
+		return nil
+	}
+	if err := tx.Exec(`DELETE FROM autochat_vec WHERE id IN (?)`, ids).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Exec(`DELETE FROM autochat_memories WHERE template_name = ?`, templateName).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	log.Info().Str("template", templateName).Int("count", len(ids)).Msg("[autochat][vector] 已删除模板记忆")
+	return nil
 }
 
-func (v *VectorClient) QueryMemoriesByKeyword(groupID int64, keyword string, topK int) ([]MemoryVector, error) {
+// DeleteByGroupAndTemplate 删除指定群+模板的全部记忆（主表+向量表）。
+func (v *VectorClient) DeleteByGroupAndTemplate(groupID int64, templateName string) error {
 	if !v.IsEnabled() {
-		return nil, nil
+		return nil
 	}
-	emb, err := v.generateEmbedding(keyword)
-	if err != nil {
-		return nil, err
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	tx := v.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
 	}
-	return v.queryByVector(groupID, "user_memory", emb, topK)
-}
-
-// QueryUserMemories 列出指定用户最近 topK 条记忆（按时间倒序）。
-func (v *VectorClient) QueryUserMemories(groupID, userID int64, topK int) ([]MemoryVector, error) {
-	if !v.IsEnabled() {
-		return nil, nil
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+	var ids []int64
+	if err := tx.Raw(`SELECT id FROM autochat_memories WHERE group_id = ? AND template_name = ?`, groupID, templateName).Scan(&ids).Error; err != nil {
+		tx.Rollback()
+		return err
 	}
-	if topK <= 0 {
-		topK = 10
+	if len(ids) == 0 {
+		tx.Rollback()
+		return nil
 	}
-	type row struct {
-		ID        int64
-		GroupID   int64
-		UserID    int64
-		UserName  string
-		Type      string
-		Text      string
-		Timestamp int64
+	if err := tx.Exec(`DELETE FROM autochat_vec WHERE id IN (?)`, ids).Error; err != nil {
+		tx.Rollback()
+		return err
 	}
-	var rows []row
-	if err := v.db.Raw(
-		`SELECT id, group_id, user_id, user_name, type, text, timestamp FROM autochat_memories
-		 WHERE group_id=? AND user_id=? AND type='user_memory' ORDER BY timestamp DESC LIMIT ?`,
-		groupID, userID, topK,
-	).Scan(&rows).Error; err != nil {
-		return nil, err
+	if err := tx.Exec(`DELETE FROM autochat_memories WHERE group_id = ? AND template_name = ?`, groupID, templateName).Error; err != nil {
+		tx.Rollback()
+		return err
 	}
-	out := make([]MemoryVector, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, MemoryVector{
-			ID: r.ID, GroupID: r.GroupID, UserID: r.UserID, UserName: r.UserName,
-			Type: r.Type, Text: r.Text, Timestamp: r.Timestamp,
-		})
+	if err := tx.Commit().Error; err != nil {
+		return err
 	}
-	return out, nil
-}
-
-// QueryRecentMemories 群组内最近 topK 条 user_memory（不做语义检索）。
-func (v *VectorClient) QueryRecentMemories(groupID int64, topK int) ([]MemoryVector, error) {
-	if !v.IsEnabled() {
-		return nil, nil
-	}
-	if topK <= 0 {
-		topK = 5
-	}
-	type row struct {
-		ID        int64
-		GroupID   int64
-		UserID    int64
-		UserName  string
-		Type      string
-		Text      string
-		Timestamp int64
-	}
-	var rows []row
-	if err := v.db.Raw(
-		`SELECT id, group_id, user_id, user_name, type, text, timestamp FROM autochat_memories
-		 WHERE group_id=? AND type='user_memory' ORDER BY timestamp DESC LIMIT ?`,
-		groupID, topK,
-	).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]MemoryVector, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, MemoryVector{
-			ID: r.ID, GroupID: r.GroupID, UserID: r.UserID, UserName: r.UserName,
-			Type: r.Type, Text: r.Text, Timestamp: r.Timestamp,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Timestamp > out[j].Timestamp })
-	return out, nil
+	log.Info().Int64("group", groupID).Str("template", templateName).Int("count", len(ids)).Msg("[autochat][vector] 已删除群+模板记忆")
+	return nil
 }

@@ -369,13 +369,16 @@ func (p *pluginImpl) handleQueryMemory(ctx *zero.Ctx) {
 }
 
 func (p *pluginImpl) queryUserMemory(ctx *zero.Ctx, groupID, userID int64, name string) {
+	cfg := GetConfig()
+	_, templateName := resolveTemplate(cfg, groupID)
+
 	var profile string
-	if local, err := p.memory.GetUserMemory(groupID, userID); err == nil {
+	if local, err := p.memory.GetUserMemory(groupID, userID, templateName); err == nil {
 		profile = local
 	}
 	var segments []memorySegment
 	if vc := GetVectorClient(); vc != nil && vc.IsEnabled() {
-		if mems, err := vc.QueryUserMemories(groupID, userID, 5); err == nil {
+		if mems, err := vc.QueryUserMemories(groupID, userID, templateName, 5); err == nil {
 			for _, m := range mems {
 				text := m.Text
 				if len([]rune(text)) > 100 {
@@ -428,7 +431,9 @@ func (p *pluginImpl) queryMemoryByKeyword(ctx *zero.Ctx, groupID int64, keyword 
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text("向量搜索功能未启用"))
 		return
 	}
-	mems, err := vc.QueryMemoriesByKeyword(groupID, keyword, 20)
+	cfg := GetConfig()
+	_, templateName := resolveTemplate(cfg, groupID)
+	mems, err := vc.QueryMemoriesByKeyword(groupID, templateName, keyword, 20)
 	if err != nil {
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text("搜索失败: "+err.Error()))
 		return
