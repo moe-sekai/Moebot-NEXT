@@ -6,7 +6,29 @@
       "Bash(cd /d/Python_Project/Moebot-NEXT-Go && go vet ./internal/plugins/autochat/ 2>&1)",
       "Bash(head:*)",
       "Bash(tail:*)",
-      "Bash(cd /d/Python_Project/Moebot-NEXT-Go && go build ./... 2>&1)"
+      "Bash(cd /d/Python_Project/Moebot-NEXT-Go && go build ./... 2>&1)",
+      "Bash(mkdir -p \"D:\\\\Python_Project\\\\NEXTonebotfilter\\\\backend\" \"D:\\\\Python_Project\\\\NEXTonebotfilter\\\\console\" \"D:\\\\Python_Project\\\\NEXTonebotfilter\\\\docs\")",
+      "Read(//d/Python_Project/**)",
+      "Bash(go mod *)",
+      "Bash(go env *)",
+      "Bash(GOPROXY=https://goproxy.cn,direct GOSUMDB=sum.golang.google.cn go mod tidy)",
+      "Bash(GOPROXY=https://goproxy.cn,direct GOSUMDB=sum.golang.google.cn go build ./...)",
+      "Bash(GOPROXY=https://goproxy.cn,direct GOSUMDB=sum.golang.google.cn go build -o nextonebotfilter.exe ./cmd/nextonebotfilter)",
+      "Bash(GOPROXY=https://goproxy.cn,direct GOSUMDB=sum.golang.google.cn go vet ./...)",
+      "Bash(npm install *)",
+      "Bash(npx --no-install tsc --noEmit)",
+      "Bash(npx --no-install next build)",
+      "Bash(npm run *)",
+      "Bash(rm -f nextonebotfilter.exe)",
+      "Bash(GOPROXY=https://goproxy.cn,direct GOSUMDB=sum.golang.google.cn go build -trimpath -ldflags=\"-s -w\" -o nextonebotfilter.exe ./cmd/nextonebotfilter)",
+      "Bash(rm -f data/nextonebotfilter.log)",
+      "Bash(backend/nextonebotfilter.exe -db data/nextonebotfilter.db -console :8788 -log data/nextonebotfilter.log -web console/out)",
+      "Bash(echo \"started bg pid=$!\")",
+      "Bash(curl -s http://127.0.0.1:8788/api/health)",
+      "Bash(curl -s -o /dev/null -w \"console index.html: HTTP %{http_code}\\\\n\" http://127.0.0.1:8788/)",
+      "Bash(netstat -ano)",
+      "Bash(rm -f /tmp/stderr.log /tmp/stderr2.log)",
+      "Bash(rm -rf data)"
     ]
   }
 }

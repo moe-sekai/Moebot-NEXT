@@ -34,15 +34,25 @@ type xmlEntryKV struct {
 }
 
 // extractXMLBlock 从 LLM 原文中提取 <response>...</response> 片段。
-// 兼容代码块包裹（```xml ... ```）以及前后多余文本。
+// 兼容代码块包裹（```xml ... ```）、前后多余文本，以及 thinking 中残留的 XML 草稿。
 func extractXMLBlock(raw string) string {
 	s := strings.TrimSpace(raw)
-	start := strings.Index(s, "<response>")
 	end := strings.LastIndex(s, "</response>")
-	if start >= 0 && end > start {
-		return s[start : end+len("</response>")]
+	if end >= 0 {
+		prefix := s[:end]
+		start := strings.LastIndex(prefix, "<response>")
+		if start >= 0 {
+			return s[start : end+len("</response>")]
+		}
 	}
 	return s
+}
+
+func parseAutoChatXML(raw string) (AutoChatXMLResponse, string, error) {
+	clean := extractXMLBlock(raw)
+	var out AutoChatXMLResponse
+	err := xml.Unmarshal([]byte(clean), &out)
+	return out, clean, err
 }
 
 // repairFormat 调用低成本模型将格式不正确的 LLM 输出转换为标准 XML。
@@ -151,22 +161,30 @@ func (p *pluginImpl) processChat(ctx *zero.Ctx, groupID, userID int64, queryText
 	elapsed := time.Since(timeStart)
 
 	// 解析 XML 响应
-	clean := extractXMLBlock(resp.Result)
-
-	var llmResp AutoChatXMLResponse
-	if err := xml.Unmarshal([]byte(clean), &llmResp); err != nil {
+	llmResp, clean, err := parseAutoChatXML(resp.Result)
+	if err != nil {
 		// 格式修复：调用低成本模型尝试将原始输出转为标准 XML
 		if cfg.FormatRepair.Enabled && cfg.FormatRepair.Model != "" {
 			repaired, repairErr := p.repairFormat(resp.Result, cfg)
 			if repairErr == nil {
-				cleanRepaired := extractXMLBlock(repaired)
-				if xmlErr := xml.Unmarshal([]byte(cleanRepaired), &llmResp); xmlErr == nil {
+				var cleanRepaired string
+				var xmlErr error
+				llmResp, cleanRepaired, xmlErr = parseAutoChatXML(repaired)
+				if xmlErr == nil {
 					log.Info().Str("raw", truncate(clean, 120)).
+						Str("repaired", truncate(cleanRepaired, 120)).
 						Msg("[autochat] 格式修复成功")
 					goto formatOK
 				}
+				log.Warn().Err(err).AnErr("repaired_parse_error", xmlErr).
+					Str("raw", truncate(clean, 200)).
+					Str("repaired", truncate(cleanRepaired, 200)).
+					Msg("[autochat] 格式修复也失败，丢弃")
+			} else {
+				log.Warn().Err(err).AnErr("repair_error", repairErr).
+					Str("raw", truncate(clean, 200)).
+					Msg("[autochat] 格式修复调用失败，丢弃")
 			}
-			log.Warn().Err(err).Str("raw", truncate(clean, 200)).Msg("[autochat] 格式修复也失败，丢弃")
 		} else {
 			log.Warn().Err(err).Str("raw", truncate(clean, 200)).Msg("[autochat] XML 解析失败，丢弃")
 		}

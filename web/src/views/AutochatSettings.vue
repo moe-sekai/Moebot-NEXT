@@ -107,10 +107,12 @@
             <h2>对话模板</h2>
             <p>每个模板包含独立的人设、首选模型、触发倾向（at/关键词/随机增量）、专属关键词和多模态开关；在「单群配置」里把模板分配给一个或多个群聊即可。</p>
           </div>
-          <div class="actions">
-            <UiButton variant="outline" size="sm" :loading="templatesLoading" @click="loadTemplates">刷新</UiButton>
-            <UiButton variant="default" size="sm" @click="addTemplate">新建模板</UiButton>
-          </div>
+        <div class="actions">
+          <UiButton variant="outline" size="sm" @click="expandAllTemplates">全部展开</UiButton>
+          <UiButton variant="outline" size="sm" @click="collapseAllTemplates">全部折叠</UiButton>
+          <UiButton variant="outline" size="sm" :loading="templatesLoading" @click="loadTemplates">刷新</UiButton>
+          <UiButton variant="default" size="sm" @click="addTemplate">新建模板</UiButton>
+        </div>
         </div>
 
         <UiAlert v-if="templatesError" variant="destructive" title="加载/保存失败">{{ templatesError }}</UiAlert>
@@ -120,18 +122,21 @@
         </div>
 
         <div v-for="t in templates" :key="t.rowKey" class="group-card">
-          <div class="group-card-head">
+          <div class="group-card-head clickable" @click="toggleTemplateCollapse(t.rowKey)">
             <div>
+              <span class="collapse-arrow">{{ isTemplateCollapsed(t.rowKey) ? '▶' : '▼' }}</span>
               <span class="group-id">{{ displayTemplateName(t) }}</span>
               <span v-if="t.isNew" class="badge badge-auto">未保存</span>
               <span v-if="t.used_by_groups?.length" class="badge badge-on">绑定群 {{ t.used_by_groups.length }}</span>
+              <span v-if="(t.models || []).length" class="badge">{{ (t.models || []).length }} 模型</span>
+              <span v-if="(t.keywords || []).length" class="badge">{{ (t.keywords || []).length }} 关键词</span>
             </div>
-            <div class="actions">
+            <div class="actions" @click.stop>
               <UiButton variant="outline" size="sm" :loading="t.saving" @click="saveTemplate(t)">保存</UiButton>
               <UiButton variant="destructive" size="sm" @click="removeTemplate(t)">删除</UiButton>
             </div>
           </div>
-          <div class="form-grid">
+          <div v-show="!isTemplateCollapsed(t.rowKey)" class="form-grid">
             <Field label="人设 Persona" full hint="留空则继承全局默认 persona">
               <textarea v-model="t.persona" rows="4" />
             </Field>
@@ -203,9 +208,11 @@
         <div class="card-heading">
           <div>
             <h2>单群组配置</h2>
-            <p>选择该群使用哪个对话模板（人设、模型、阈值、关键词由模板统一管理）。这里只保留模板绑定与命令/自动回复开关。</p>
+            <p>选择该群使用哪个对话模板（人设、模型、阈值、关键词由模板统一管理）。这里只保留模板绑定与命令/自动回复开关。群按模板分组显示。</p>
           </div>
           <div class="actions">
+            <UiButton variant="outline" size="sm" @click="expandAllGroupSections">全部展开</UiButton>
+            <UiButton variant="outline" size="sm" @click="collapseAllGroupSections">全部折叠</UiButton>
             <UiButton variant="outline" size="sm" :loading="groupsLoading" @click="loadGroups">刷新</UiButton>
             <UiButton variant="default" size="sm" @click="addGroup">添加群</UiButton>
           </div>
@@ -217,31 +224,50 @@
           暂无单群覆盖配置。点击"添加群"录入群号即可。默认阈值：<code>{{ defaultThreshold }}</code>
         </div>
 
-        <div v-for="g in groups" :key="g.group_id" class="group-card">
-          <div class="group-card-head">
-            <div>
-              <span class="group-id">群 {{ g.group_id }}</span>
-              <span v-if="g.chat_enabled" class="badge badge-on">/chat 启用</span>
-              <span v-if="g.auto_enabled" class="badge badge-auto">自动回复启用</span>
-            </div>
-            <div class="actions">
-              <UiButton variant="outline" size="sm" :loading="g.saving" @click="saveGroup(g)">保存</UiButton>
-              <UiButton variant="destructive" size="sm" @click="removeGroup(g)">移除覆盖</UiButton>
-            </div>
+        <div v-for="[tmplKey, tmplGroups] in groupsByTemplate" :key="tmplKey" class="template-group-section">
+          <div class="template-group-header" @click="toggleTemplateGroupSection(tmplKey)">
+            <span class="collapse-arrow">{{ isTemplateGroupCollapsed(tmplKey) ? '▶' : '▼' }}</span>
+            <strong>{{ tmplKey || '未绑定模板（默认）' }}</strong>
+            <span class="badge">{{ tmplGroups.length }} 个群</span>
           </div>
-          <div class="form-grid">
-            <Field label="使用模板" hint="留空表示不绑定模板（使用全局默认 persona/模型/阈值）">
-              <select v-model="g.template">
-                <option value="">（无 / 默认）</option>
-                <option v-for="n in templateNames" :key="n" :value="n">{{ n }}</option>
-              </select>
-            </Field>
-            <Field label="开关">
-              <div class="check-row">
-                <label class="check"><input type="checkbox" v-model="g.chat_enabled" /> /chat 命令</label>
-                <label class="check"><input type="checkbox" v-model="g.auto_enabled" /> 阈值/关键词自动回复</label>
+          <div v-show="!isTemplateGroupCollapsed(tmplKey)" class="template-group-body">
+            <div class="batch-actions">
+              <label class="check"><input type="checkbox" :checked="isAllSelectedInGroup(tmplKey)" @change="toggleSelectAllInGroup(tmplKey, $event)" /> 全选</label>
+              <UiButton size="sm" variant="outline" @click="batchChangeTemplate(tmplKey)">批量切换模板</UiButton>
+              <UiButton size="sm" variant="destructive" @click="batchRemoveGroups(tmplKey)">批量移除</UiButton>
+            </div>
+            <div v-for="g in tmplGroups" :key="g.group_id" class="group-card">
+              <div class="group-card-head clickable" @click="toggleGroupCollapse(g.group_id)">
+                <div>
+                  <label class="check" style="margin-right: 8px;" @click.stop>
+                    <input type="checkbox" :checked="selectedGroups.has(g.group_id)" @change="toggleSelectGroup(g.group_id)" />
+                  </label>
+                  <span class="collapse-arrow">{{ isGroupCollapsed(g.group_id) ? '▶' : '▼' }}</span>
+                  <span class="group-id">群 {{ g.group_id }}</span>
+                  <span v-if="g.template" class="badge">{{ g.template }}</span>
+                  <span v-if="g.chat_enabled" class="badge badge-on">/chat</span>
+                  <span v-if="g.auto_enabled" class="badge badge-auto">自动回复</span>
+                </div>
+                <div class="actions" @click.stop>
+                  <UiButton variant="outline" size="sm" :loading="g.saving" @click="saveGroup(g)">保存</UiButton>
+                  <UiButton variant="destructive" size="sm" @click="removeGroup(g)">移除</UiButton>
+                </div>
               </div>
-            </Field>
+              <div v-show="!isGroupCollapsed(g.group_id)" class="form-grid">
+                <Field label="使用模板" hint="留空表示不绑定模板（使用全局默认 persona/模型/阈值）">
+                  <select v-model="g.template">
+                    <option value="">（无 / 默认）</option>
+                    <option v-for="n in templateNames" :key="n" :value="n">{{ n }}</option>
+                  </select>
+                </Field>
+                <Field label="开关">
+                  <div class="check-row">
+                    <label class="check"><input type="checkbox" v-model="g.chat_enabled" /> /chat 命令</label>
+                    <label class="check"><input type="checkbox" v-model="g.auto_enabled" /> 阈值/关键词自动回复</label>
+                  </div>
+                </Field>
+              </div>
+            </div>
           </div>
         </div>
       </UiCard>
@@ -403,6 +429,127 @@ async function removeGroup(g: GroupRow) {
   } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
 }
 
+// ----- Group collapse & grouping -----
+const collapsedGroups = ref(new Set<number>())
+function toggleGroupCollapse(gid: number) {
+  const s = new Set(collapsedGroups.value)
+  s.has(gid) ? s.delete(gid) : s.add(gid)
+  collapsedGroups.value = s
+}
+function isGroupCollapsed(gid: number) {
+  return collapsedGroups.value.has(gid)
+}
+function collapseAllGroups() {
+  collapsedGroups.value = new Set(groups.value.map(g => g.group_id))
+}
+function expandAllGroups() {
+  collapsedGroups.value = new Set()
+}
+
+const collapsedTemplateGroups = ref(new Set<string>())
+function toggleTemplateGroupSection(key: string) {
+  const s = new Set(collapsedTemplateGroups.value)
+  s.has(key) ? s.delete(key) : s.add(key)
+  collapsedTemplateGroups.value = s
+}
+function isTemplateGroupCollapsed(key: string) {
+  return collapsedTemplateGroups.value.has(key)
+}
+function collapseAllGroupSections() {
+  const keys = [...groupsByTemplate.value.keys()]
+  collapsedTemplateGroups.value = new Set(keys)
+}
+function expandAllGroupSections() {
+  collapsedTemplateGroups.value = new Set()
+}
+
+const groupsByTemplate = computed(() => {
+  const map = new Map<string, GroupRow[]>()
+  // 按模板分组，排序：有模板的在前，无模板的在后
+  const withTemplate: GroupRow[] = []
+  const withoutTemplate: GroupRow[] = []
+  for (const g of groups.value) {
+    if (g.template) withTemplate.push(g)
+    else withoutTemplate.push(g)
+  }
+  // 有模板的按模板名聚合
+  const templateMap = new Map<string, GroupRow[]>()
+  for (const g of withTemplate) {
+    if (!templateMap.has(g.template!)) templateMap.set(g.template!, [])
+    templateMap.get(g.template!)!.push(g)
+  }
+  for (const [tmpl, list] of templateMap) {
+    map.set(tmpl, list)
+  }
+  if (withoutTemplate.length) {
+    map.set('', withoutTemplate)
+  }
+  return map
+})
+
+const selectedGroups = ref(new Set<number>())
+function toggleSelectGroup(gid: number) {
+  const s = new Set(selectedGroups.value)
+  s.has(gid) ? s.delete(gid) : s.add(gid)
+  selectedGroups.value = s
+}
+function toggleSelectAllInGroup(tmplKey: string, event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  const list = groupsByTemplate.value.get(tmplKey) || []
+  const s = new Set(selectedGroups.value)
+  for (const g of list) {
+    checked ? s.add(g.group_id) : s.delete(g.group_id)
+  }
+  selectedGroups.value = s
+}
+function isAllSelectedInGroup(tmplKey: string): boolean {
+  const list = groupsByTemplate.value.get(tmplKey) || []
+  return list.length > 0 && list.every(g => selectedGroups.value.has(g.group_id))
+}
+
+async function batchChangeTemplate(tmplKey: string) {
+  const list = (groupsByTemplate.value.get(tmplKey) || []).filter(g => selectedGroups.value.has(g.group_id))
+  if (!list.length) return
+  const options = ['（无 / 默认）', ...templateNames.value]
+  const choice = window.prompt(
+    `为选中的 ${list.length} 个群切换模板，请输入模板名：\n可选：${options.join(', ')}`
+  )
+  if (choice === null) return
+  const newTemplate = choice.trim() === '（无 / 默认）' || !choice.trim() ? '' : choice.trim()
+  if (newTemplate && !templateNames.value.includes(newTemplate)) {
+    groupsError.value = `模板 "${newTemplate}" 不存在`
+    return
+  }
+  groupsError.value = ''
+  try {
+    for (const g of list) {
+      await upsertAutochatGroup(g.group_id, {
+        template: newTemplate,
+        chat_enabled: g.chat_enabled,
+        auto_enabled: g.auto_enabled,
+      })
+    }
+    selectedGroups.value = new Set()
+    await loadGroups()
+    await loadTemplates()
+  } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
+}
+
+async function batchRemoveGroups(tmplKey: string) {
+  const list = (groupsByTemplate.value.get(tmplKey) || []).filter(g => selectedGroups.value.has(g.group_id))
+  if (!list.length) return
+  if (!window.confirm(`确定移除选中的 ${list.length} 个群的覆盖配置？`)) return
+  groupsError.value = ''
+  try {
+    for (const g of list) {
+      await deleteAutochatGroup(g.group_id)
+    }
+    selectedGroups.value = new Set()
+    await loadGroups()
+    await loadTemplates()
+  } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
+}
+
 // ----- Templates -----
 interface TemplateRow extends AutochatTemplate {
   saving?: boolean
@@ -425,6 +572,23 @@ const templatesError = ref('')
 const availableModels = ref<string[]>([])
 // 关键词 chip-input 的临时输入文本（每个模板一个）
 const keywordDraft = ref<Record<string, string>>({})
+
+// ----- Template collapse -----
+const collapsedTemplates = ref(new Set<string>())
+function toggleTemplateCollapse(rowKey: string) {
+  const s = new Set(collapsedTemplates.value)
+  s.has(rowKey) ? s.delete(rowKey) : s.add(rowKey)
+  collapsedTemplates.value = s
+}
+function isTemplateCollapsed(rowKey: string) {
+  return collapsedTemplates.value.has(rowKey)
+}
+function collapseAllTemplates() {
+  collapsedTemplates.value = new Set(templates.value.map(t => t.rowKey))
+}
+function expandAllTemplates() {
+  collapsedTemplates.value = new Set()
+}
 
 async function loadAvailableModels() {
   try {
@@ -487,6 +651,8 @@ async function loadTemplates() {
       applyMultimodalMode(row)
       return row
     })
+    // 已有模板默认折叠，避免页面过长
+    collapsedTemplates.value = new Set(templates.value.map(t => t.rowKey))
   } catch (e) {
     templatesError.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -651,9 +817,42 @@ watch(tab, (newTab) => {
   background: rgba(255, 255, 255, 0.7);
 }
 .group-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
+.group-card-head.clickable { cursor: pointer; user-select: none; }
+.group-card-head.clickable:hover { opacity: 0.85; }
 .group-card-head .actions { display: flex; gap: 8px; }
 .group-id { font-weight: 700; margin-right: 8px; color: var(--foreground); }
+.collapse-arrow { display: inline-block; width: 16px; font-size: 11px; color: var(--muted-foreground); margin-right: 4px; }
 .badge { font-size: 11px; padding: 3px 8px; border-radius: 999px; margin-right: 4px; background: rgba(165, 180, 252, 0.18); color: var(--foreground); font-weight: 600; }
+
+/* 按模板分组 */
+.template-group-section {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+.template-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+}
+.template-group-header:hover { background: rgba(255, 255, 255, 0.8); }
+.template-group-body { padding: 0 12px 12px; }
+
+/* 批量操作栏 */
+.batch-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
 .badge-on { background: rgba(80, 200, 120, 0.18); color: #1e8a4a; }
 .badge-auto { background: rgba(120, 140, 240, 0.2); color: #5868c5; }
 .badge-list { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px; }
