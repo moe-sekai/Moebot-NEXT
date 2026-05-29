@@ -192,10 +192,19 @@
                 placeholder="输入关键词后按 Enter 添加"
               />
             </Field>
-            <Field v-if="t.used_by_groups?.length" label="绑定群" full>
-              <div class="badge-list">
-                <span v-for="gid in t.used_by_groups" :key="gid" class="badge badge-auto">{{ gid }}</span>
+            <Field label="绑定群聊" full hint="在此直接管理使用该模板的群，输入群号回车添加">
+              <div v-if="t.used_by_groups?.length" class="badge-list" style="margin-bottom: 8px;">
+                <span v-for="gid in t.used_by_groups" :key="gid" class="badge badge-auto">
+                  {{ gid }}
+                  <button type="button" class="chip-x" @click.stop="unbindGroupFromTemplate(t, gid)" title="解绑（群将变为默认配置）">×</button>
+                </span>
               </div>
+              <div v-else class="empty-hint" style="margin-bottom: 6px;">暂无群聊绑定此模板</div>
+              <input
+                type="text"
+                placeholder="输入群号按 Enter 绑定"
+                @keydown.enter.prevent="bindGroupToTemplate(t, $event)"
+              />
             </Field>
           </div>
         </div>
@@ -208,67 +217,57 @@
         <div class="card-heading">
           <div>
             <h2>单群组配置</h2>
-            <p>选择该群使用哪个对话模板（人设、模型、阈值、关键词由模板统一管理）。这里只保留模板绑定与命令/自动回复开关。群按模板分组显示。</p>
+            <p>仅控制 /chat 命令和阈值自动回复开关；模板绑定请在「模板」页操作。默认阈值：<code>{{ defaultThreshold }}</code></p>
           </div>
           <div class="actions">
-            <UiButton variant="outline" size="sm" @click="expandAllGroupSections">全部展开</UiButton>
-            <UiButton variant="outline" size="sm" @click="collapseAllGroupSections">全部折叠</UiButton>
             <UiButton variant="outline" size="sm" :loading="groupsLoading" @click="loadGroups">刷新</UiButton>
-            <UiButton variant="default" size="sm" @click="addGroup">添加群</UiButton>
           </div>
         </div>
 
         <UiAlert v-if="groupsError" variant="destructive" title="加载/保存失败">{{ groupsError }}</UiAlert>
 
-        <div v-if="!groups.length && !groupsLoading" class="empty">
-          暂无单群覆盖配置。点击"添加群"录入群号即可。默认阈值：<code>{{ defaultThreshold }}</code>
+        <Field label="批量添加群" full hint="每行一个群号，或逗号/空格分隔，回车提交">
+          <textarea v-model="addGroupsText" rows="4" placeholder="123456&#10;789012, 345678" />
+        </Field>
+        <div style="margin-bottom: 16px;">
+          <UiButton variant="default" size="sm" @click="addGroupsBatch">批量添加</UiButton>
         </div>
 
-        <div v-for="[tmplKey, tmplGroups] in groupsByTemplate" :key="tmplKey" class="template-group-section">
-          <div class="template-group-header" @click="toggleTemplateGroupSection(tmplKey)">
-            <span class="collapse-arrow">{{ isTemplateGroupCollapsed(tmplKey) ? '▶' : '▼' }}</span>
-            <strong>{{ tmplKey || '未绑定模板（默认）' }}</strong>
-            <span class="badge">{{ tmplGroups.length }} 个群</span>
-          </div>
-          <div v-show="!isTemplateGroupCollapsed(tmplKey)" class="template-group-body">
-            <div class="batch-actions">
-              <label class="check"><input type="checkbox" :checked="isAllSelectedInGroup(tmplKey)" @change="toggleSelectAllInGroup(tmplKey, $event)" /> 全选</label>
-              <UiButton size="sm" variant="outline" @click="batchChangeTemplate(tmplKey)">批量切换模板</UiButton>
-              <UiButton size="sm" variant="destructive" @click="batchRemoveGroups(tmplKey)">批量移除</UiButton>
-            </div>
-            <div v-for="g in tmplGroups" :key="g.group_id" class="group-card">
-              <div class="group-card-head clickable" @click="toggleGroupCollapse(g.group_id)">
-                <div>
-                  <label class="check" style="margin-right: 8px;" @click.stop>
-                    <input type="checkbox" :checked="selectedGroups.has(g.group_id)" @change="toggleSelectGroup(g.group_id)" />
-                  </label>
-                  <span class="collapse-arrow">{{ isGroupCollapsed(g.group_id) ? '▶' : '▼' }}</span>
-                  <span class="group-id">群 {{ g.group_id }}</span>
-                  <span v-if="g.template" class="badge">{{ g.template }}</span>
-                  <span v-if="g.chat_enabled" class="badge badge-on">/chat</span>
-                  <span v-if="g.auto_enabled" class="badge badge-auto">自动回复</span>
-                </div>
-                <div class="actions" @click.stop>
-                  <UiButton variant="outline" size="sm" :loading="g.saving" @click="saveGroup(g)">保存</UiButton>
-                  <UiButton variant="destructive" size="sm" @click="removeGroup(g)">移除</UiButton>
-                </div>
-              </div>
-              <div v-show="!isGroupCollapsed(g.group_id)" class="form-grid">
-                <Field label="使用模板" hint="留空表示不绑定模板（使用全局默认 persona/模型/阈值）">
-                  <select v-model="g.template">
-                    <option value="">（无 / 默认）</option>
-                    <option v-for="n in templateNames" :key="n" :value="n">{{ n }}</option>
-                  </select>
-                </Field>
-                <Field label="开关">
-                  <div class="check-row">
-                    <label class="check"><input type="checkbox" v-model="g.chat_enabled" /> /chat 命令</label>
-                    <label class="check"><input type="checkbox" v-model="g.auto_enabled" /> 阈值/关键词自动回复</label>
-                  </div>
-                </Field>
-              </div>
-            </div>
-          </div>
+        <div v-if="!groups.length && !groupsLoading" class="empty">
+          暂无单群覆盖配置。在上方输入群号添加。
+        </div>
+
+        <table v-if="groups.length" class="group-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" :checked="isAllGroupsSelected" @change="toggleSelectAllGroups($event)" /></th>
+              <th>群号</th>
+              <th>绑定模板</th>
+              <th>/chat</th>
+              <th>自动回复</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="g in groups" :key="g.group_id">
+              <td><input type="checkbox" :checked="selectedGroups.has(g.group_id)" @change="toggleSelectGroup(g.group_id)" /></td>
+              <td><span class="group-id">{{ g.group_id }}</span></td>
+              <td>
+                <span v-if="g.template" class="badge badge-auto">{{ g.template }}</span>
+                <span v-else class="muted-text">（默认）</span>
+              </td>
+              <td><label class="check"><input type="checkbox" v-model="g.chat_enabled" @change="saveGroupSilent(g)" /></label></td>
+              <td><label class="check"><input type="checkbox" v-model="g.auto_enabled" @change="saveGroupSilent(g)" /></label></td>
+              <td><UiButton variant="destructive" size="sm" @click="removeGroup(g)">移除</UiButton></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div v-if="groups.length && selectedGroups.size > 0" class="batch-actions" style="margin-top: 12px;">
+          <span>已选 {{ selectedGroups.size }} 项</span>
+          <UiButton size="sm" variant="destructive" @click="batchRemoveAllSelected">批量移除</UiButton>
+          <UiButton size="sm" variant="outline" @click="batchToggleChat">批量开关 /chat</UiButton>
+          <UiButton size="sm" variant="outline" @click="batchToggleAuto">批量开关 自动回复</UiButton>
         </div>
       </UiCard>
     </template>
@@ -382,6 +381,8 @@ const groups = ref<GroupRow[]>([])
 const defaultThreshold = ref(0)
 const groupsLoading = ref(false)
 const groupsError = ref('')
+const addGroupsText = ref('')
+
 async function loadGroups() {
   groupsLoading.value = true
   groupsError.value = ''
@@ -395,18 +396,32 @@ async function loadGroups() {
     groupsLoading.value = false
   }
 }
-function addGroup() {
-  const input = window.prompt('请输入要添加的群号（QQ 群 ID）：')
-  if (!input) return
-  const gid = Number(input.trim())
-  if (!Number.isFinite(gid) || gid <= 0) { groupsError.value = '群号无效。'; return }
-  if (groups.value.some(g => g.group_id === gid)) return
-  groups.value.unshift({
-    group_id: gid, persona: '', willing_threshold: null, model: '', template: '',
-    chat_enabled: false, auto_enabled: false,
-  })
+
+function parseGroupIDs(text: string): number[] {
+  return text.split(/[\n,，\s]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter(n => Number.isFinite(n) && n > 0)
 }
-async function saveGroup(g: GroupRow) {
+
+async function addGroupsBatch() {
+  const ids = parseGroupIDs(addGroupsText.value)
+  if (!ids.length) { groupsError.value = '未检测到有效群号'; return }
+  const existing = new Set(groups.value.map(g => g.group_id))
+  const newIds = ids.filter(id => !existing.has(id))
+  if (!newIds.length) { groupsError.value = '所有群号已存在'; return }
+  groupsError.value = ''
+  for (const gid of newIds) {
+    groups.value.push({
+      group_id: gid, persona: '', willing_threshold: null, model: '', template: '',
+      chat_enabled: false, auto_enabled: false,
+    })
+  }
+  addGroupsText.value = ''
+}
+
+async function saveGroupSilent(g: GroupRow) {
   g.saving = true
   groupsError.value = ''
   try {
@@ -415,139 +430,115 @@ async function saveGroup(g: GroupRow) {
       chat_enabled: g.chat_enabled,
       auto_enabled: g.auto_enabled,
     })
-    await loadGroups()
-    // 同步刷新 templates（更新 used_by_groups 显示）
-    await loadTemplates()
   } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
   finally { g.saving = false }
 }
+
 async function removeGroup(g: GroupRow) {
-  if (!window.confirm(`移除群 ${g.group_id} 的所有覆盖配置？默认值会重新生效。`)) return
+  if (!window.confirm(`移除群 ${g.group_id} 的所有覆盖配置？`)) return
   try {
     await deleteAutochatGroup(g.group_id)
-    await loadGroups()
+    groups.value = groups.value.filter(x => x.group_id !== g.group_id)
+    await loadTemplates()
   } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
 }
 
-// ----- Group collapse & grouping -----
-const collapsedGroups = ref(new Set<number>())
-function toggleGroupCollapse(gid: number) {
-  const s = new Set(collapsedGroups.value)
-  s.has(gid) ? s.delete(gid) : s.add(gid)
-  collapsedGroups.value = s
-}
-function isGroupCollapsed(gid: number) {
-  return collapsedGroups.value.has(gid)
-}
-function collapseAllGroups() {
-  collapsedGroups.value = new Set(groups.value.map(g => g.group_id))
-}
-function expandAllGroups() {
-  collapsedGroups.value = new Set()
-}
-
-const collapsedTemplateGroups = ref(new Set<string>())
-function toggleTemplateGroupSection(key: string) {
-  const s = new Set(collapsedTemplateGroups.value)
-  s.has(key) ? s.delete(key) : s.add(key)
-  collapsedTemplateGroups.value = s
-}
-function isTemplateGroupCollapsed(key: string) {
-  return collapsedTemplateGroups.value.has(key)
-}
-function collapseAllGroupSections() {
-  const keys = [...groupsByTemplate.value.keys()]
-  collapsedTemplateGroups.value = new Set(keys)
-}
-function expandAllGroupSections() {
-  collapsedTemplateGroups.value = new Set()
-}
-
-const groupsByTemplate = computed(() => {
-  const map = new Map<string, GroupRow[]>()
-  // 按模板分组，排序：有模板的在前，无模板的在后
-  const withTemplate: GroupRow[] = []
-  const withoutTemplate: GroupRow[] = []
-  for (const g of groups.value) {
-    if (g.template) withTemplate.push(g)
-    else withoutTemplate.push(g)
-  }
-  // 有模板的按模板名聚合
-  const templateMap = new Map<string, GroupRow[]>()
-  for (const g of withTemplate) {
-    if (!templateMap.has(g.template!)) templateMap.set(g.template!, [])
-    templateMap.get(g.template!)!.push(g)
-  }
-  for (const [tmpl, list] of templateMap) {
-    map.set(tmpl, list)
-  }
-  if (withoutTemplate.length) {
-    map.set('', withoutTemplate)
-  }
-  return map
-})
-
+// ----- Group selection & batch ops -----
 const selectedGroups = ref(new Set<number>())
 function toggleSelectGroup(gid: number) {
   const s = new Set(selectedGroups.value)
   s.has(gid) ? s.delete(gid) : s.add(gid)
   selectedGroups.value = s
 }
-function toggleSelectAllInGroup(tmplKey: string, event: Event) {
+function toggleSelectAllGroups(event: Event) {
   const checked = (event.target as HTMLInputElement).checked
-  const list = groupsByTemplate.value.get(tmplKey) || []
-  const s = new Set(selectedGroups.value)
+  selectedGroups.value = checked ? new Set(groups.value.map(g => g.group_id)) : new Set()
+}
+const isAllGroupsSelected = computed(() =>
+  groups.value.length > 0 && groups.value.every(g => selectedGroups.value.has(g.group_id))
+)
+
+async function batchRemoveAllSelected() {
+  if (!selectedGroups.value.size) return
+  if (!window.confirm(`确定移除选中的 ${selectedGroups.value.size} 个群？`)) return
+  groupsError.value = ''
+  try {
+    for (const gid of selectedGroups.value) {
+      await deleteAutochatGroup(gid)
+    }
+    selectedGroups.value = new Set()
+    await loadGroups()
+    await loadTemplates()
+  } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
+}
+
+async function batchToggleChat() {
+  const list = groups.value.filter(g => selectedGroups.value.has(g.group_id))
+  if (!list.length) return
+  const target = !list.every(g => g.chat_enabled)
   for (const g of list) {
-    checked ? s.add(g.group_id) : s.delete(g.group_id)
+    g.chat_enabled = target
+    await saveGroupSilent(g)
   }
-  selectedGroups.value = s
-}
-function isAllSelectedInGroup(tmplKey: string): boolean {
-  const list = groupsByTemplate.value.get(tmplKey) || []
-  return list.length > 0 && list.every(g => selectedGroups.value.has(g.group_id))
 }
 
-async function batchChangeTemplate(tmplKey: string) {
-  const list = (groupsByTemplate.value.get(tmplKey) || []).filter(g => selectedGroups.value.has(g.group_id))
+async function batchToggleAuto() {
+  const list = groups.value.filter(g => selectedGroups.value.has(g.group_id))
   if (!list.length) return
-  const options = ['（无 / 默认）', ...templateNames.value]
-  const choice = window.prompt(
-    `为选中的 ${list.length} 个群切换模板，请输入模板名：\n可选：${options.join(', ')}`
-  )
-  if (choice === null) return
-  const newTemplate = choice.trim() === '（无 / 默认）' || !choice.trim() ? '' : choice.trim()
-  if (newTemplate && !templateNames.value.includes(newTemplate)) {
-    groupsError.value = `模板 "${newTemplate}" 不存在`
-    return
+  const target = !list.every(g => g.auto_enabled)
+  for (const g of list) {
+    g.auto_enabled = target
+    await saveGroupSilent(g)
   }
-  groupsError.value = ''
-  try {
-    for (const g of list) {
-      await upsertAutochatGroup(g.group_id, {
-        template: newTemplate,
-        chat_enabled: g.chat_enabled,
-        auto_enabled: g.auto_enabled,
-      })
-    }
-    selectedGroups.value = new Set()
-    await loadGroups()
-    await loadTemplates()
-  } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
 }
 
-async function batchRemoveGroups(tmplKey: string) {
-  const list = (groupsByTemplate.value.get(tmplKey) || []).filter(g => selectedGroups.value.has(g.group_id))
-  if (!list.length) return
-  if (!window.confirm(`确定移除选中的 ${list.length} 个群的覆盖配置？`)) return
-  groupsError.value = ''
-  try {
-    for (const g of list) {
-      await deleteAutochatGroup(g.group_id)
-    }
-    selectedGroups.value = new Set()
-    await loadGroups()
-    await loadTemplates()
-  } catch (e) { groupsError.value = e instanceof Error ? e.message : String(e) }
+// ----- Template group binding (在模板卡片内操作) -----
+async function bindGroupToTemplate(t: TemplateRow, event: KeyboardEvent) {
+  const input = event.target as HTMLInputElement
+  const gid = Number(input.value.trim())
+  if (!Number.isFinite(gid) || gid <= 0) return
+  input.value = ''
+  // 如果该群已在 groups 列表中，直接更新其 template
+  const existing = groups.value.find(g => g.group_id === gid)
+  if (existing) {
+    existing.template = t.name
+    await upsertAutochatGroup(gid, {
+      template: t.name,
+      chat_enabled: existing.chat_enabled,
+      auto_enabled: existing.auto_enabled,
+    })
+  } else {
+    // 新建群覆盖
+    await upsertAutochatGroup(gid, {
+      template: t.name,
+      chat_enabled: false,
+      auto_enabled: false,
+    })
+    groups.value.push({
+      group_id: gid, persona: '', willing_threshold: null, model: '',
+      template: t.name, chat_enabled: false, auto_enabled: false,
+    })
+  }
+  if (!t.used_by_groups) t.used_by_groups = []
+  const gidStr = String(gid)
+  if (!t.used_by_groups.includes(gidStr)) t.used_by_groups.push(gidStr)
+}
+
+async function unbindGroupFromTemplate(t: TemplateRow, gid: string) {
+  const numGid = Number(gid)
+  // 将群的 template 清空
+  const existing = groups.value.find(g => g.group_id === numGid)
+  if (existing) {
+    existing.template = ''
+    await upsertAutochatGroup(numGid, {
+      template: '',
+      chat_enabled: existing.chat_enabled,
+      auto_enabled: existing.auto_enabled,
+    })
+  } else {
+    await upsertAutochatGroup(numGid, { template: '', chat_enabled: false, auto_enabled: false })
+  }
+  t.used_by_groups = (t.used_by_groups || []).filter(x => x !== gid)
 }
 
 // ----- Templates -----
@@ -852,6 +843,39 @@ watch(tab, (newTab) => {
   padding: 8px 4px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 8px;
+}
+
+/* 群表格 */
+.group-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.group-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  border-bottom: 2px solid var(--border);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.group-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.group-table tr:hover td {
+  background: rgba(255, 255, 255, 0.5);
+}
+.group-table th:first-child,
+.group-table td:first-child {
+  width: 36px;
+  text-align: center;
+}
+.muted-text {
+  color: var(--muted-foreground);
+  font-size: 12px;
 }
 .badge-on { background: rgba(80, 200, 120, 0.18); color: #1e8a4a; }
 .badge-auto { background: rgba(120, 140, 240, 0.2); color: #5868c5; }
