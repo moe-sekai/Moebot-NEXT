@@ -120,6 +120,16 @@ func (m *MemoryManager) GetUserMemory(groupID, userID int64, templateName string
 	if item, ok := gm.UMS[fmt.Sprintf("%d", userID)]; ok {
 		return item.Text, nil
 	}
+	// 兼容旧数据：如果当前模板没有用户画像，回退查默认模板（旧数据）
+	if templateName != "" {
+		gm, err := m.load(groupID, "")
+		if err != nil {
+			return "", err
+		}
+		if item, ok := gm.UMS[fmt.Sprintf("%d", userID)]; ok {
+			return item.Text, nil
+		}
+	}
 	return "", nil
 }
 
@@ -129,6 +139,13 @@ func (m *MemoryManager) GetRecentSummaries(groupID int64, templateName string, l
 	gm, err := m.load(groupID, templateName)
 	if err != nil {
 		return nil, err
+	}
+	// 兼容旧数据：如果当前模板没有总结，回退查默认模板（旧数据）
+	if len(gm.Summaries) == 0 && templateName != "" {
+		gm, err = m.load(groupID, "")
+		if err != nil {
+			return nil, err
+		}
 	}
 	if len(gm.Summaries) == 0 {
 		return []string{}, nil
