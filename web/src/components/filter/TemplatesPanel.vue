@@ -210,6 +210,7 @@ async function submitNew() {
 
 function ruleSetFromTemplate(t: FilterTemplatePayload): RuleSet {
   return {
+    client_id_rules: { ...t.client_id_rules },
     user_id_rules: { ...t.user_id_rules },
     group_id_rules: { ...t.group_id_rules },
     message_rules: { ...t.message_rules },
@@ -220,6 +221,7 @@ function ruleSetFromTemplate(t: FilterTemplatePayload): RuleSet {
 
 function emptyRuleSet(): RuleSet {
   return {
+    client_id_rules: { mode: 'on', ids: [] },
     user_id_rules: { mode: 'on', ids: [] },
     group_id_rules: { mode: 'on', ids: [] },
     message_rules: { mode: 'on', filters: [], prefix: [], prefix_replace: '' },

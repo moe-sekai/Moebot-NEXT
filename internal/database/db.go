@@ -229,6 +229,10 @@ func seedDefaultFilterTemplate(db *gorm.DB, legacyUser, legacyGroup string) erro
 		// If the template already exists with empty rules and we have legacy
 		// values to migrate, fill them in once.
 		dirty := false
+		if t.ClientIDRules == "" || t.ClientIDRules == "{}" {
+			t.ClientIDRules = `{"mode":"on","ids":[]}`
+			dirty = true
+		}
 		if legacyUser != "" && legacyUser != "{}" && (t.UserIDRules == "" || t.UserIDRules == "{}" || t.UserIDRules == `{"mode":"on","ids":[]}`) {
 			t.UserIDRules = legacyUser
 			dirty = true
@@ -255,6 +259,7 @@ func seedDefaultFilterTemplate(db *gorm.DB, legacyUser, legacyGroup string) erro
 		Name:                "default",
 		Description:         "默认模板。当下游应用规则的 mode=default 时，回退到此模板的规则。",
 		Builtin:             true,
+		ClientIDRules:       `{"mode":"on","ids":[]}`,
 		UserIDRules:         user,
 		GroupIDRules:        group,
 		MessageRules:        `{"mode":"on"}`,

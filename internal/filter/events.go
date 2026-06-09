@@ -9,26 +9,27 @@ import (
 type EventKind string
 
 const (
-	EventAllow         EventKind = "allow"
-	EventBlock         EventKind = "block"
-	EventPrefixPass    EventKind = "prefix_pass"
-	EventClientUp      EventKind = "client_up"
-	EventClientDown    EventKind = "client_down"
-	EventUpstreamUp    EventKind = "upstream_up"
-	EventUpstreamDown  EventKind = "upstream_down"
+	EventAllow        EventKind = "allow"
+	EventBlock        EventKind = "block"
+	EventPrefixPass   EventKind = "prefix_pass"
+	EventClientUp     EventKind = "client_up"
+	EventClientDown   EventKind = "client_down"
+	EventUpstreamUp   EventKind = "upstream_up"
+	EventUpstreamDown EventKind = "upstream_down"
 )
 
 // Event is a small record published by the manager for SSE/WebUI consumption.
 type Event struct {
-	Seq       uint64    `json:"seq"`
-	Time      time.Time `json:"time"`
-	Kind      EventKind `json:"kind"`
-	Filter    string    `json:"filter,omitempty"`
-	Reason    string    `json:"reason,omitempty"`
-	UserID    int64     `json:"user_id,omitempty"`
-	GroupID   int64     `json:"group_id,omitempty"`
-	MsgType   string    `json:"msg_type,omitempty"`
-	Raw       string    `json:"raw,omitempty"`
+	Seq      uint64    `json:"seq"`
+	Time     time.Time `json:"time"`
+	Kind     EventKind `json:"kind"`
+	Filter   string    `json:"filter,omitempty"`
+	Reason   string    `json:"reason,omitempty"`
+	ClientID int64     `json:"client_id,omitempty"`
+	UserID   int64     `json:"user_id,omitempty"`
+	GroupID  int64     `json:"group_id,omitempty"`
+	MsgType  string    `json:"msg_type,omitempty"`
+	Raw      string    `json:"raw,omitempty"`
 }
 
 // eventBus is a small ring-buffered pub/sub.

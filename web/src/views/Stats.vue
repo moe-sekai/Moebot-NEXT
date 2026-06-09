@@ -225,13 +225,15 @@
               <span class="rank-row__id" :title="formatGroupRank(row)">{{
                 formatGroupRank(row)
               }}</span>
-              <div class="rank-row__bar">
-                <div
-                  class="rank-row__fill"
-                  :style="{ width: pct(row.count, maxGroupCount) + '%' }"
-                ></div>
+              <div class="rank-row__bar-wrap">
+                <div class="rank-row__bar">
+                  <div
+                    class="rank-row__fill"
+                    :style="{ width: pct(row.count, maxGroupCount) + '%' }"
+                  ></div>
+                </div>
+                <span class="rank-row__count">{{ formatNumber(row.count) }}</span>
               </div>
-              <span class="rank-row__count">{{ formatNumber(row.count) }}</span>
             </div>
           </div>
         </UiCard>
@@ -262,13 +264,15 @@
               <span class="rank-row__id" :title="formatUserRank(row)">{{
                 formatUserRank(row)
               }}</span>
-              <div class="rank-row__bar">
-                <div
-                  class="rank-row__fill"
-                  :style="{ width: pct(row.count, maxUserCount) + '%' }"
-                ></div>
+              <div class="rank-row__bar-wrap">
+                <div class="rank-row__bar">
+                  <div
+                    class="rank-row__fill"
+                    :style="{ width: pct(row.count, maxUserCount) + '%' }"
+                  ></div>
+                </div>
+                <span class="rank-row__count">{{ formatNumber(row.count) }}</span>
               </div>
-              <span class="rank-row__count">{{ formatNumber(row.count) }}</span>
             </div>
           </div>
         </UiCard>
@@ -312,20 +316,22 @@
             <div
               v-for="row in stats.by_platform"
               :key="row.platform"
-              class="rank-row"
+              class="rank-row rank-row--no-idx"
             >
               <span class="rank-row__id">{{ row.platform || "未知平台" }}</span>
-              <div class="rank-row__bar">
-                <div
-                  class="rank-row__fill"
-                  :style="{ width: pct(row.count, totalPlatformCount) + '%' }"
-                ></div>
+              <div class="rank-row__bar-wrap">
+                <div class="rank-row__bar">
+                  <div
+                    class="rank-row__fill"
+                    :style="{ width: pct(row.count, totalPlatformCount) + '%' }"
+                  ></div>
+                </div>
+                <span class="rank-row__count"
+                  >{{ formatNumber(row.count) }}（{{
+                    pct(row.count, totalPlatformCount).toFixed(1)
+                  }}%）</span
+                >
               </div>
-              <span class="rank-row__count"
-                >{{ formatNumber(row.count) }}（{{
-                  pct(row.count, totalPlatformCount).toFixed(1)
-                }}%）</span
-              >
             </div>
           </div>
         </UiCard>
@@ -348,22 +354,24 @@
             <div
               v-for="row in stats.by_client"
               :key="clientOptionKey(row.client_id)"
-              class="rank-row"
+              class="rank-row rank-row--no-idx"
             >
               <span class="rank-row__id" :title="formatClient(row.client_id)">{{
                 formatClient(row.client_id)
               }}</span>
-              <div class="rank-row__bar">
-                <div
-                  class="rank-row__fill"
-                  :style="{ width: pct(row.count, totalClientCount) + '%' }"
-                ></div>
+              <div class="rank-row__bar-wrap">
+                <div class="rank-row__bar">
+                  <div
+                    class="rank-row__fill"
+                    :style="{ width: pct(row.count, totalClientCount) + '%' }"
+                  ></div>
+                </div>
+                <span class="rank-row__count"
+                  >{{ formatNumber(row.count) }}（{{
+                    pct(row.count, totalClientCount).toFixed(1)
+                  }}%）</span
+                >
               </div>
-              <span class="rank-row__count"
-                >{{ formatNumber(row.count) }}（{{
-                  pct(row.count, totalClientCount).toFixed(1)
-                }}%）</span
-              >
             </div>
           </div>
         </UiCard>
@@ -830,21 +838,29 @@ function formatTime(value: string): string {
 .rank-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 /*
- * 关键改动：原 .rank-row 用 `minmax(80px, 1fr)` 在窄列里被压缩到看不见；
- * 这里改成 `minmax(0, 1fr)` 允许内容自由伸缩，长 ID 走 word-break 换行。
+ * 关键设计（v2 修复 "一行一个字符" 问题）：
+ *   - ID 列固定宽度 240px，不再用 fr 单位。
+ *   - ID 用 overflow-wrap: anywhere + word-break: normal，
+ *     长 ID 优先在空格 / "·" / 中文边界换行，只有在完全无断点时才任意断字。
+ *   - bar + count 用 .rank-row__bar-wrap 包成一行：bar 弹性占满、count 固定宽度。
+ *   - 来源 tab（无 idx）用 .rank-row--no-idx 让 ID 占第 1 列。
  */
 .rank-row {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1.2fr) minmax(0, 2fr) auto;
+  grid-template-columns: 24px 240px minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
+  column-gap: 14px;
+  row-gap: 6px;
   font-size: 13px;
-  padding: 6px 4px;
+  padding: 8px 6px;
   border-radius: 8px;
   transition: background 0.15s;
+}
+.rank-row--no-idx {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
 }
 .rank-row:hover {
   background: rgba(99, 102, 241, 0.04);
@@ -854,25 +870,35 @@ function formatTime(value: string): string {
   font-weight: 700;
   font-size: 12px;
 }
-/*
- * 关键改动：原 .rank-row__id 是 `white-space: nowrap` + ellipsis，
- * 长 ID 会被截成 "On…"。这里改成 normal + break-all，长 ID 换行。
- */
 .rank-row__id {
   font-family:
     ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
   font-size: 12.5px;
   color: var(--foreground);
-  white-space: normal;
-  word-break: break-all;
-  line-height: 1.4;
+  line-height: 1.45;
+  min-width: 0;
+  /*
+   * 关键：默认不随意断字。
+   * "OneBot 2910781788" 中间有空格，优先在空格处换行 → "OneBot\n2910781788"。
+   * "OneBot 2621289583" 同样会空格处换行。
+   * 真正无断点的极长串才用 overflow-wrap 兜底（不会发生在当前数据上）。
+   */
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.rank-row__bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 .rank-row__bar {
+  flex: 1 1 auto;
   height: 8px;
   background: rgba(99, 102, 241, 0.1);
   border-radius: 999px;
   overflow: hidden;
+  min-width: 60px;
 }
 .rank-row__fill {
   height: 100%;
@@ -885,11 +911,13 @@ function formatTime(value: string): string {
   transition: width 0.25s ease;
 }
 .rank-row__count {
+  flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--muted-foreground);
   white-space: nowrap;
   text-align: right;
+  font-size: 12px;
 }
 
 .args-cell {

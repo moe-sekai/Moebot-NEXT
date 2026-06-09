@@ -1,5 +1,9 @@
 <template>
   <div class="rule-chips" role="list">
+    <span class="rule-chip" :class="`tone-${toneOf(rules.client_id_rules.mode)}`" role="listitem">
+      <span class="chip-key">client-id</span>
+      <span class="chip-val">{{ labelOf(rules.client_id_rules.mode) }}</span>
+    </span>
     <span class="rule-chip" :class="`tone-${toneOf(rules.user_id_rules.mode)}`" role="listitem">
       <span class="chip-key">user-id</span>
       <span class="chip-val">{{ labelOf(rules.user_id_rules.mode) }}</span>

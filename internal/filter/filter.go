@@ -13,6 +13,7 @@ import (
 // Filter is the compiled, runtime view of a downstream FilterApp's rules.
 type Filter struct {
 	Name           string
+	ClientID       IDFilter
 	UserID         IDFilter
 	GroupID        IDFilter
 	PrivateMessage MessageFilter
@@ -50,14 +51,16 @@ type MessageFilter struct {
 
 // CompiledRules is what the manager passes when (re)building a Filter.
 type CompiledRules struct {
-	Name           string
-	UserID         IDRule
-	GroupID        IDRule
-	Message        MessageRule
-	PrivateMessage MessageRule
-	GroupMessage   MessageRule
-	DefaultUserID  IDRule
-	DefaultGroupID IDRule
+	Name            string
+	ClientID        IDRule
+	UserID          IDRule
+	GroupID         IDRule
+	Message         MessageRule
+	PrivateMessage  MessageRule
+	GroupMessage    MessageRule
+	DefaultClientID IDRule
+	DefaultUserID   IDRule
+	DefaultGroupID  IDRule
 }
 
 // Compile rebuilds the filter's runtime state from raw rules. It applies the
@@ -67,6 +70,10 @@ func (f *Filter) Compile(c CompiledRules) {
 	defer f.mu.Unlock()
 	f.Name = c.Name
 
+	clientID := c.ClientID
+	if clientID.Mode == "" || clientID.Mode == ModeDefault {
+		clientID = c.DefaultClientID
+	}
 	userID := c.UserID
 	if userID.Mode == "" || userID.Mode == ModeDefault {
 		userID = c.DefaultUserID
@@ -75,6 +82,7 @@ func (f *Filter) Compile(c CompiledRules) {
 	if groupID.Mode == "" || groupID.Mode == ModeDefault {
 		groupID = c.DefaultGroupID
 	}
+	f.ClientID = IDFilter{IDRule: clientID}
 	f.UserID = IDFilter{IDRule: userID}
 	f.GroupID = IDFilter{IDRule: groupID}
 
@@ -109,14 +117,25 @@ func compileMessage(rule MessageRule) MessageFilter {
 // Allow checks whether an OneBot message should be forwarded. It may rewrite
 // the message in-place when prefix-replace is configured.
 func (f *Filter) Allow(msg *OneBotMessage, debug bool) bool {
+	return f.AllowFromClient(msg, msg.Partial.SelfID, debug)
+}
+
+// AllowFromClient checks a message with an explicit upstream websocket client
+// id. The explicit client id wins over the payload's self_id so multi-upstream
+// routing stays tied to the connection that produced the event.
+func (f *Filter) AllowFromClient(msg *OneBotMessage, clientID int64, debug bool) bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
 	base := Event{
-		UserID:  msg.Partial.UserID,
-		GroupID: msg.Partial.GroupID,
-		MsgType: msg.Partial.MessageType,
-		Raw:     msg.Partial.RawMessage,
+		ClientID: clientID,
+		UserID:   msg.Partial.UserID,
+		GroupID:  msg.Partial.GroupID,
+		MsgType:  msg.Partial.MessageType,
+		Raw:      msg.Partial.RawMessage,
+	}
+	if !f.allowClientLocked(clientID, base, debug) {
+		return false
 	}
 	var rule *MessageFilter
 	switch msg.Partial.MessageType {
@@ -232,12 +251,34 @@ func (f *Filter) Allow(msg *OneBotMessage, debug bool) bool {
 	return false
 }
 
+// AllowClientEvent checks only the upstream websocket client id. It is used for
+// non-message OneBot events, where user/group/message rules do not apply.
+func (f *Filter) AllowClientEvent(clientID int64, debug bool) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.allowClientLocked(clientID, Event{ClientID: clientID}, debug)
+}
+
+func (f *Filter) allowClientLocked(clientID int64, base Event, debug bool) bool {
+	if f.ClientID.matchClient(clientID) {
+		return true
+	}
+	if debug {
+		log.Debug().Str("filter", f.Name).Int64("client_id", clientID).Msg("filter: client blocked")
+	}
+	b := base
+	b.Kind = EventBlock
+	b.Reason = "client_id"
+	f.emit(b)
+	return false
+}
+
 func (idf *IDFilter) match(id int64) bool {
 	if id == 0 {
 		return true
 	}
 	switch idf.Mode {
-	case "", ModeOn:
+	case "", ModeDefault, ModeOn:
 		return true
 	case ModeOff:
 		return false
@@ -245,6 +286,20 @@ func (idf *IDFilter) match(id int64) bool {
 		return slices.Contains(idf.IDs, id)
 	case ModeBlacklist:
 		return !slices.Contains(idf.IDs, id)
+	}
+	return true
+}
+
+func (idf *IDFilter) matchClient(id int64) bool {
+	switch idf.Mode {
+	case "", ModeDefault, ModeOn:
+		return true
+	case ModeOff:
+		return false
+	case ModeWhitelist:
+		return id != 0 && slices.Contains(idf.IDs, id)
+	case ModeBlacklist:
+		return id == 0 || !slices.Contains(idf.IDs, id)
 	}
 	return true
 }

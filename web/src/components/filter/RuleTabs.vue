@@ -17,6 +17,14 @@
     <div class="rule-tabs-body">
       <div v-show="activeTab === 'id'" class="rule-tabs-grid">
         <IDRuleEditor
+          label="client-id / websocket client"
+          hint="按 OneBot 连接的 self_id 过滤，可让某个 Bot 账号不触发某些插件功能"
+          :model-value="modelValue.client_id_rules"
+          :allow-default="allowDefault"
+          :disabled="disabled"
+          @update:model-value="update('client_id_rules', $event)"
+        />
+        <IDRuleEditor
           label="user-id 名单"
           hint="按 QQ 号过滤来源用户"
           :model-value="modelValue.user_id_rules"
@@ -76,6 +84,7 @@ import MessageRuleEditor from './MessageRuleEditor.vue'
 import type { FilterIDRule, FilterMessageRule } from '../../api/types'
 
 export type RuleSet = {
+  client_id_rules: FilterIDRule
   user_id_rules: FilterIDRule
   group_id_rules: FilterIDRule
   message_rules: FilterMessageRule

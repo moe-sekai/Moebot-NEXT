@@ -166,7 +166,7 @@
               <p v-else-if="a.system_transport" class="app-template-hint">
                 <strong>系统传输闸门</strong>：负责把 Filter 网关收到的事件转发给 Bot 主进程，是所有插件接收消息的唯一通道。
                 规则被运行时强制锁定为「全部放行」，避免与各 <code>plugin:*</code> 应用的规则形成 AND 串联。
-                想限制某个插件的可用群/用户，请去对应的 <code>plugin:&lt;name&gt;</code> 应用配置；
+                想限制某个插件的可用 client / 群 / 用户，请去对应的 <code>plugin:&lt;name&gt;</code> 应用配置；
                 这里只允许调整 URI / AccessToken / 启用状态等传输参数。
               </p>
 
@@ -300,6 +300,7 @@
           <UiBadge :variant="eventBadgeVariant(ev.kind)">{{ ev.kind }}</UiBadge>
           <span class="filter-event-time">{{ formatEventTime(ev.time) }}</span>
           <span v-if="ev.filter">[{{ ev.filter }}]</span>
+          <span v-if="ev.client_id">c:{{ ev.client_id }}</span>
           <span v-if="ev.user_id">u:{{ ev.user_id }}</span>
           <span v-if="ev.group_id">g:{{ ev.group_id }}</span>
           <span v-if="ev.reason" class="ev-reason">{{ ev.reason }}</span>
@@ -408,7 +409,7 @@ const filteredEvents = computed(() => {
     if (!kinds.has(ev.kind)) return false
     if (name && ev.filter !== name) return false
     if (!q) return true
-    const haystack = [ev.raw, ev.reason, ev.user_id, ev.group_id, ev.filter]
+    const haystack = [ev.raw, ev.reason, ev.client_id, ev.user_id, ev.group_id, ev.filter]
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
@@ -462,6 +463,7 @@ async function loadAll() {
 
 function normalizeApp(a: FilterAppPayload): AppDraft {
   const empty: FilterEffectiveRules = {
+    client_id_rules: { mode: 'on', ids: [] },
     user_id_rules: { mode: 'on', ids: [] },
     group_id_rules: { mode: 'on', ids: [] },
     message_rules: { mode: 'on', filters: [], prefix: [], prefix_replace: '' },
@@ -471,6 +473,7 @@ function normalizeApp(a: FilterAppPayload): AppDraft {
   return {
     ...a,
     template_id: a.template_id ?? null,
+    client_id_rules: a.client_id_rules || { mode: '', ids: [] },
     user_id_rules: a.user_id_rules || { mode: '', ids: [] },
     group_id_rules: a.group_id_rules || { mode: '', ids: [] },
     message_rules: a.message_rules || { mode: '', filters: [], prefix: [], prefix_replace: '' },
@@ -514,6 +517,7 @@ function ruleSetOf(a: AppDraft): RuleSet {
     const t = templates.value.find((x) => x.id === a.template_id)
     if (t) {
       return {
+        client_id_rules: { ...t.client_id_rules },
         user_id_rules: { ...t.user_id_rules },
         group_id_rules: { ...t.group_id_rules },
         message_rules: { ...t.message_rules },
@@ -523,6 +527,7 @@ function ruleSetOf(a: AppDraft): RuleSet {
     }
   }
   return {
+    client_id_rules: a.client_id_rules,
     user_id_rules: a.user_id_rules,
     group_id_rules: a.group_id_rules,
     message_rules: a.message_rules,
@@ -532,6 +537,7 @@ function ruleSetOf(a: AppDraft): RuleSet {
 }
 
 function updateAppRules(a: AppDraft, v: RuleSet) {
+  a.client_id_rules = v.client_id_rules
   a.user_id_rules = v.user_id_rules
   a.group_id_rules = v.group_id_rules
   a.message_rules = v.message_rules
@@ -560,12 +566,14 @@ function addNew() {
     system_transport: false,
     sort_order: apps.value.length,
     template_id: null,
+    client_id_rules: { mode: 'default', ids: [] },
     user_id_rules: { mode: 'default', ids: [] },
     group_id_rules: { mode: 'default', ids: [] },
     message_rules: { mode: 'on', filters: [], prefix: [], prefix_replace: '' },
     private_message_rules: { mode: 'default', filters: [], prefix: [], prefix_replace: '' },
     group_message_rules: { mode: 'default', filters: [], prefix: [], prefix_replace: '' },
     effective_rules: {
+      client_id_rules: { mode: 'default', ids: [] },
       user_id_rules: { mode: 'default', ids: [] },
       group_id_rules: { mode: 'default', ids: [] },
       message_rules: { mode: 'on', filters: [], prefix: [], prefix_replace: '' },

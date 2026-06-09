@@ -144,6 +144,7 @@ func (d *DB) GetDefaultFilterTemplate() (*models.FilterTemplate, error) {
 		Name:                DefaultFilterTemplateName,
 		Description:         "默认模板。当下游应用规则的 mode=default 时，回退到此模板的规则。",
 		Builtin:             true,
+		ClientIDRules:       `{"mode":"on","ids":[]}`,
 		UserIDRules:         `{"mode":"on","ids":[]}`,
 		GroupIDRules:        `{"mode":"on","ids":[]}`,
 		MessageRules:        `{"mode":"on"}`,

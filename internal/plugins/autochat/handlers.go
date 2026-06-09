@@ -82,7 +82,7 @@ func (p *pluginImpl) handleChat(ctx *zero.Ctx) {
 	userID := ctx.Event.UserID
 	// Filter 网关：控制台「Filter」页面给本插件分配的 internal app 模板，
 	// 决定该 group/user/消息是否被允许触发对话。失配时静默忽略。
-	if !p.allowedByFilter(groupID, userID, false, ctx.Event.RawMessage) {
+	if !p.allowedByFilter(ctx.Event.SelfID, groupID, userID, false, ctx.Event.RawMessage) {
 		return
 	}
 	// 兼容旧 /开启聊天 /关闭聊天 命令的本地白名单。
@@ -137,7 +137,7 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 	groupID := ctx.Event.GroupID
 	userID := ctx.Event.UserID
 	msg := ctx.Event.Message
-	if !p.allowedByFilter(groupID, userID, false, ctx.Event.RawMessage) {
+	if !p.allowedByFilter(ctx.Event.SelfID, groupID, userID, false, ctx.Event.RawMessage) {
 		return
 	}
 	if !p.chatWhiteList.Check(groupID) {

@@ -936,6 +936,7 @@ export interface FilterGatewayPayload {
 }
 
 export interface FilterEffectiveRules {
+  client_id_rules: FilterIDRule;
   user_id_rules: FilterIDRule;
   group_id_rules: FilterIDRule;
   message_rules: FilterMessageRule;
@@ -954,6 +955,7 @@ export interface FilterAppPayload {
   system_transport: boolean;
   sort_order: number;
   template_id: number | null;
+  client_id_rules: FilterIDRule;
   user_id_rules: FilterIDRule;
   group_id_rules: FilterIDRule;
   message_rules: FilterMessageRule;
@@ -967,6 +969,7 @@ export interface FilterTemplatePayload {
   name: string;
   description: string;
   builtin: boolean;
+  client_id_rules: FilterIDRule;
   user_id_rules: FilterIDRule;
   group_id_rules: FilterIDRule;
   message_rules: FilterMessageRule;
@@ -1022,6 +1025,7 @@ export interface FilterEvent {
   kind: FilterEventKind;
   filter?: string;
   reason?: string;
+  client_id?: number;
   user_id?: number;
   group_id?: number;
   msg_type?: string;

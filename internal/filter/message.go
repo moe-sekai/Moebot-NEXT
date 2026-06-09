@@ -2,6 +2,8 @@ package filter
 
 import (
 	"encoding/json"
+	"strconv"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 )
@@ -29,6 +31,27 @@ type OneBotMessagePartial struct {
 type OneBotMessageContent struct {
 	Type string                 `json:"type"`
 	Data map[string]interface{} `json:"data"`
+}
+
+// ExtractSelfID attempts to read a numeric self_id from any OneBot JSON event.
+// It accepts both numeric and string encodings for compatibility with adapters.
+func ExtractSelfID(raw []byte) int64 {
+	var probe struct {
+		SelfID json.RawMessage `json:"self_id"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil || len(probe.SelfID) == 0 || string(probe.SelfID) == "null" {
+		return 0
+	}
+	var id int64
+	if err := json.Unmarshal(probe.SelfID, &id); err == nil {
+		return id
+	}
+	var s string
+	if err := json.Unmarshal(probe.SelfID, &s); err == nil {
+		id, _ = strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+		return id
+	}
+	return 0
 }
 
 // ParseOneBotMessage attempts to parse an OneBot11 event payload. Returns nil

@@ -218,7 +218,7 @@ func (p *pluginImpl) Init(ctx *plugin.Context) error {
 				cacheMu.Unlock()
 
 				isPrivate := ev.MessageType == "private" || ev.DetailType == "private"
-				allow := filterMgr.AllowMessage(filterAppName, ev.GroupID, ev.UserID, isPrivate, ev.RawMessage)
+				allow := filterMgr.AllowMessageForClient(filterAppName, ev.SelfID, ev.GroupID, ev.UserID, isPrivate, ev.RawMessage)
 
 				cacheMu.Lock()
 				// 顺手清理过期项，防止长生命周期 map 累积。

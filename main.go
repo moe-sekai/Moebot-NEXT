@@ -256,6 +256,7 @@ func pluginsDataDir(cfg *config.Config) string {
 // 旧版本残留的用户白/黑名单与插件层规则形成 AND 串联，造成意料之外的拦截。
 func seedBuiltinFilterApp(db *database.DB, drv config.DriverConfig) error {
 	builtinName := filter.BuiltinTransportName
+	lockedClientID := filter.EncodeIDRule(filter.IDRule{Mode: filter.ModeOn})
 	lockedUserID := filter.EncodeIDRule(filter.IDRule{Mode: filter.ModeOn})
 	lockedGroupID := filter.EncodeIDRule(filter.IDRule{Mode: filter.ModeOn})
 	lockedMsg := filter.EncodeMessageRule(filter.MessageRule{Mode: filter.ModeOn})
@@ -265,6 +266,10 @@ func seedBuiltinFilterApp(db *database.DB, drv config.DriverConfig) error {
 		dirty := false
 		if existing.TemplateID != nil {
 			existing.TemplateID = nil
+			dirty = true
+		}
+		if existing.ClientIDRules != lockedClientID {
+			existing.ClientIDRules = lockedClientID
 			dirty = true
 		}
 		if existing.UserIDRules != lockedUserID {
@@ -316,6 +321,7 @@ func seedBuiltinFilterApp(db *database.DB, drv config.DriverConfig) error {
 		Enabled:             true,
 		Builtin:             true,
 		SortOrder:           0,
+		ClientIDRules:       lockedClientID,
 		UserIDRules:         lockedUserID,
 		GroupIDRules:        lockedGroupID,
 		MessageRules:        lockedMsg,

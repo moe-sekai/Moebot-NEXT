@@ -29,8 +29,9 @@ type YAMLServer struct {
 }
 
 type YAMLDefaults struct {
-	UserID  YAMLIDRule `yaml:"user-id,omitempty"`
-	GroupID YAMLIDRule `yaml:"group-id,omitempty"`
+	ClientID YAMLIDRule `yaml:"client-id,omitempty"`
+	UserID   YAMLIDRule `yaml:"user-id,omitempty"`
+	GroupID  YAMLIDRule `yaml:"group-id,omitempty"`
 }
 
 type YAMLIDRule struct {
@@ -49,6 +50,7 @@ type YAMLBotApp struct {
 	Name           string          `yaml:"name"`
 	URI            string          `yaml:"uri"`
 	AccessToken    string          `yaml:"access-token,omitempty"`
+	ClientID       YAMLIDRule      `yaml:"client-id,omitempty"`
 	UserID         YAMLIDRule      `yaml:"user-id,omitempty"`
 	GroupID        YAMLIDRule      `yaml:"group-id,omitempty"`
 	Message        YAMLMessageRule `yaml:"message,omitempty"`
@@ -74,6 +76,7 @@ func ExportYAML(gateway *models.FilterGateway, defaultTemplate *models.FilterTem
 		Debug:      gateway.Debug,
 	}
 	if defaultTemplate != nil {
+		cfg.Server.Default.ClientID = idRuleToYAML(DecodeIDRule(defaultTemplate.ClientIDRules))
 		cfg.Server.Default.UserID = idRuleToYAML(DecodeIDRule(defaultTemplate.UserIDRules))
 		cfg.Server.Default.GroupID = idRuleToYAML(DecodeIDRule(defaultTemplate.GroupIDRules))
 	}
@@ -84,11 +87,11 @@ func ExportYAML(gateway *models.FilterGateway, defaultTemplate *models.FilterTem
 	}
 	cfg.BotApps = make([]YAMLBotApp, 0, len(apps))
 	for _, a := range apps {
-		ur, gr := a.UserIDRules, a.GroupIDRules
+		cr, ur, gr := a.ClientIDRules, a.UserIDRules, a.GroupIDRules
 		mr, pr, grm := a.MessageRules, a.PrivateMessageRules, a.GroupMessageRules
 		if a.TemplateID != nil {
 			if t, ok := tplByID[*a.TemplateID]; ok {
-				ur, gr = t.UserIDRules, t.GroupIDRules
+				cr, ur, gr = t.ClientIDRules, t.UserIDRules, t.GroupIDRules
 				mr, pr, grm = t.MessageRules, t.PrivateMessageRules, t.GroupMessageRules
 			}
 		}
@@ -96,6 +99,7 @@ func ExportYAML(gateway *models.FilterGateway, defaultTemplate *models.FilterTem
 			Name:           a.Name,
 			URI:            a.URI,
 			AccessToken:    a.AccessToken,
+			ClientID:       idRuleToYAML(DecodeIDRule(cr)),
 			UserID:         idRuleToYAML(DecodeIDRule(ur)),
 			GroupID:        idRuleToYAML(DecodeIDRule(gr)),
 			Message:        msgRuleToYAML(DecodeMessageRule(mr)),
@@ -144,6 +148,7 @@ func ApplyYAMLToModels(cfg *YAMLConfig, gateway *models.FilterGateway, defaultTe
 	}
 	gateway.Debug = cfg.Server.Debug
 	if defaultTemplate != nil {
+		defaultTemplate.ClientIDRules = EncodeIDRule(yamlToIDRule(cfg.Server.Default.ClientID))
 		defaultTemplate.UserIDRules = EncodeIDRule(yamlToIDRule(cfg.Server.Default.UserID))
 		defaultTemplate.GroupIDRules = EncodeIDRule(yamlToIDRule(cfg.Server.Default.GroupID))
 	}
@@ -155,6 +160,7 @@ func ApplyYAMLToModels(cfg *YAMLConfig, gateway *models.FilterGateway, defaultTe
 			URI:                 b.URI,
 			AccessToken:         b.AccessToken,
 			Enabled:             true,
+			ClientIDRules:       EncodeIDRule(yamlToIDRule(b.ClientID)),
 			UserIDRules:         EncodeIDRule(yamlToIDRule(b.UserID)),
 			GroupIDRules:        EncodeIDRule(yamlToIDRule(b.GroupID)),
 			MessageRules:        EncodeMessageRule(yamlToMsgRule(b.Message)),

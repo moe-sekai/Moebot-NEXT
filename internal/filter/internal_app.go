@@ -70,6 +70,7 @@ func SeedInternalApp(db *database.DB, pluginName, displayName string) error {
 		Internal:            true,
 		SortOrder:           100, // 排在用户自定义 app 之后
 		TemplateID:          &tplID,
+		ClientIDRules:       EncodeIDRule(IDRule{Mode: ModeDefault}),
 		UserIDRules:         EncodeIDRule(IDRule{Mode: ModeDefault}),
 		GroupIDRules:        EncodeIDRule(IDRule{Mode: ModeDefault}),
 		MessageRules:        EncodeMessageRule(MessageRule{Mode: ModeOn}),

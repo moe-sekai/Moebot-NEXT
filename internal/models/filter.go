@@ -39,6 +39,7 @@ type FilterTemplate struct {
 	Description string `json:"description"`
 	Builtin     bool   `gorm:"default:false" json:"builtin"`
 
+	ClientIDRules       string `gorm:"type:text;default:'{}'" json:"client_id_rules"`
 	UserIDRules         string `gorm:"type:text;default:'{}'" json:"user_id_rules"`
 	GroupIDRules        string `gorm:"type:text;default:'{}'" json:"group_id_rules"`
 	MessageRules        string `gorm:"type:text;default:'{}'" json:"message_rules"`
@@ -70,8 +71,9 @@ type FilterApp struct {
 	TemplateID *uint `gorm:"index" json:"template_id,omitempty"`
 
 	// JSON: {"mode":"default|on|off|whitelist|blacklist","ids":[...]}
-	UserIDRules  string `gorm:"type:text;default:'{}'" json:"user_id_rules"`
-	GroupIDRules string `gorm:"type:text;default:'{}'" json:"group_id_rules"`
+	ClientIDRules string `gorm:"type:text;default:'{}'" json:"client_id_rules"`
+	UserIDRules   string `gorm:"type:text;default:'{}'" json:"user_id_rules"`
+	GroupIDRules  string `gorm:"type:text;default:'{}'" json:"group_id_rules"`
 
 	// JSON: {"mode":"default|on|off|whitelist|blacklist","filters":[...],"prefix":[...],"prefix_replace":""}
 	MessageRules        string `gorm:"type:text;default:'{}'" json:"message_rules"`

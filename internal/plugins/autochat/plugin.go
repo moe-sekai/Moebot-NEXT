@@ -57,11 +57,11 @@ func (p *pluginImpl) filterAppName() string { return filter.InternalAppName(Plug
 
 // allowedByFilter 查询 filter 网关：当前消息是否被本插件的 internal app 放行。
 // 当 filter 未启用 / 该 app 未 seed 时返回 true（不阻塞）。
-func (p *pluginImpl) allowedByFilter(groupID, userID int64, isPrivate bool, raw string) bool {
+func (p *pluginImpl) allowedByFilter(clientID, groupID, userID int64, isPrivate bool, raw string) bool {
 	if p.filterMgr == nil {
 		return true
 	}
-	return p.filterMgr.AllowMessage(p.filterAppName(), groupID, userID, isPrivate, raw)
+	return p.filterMgr.AllowMessageForClient(p.filterAppName(), clientID, groupID, userID, isPrivate, raw)
 }
 
 func (p *pluginImpl) Manifest() plugin.Manifest {

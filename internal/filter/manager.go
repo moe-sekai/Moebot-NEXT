@@ -310,6 +310,7 @@ func (m *Manager) startClientsLocked(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defaultClientID := DecodeIDRule(defaultTpl.ClientIDRules)
 	defaultUserID := DecodeIDRule(defaultTpl.UserIDRules)
 	defaultGroupID := DecodeIDRule(defaultTpl.GroupIDRules)
 	snap := gatewaySnapshot{
@@ -331,11 +332,12 @@ func (m *Manager) startClientsLocked(ctx context.Context) error {
 		}
 		// When the app references a template, source rules from it; otherwise
 		// from the app's own fields.
-		userID, groupID, msg, priv, grp := appOrTemplateRules(&app, tplByID)
+		clientID, userID, groupID, msg, priv, grp := appOrTemplateRules(&app, tplByID)
 		// "moebot-builtin" 是网关→Bot 主进程的传输闸门：把它当成纯透传，
 		// 防止与各 plugin:<name> 的 internal app 形成 AND 串联语义。
 		// 任何用户残留的规则在此处被强制忽略（控制台 UI 也会隐藏其规则编辑器）。
 		if IsBuiltinTransport(app.Name) {
+			clientID = IDRule{Mode: ModeOn}
 			userID = IDRule{Mode: ModeOn}
 			groupID = IDRule{Mode: ModeOn}
 			msg = MessageRule{Mode: ModeOn}
@@ -344,14 +346,16 @@ func (m *Manager) startClientsLocked(ctx context.Context) error {
 		}
 		f := &Filter{}
 		f.Compile(CompiledRules{
-			Name:           app.Name,
-			UserID:         userID,
-			GroupID:        groupID,
-			Message:        msg,
-			PrivateMessage: priv,
-			GroupMessage:   grp,
-			DefaultUserID:  defaultUserID,
-			DefaultGroupID: defaultGroupID,
+			Name:            app.Name,
+			ClientID:        clientID,
+			UserID:          userID,
+			GroupID:         groupID,
+			Message:         msg,
+			PrivateMessage:  priv,
+			GroupMessage:    grp,
+			DefaultClientID: defaultClientID,
+			DefaultUserID:   defaultUserID,
+			DefaultGroupID:  defaultGroupID,
 		})
 		f.SetPublisher(m.bus.Publish)
 		m.filters[app.Name] = f
@@ -375,6 +379,12 @@ func (m *Manager) startClientsLocked(ctx context.Context) error {
 // 找不到对应名字的 app（未启用 / 未 seed）时返回 true，让插件按默认行为
 // 走自己的逻辑——插件应当在调用前自检 IsAppEnabled。
 func (m *Manager) AllowMessage(appName string, groupID, userID int64, isPrivate bool, raw string) bool {
+	return m.AllowMessageForClient(appName, 0, groupID, userID, isPrivate, raw)
+}
+
+// AllowMessageForClient 让插件按 filter app 的规则过滤消息事件，并额外
+// 传入产生该事件的 upstream websocket client/self_id。
+func (m *Manager) AllowMessageForClient(appName string, clientID, groupID, userID int64, isPrivate bool, raw string) bool {
 	m.mu.Lock()
 	f := m.filters[appName]
 	m.mu.Unlock()
@@ -391,11 +401,12 @@ func (m *Manager) AllowMessage(appName string, groupID, userID int64, isPrivate 
 			MessageFormat: MessageFormatString,
 			MessageString: raw,
 			RawMessage:    raw,
+			SelfID:        clientID,
 			UserID:        userID,
 			GroupID:       groupID,
 		},
 	}
-	return f.Allow(probe, m.debug)
+	return f.AllowFromClient(probe, clientID, m.debug)
 }
 
 // IsAppEnabled 报告 filter 网关是否已为某个 app 编译了规则。
@@ -410,17 +421,19 @@ func (m *Manager) IsAppEnabled(appName string) bool {
 // appOrTemplateRules returns the five rule values that should be used to compile
 // `app`. When app.TemplateID is set and points to a known template, the template's
 // rules win; otherwise the app's own fields are used.
-func appOrTemplateRules(app *models.FilterApp, tplByID map[uint]*models.FilterTemplate) (IDRule, IDRule, MessageRule, MessageRule, MessageRule) {
+func appOrTemplateRules(app *models.FilterApp, tplByID map[uint]*models.FilterTemplate) (IDRule, IDRule, IDRule, MessageRule, MessageRule, MessageRule) {
 	if app.TemplateID != nil {
 		if t, ok := tplByID[*app.TemplateID]; ok {
-			return DecodeIDRule(t.UserIDRules),
+			return DecodeIDRule(t.ClientIDRules),
+				DecodeIDRule(t.UserIDRules),
 				DecodeIDRule(t.GroupIDRules),
 				DecodeMessageRule(t.MessageRules),
 				DecodeMessageRule(t.PrivateMessageRules),
 				DecodeMessageRule(t.GroupMessageRules)
 		}
 	}
-	return DecodeIDRule(app.UserIDRules),
+	return DecodeIDRule(app.ClientIDRules),
+		DecodeIDRule(app.UserIDRules),
 		DecodeIDRule(app.GroupIDRules),
 		DecodeMessageRule(app.MessageRules),
 		DecodeMessageRule(app.PrivateMessageRules),

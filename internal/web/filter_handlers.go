@@ -12,6 +12,7 @@ import (
 )
 
 type effectiveRules struct {
+	ClientIDRules       filter.IDRule      `json:"client_id_rules"`
 	UserIDRules         filter.IDRule      `json:"user_id_rules"`
 	GroupIDRules        filter.IDRule      `json:"group_id_rules"`
 	MessageRules        filter.MessageRule `json:"message_rules"`
@@ -33,6 +34,7 @@ type filterAppPayload struct {
 	SystemTransport     bool               `json:"system_transport"`
 	SortOrder           int                `json:"sort_order"`
 	TemplateID          *uint              `json:"template_id"`
+	ClientIDRules       filter.IDRule      `json:"client_id_rules"`
 	UserIDRules         filter.IDRule      `json:"user_id_rules"`
 	GroupIDRules        filter.IDRule      `json:"group_id_rules"`
 	MessageRules        filter.MessageRule `json:"message_rules"`
@@ -47,6 +49,7 @@ func computeEffectiveRules(a *models.FilterApp, tplByID map[uint]*models.FilterT
 	if a.TemplateID != nil {
 		if t, ok := tplByID[*a.TemplateID]; ok {
 			return effectiveRules{
+				ClientIDRules:       filter.DecodeIDRule(t.ClientIDRules),
 				UserIDRules:         filter.DecodeIDRule(t.UserIDRules),
 				GroupIDRules:        filter.DecodeIDRule(t.GroupIDRules),
 				MessageRules:        filter.DecodeMessageRule(t.MessageRules),
@@ -56,6 +59,7 @@ func computeEffectiveRules(a *models.FilterApp, tplByID map[uint]*models.FilterT
 		}
 	}
 	return effectiveRules{
+		ClientIDRules:       filter.DecodeIDRule(a.ClientIDRules),
 		UserIDRules:         filter.DecodeIDRule(a.UserIDRules),
 		GroupIDRules:        filter.DecodeIDRule(a.GroupIDRules),
 		MessageRules:        filter.DecodeMessageRule(a.MessageRules),
@@ -71,6 +75,7 @@ func appToPayload(a *models.FilterApp, tplByID map[uint]*models.FilterTemplate) 
 		SystemTransport:     filter.IsBuiltinTransport(a.Name),
 		SortOrder:           a.SortOrder,
 		TemplateID:          a.TemplateID,
+		ClientIDRules:       filter.DecodeIDRule(a.ClientIDRules),
 		UserIDRules:         filter.DecodeIDRule(a.UserIDRules),
 		GroupIDRules:        filter.DecodeIDRule(a.GroupIDRules),
 		MessageRules:        filter.DecodeMessageRule(a.MessageRules),
@@ -87,6 +92,7 @@ func payloadToApp(p *filterAppPayload, dst *models.FilterApp) {
 	dst.Enabled = p.Enabled
 	dst.SortOrder = p.SortOrder
 	dst.TemplateID = p.TemplateID
+	dst.ClientIDRules = filter.EncodeIDRule(p.ClientIDRules)
 	dst.UserIDRules = filter.EncodeIDRule(p.UserIDRules)
 	dst.GroupIDRules = filter.EncodeIDRule(p.GroupIDRules)
 	dst.MessageRules = filter.EncodeMessageRule(p.MessageRules)
@@ -124,6 +130,7 @@ type filterTemplatePayload struct {
 	Name                string             `json:"name"`
 	Description         string             `json:"description"`
 	Builtin             bool               `json:"builtin"`
+	ClientIDRules       filter.IDRule      `json:"client_id_rules"`
 	UserIDRules         filter.IDRule      `json:"user_id_rules"`
 	GroupIDRules        filter.IDRule      `json:"group_id_rules"`
 	MessageRules        filter.MessageRule `json:"message_rules"`
@@ -135,6 +142,7 @@ type filterTemplatePayload struct {
 func templateToPayload(t *models.FilterTemplate, usage int64) filterTemplatePayload {
 	return filterTemplatePayload{
 		ID: t.ID, Name: t.Name, Description: t.Description, Builtin: t.Builtin,
+		ClientIDRules:       filter.DecodeIDRule(t.ClientIDRules),
 		UserIDRules:         filter.DecodeIDRule(t.UserIDRules),
 		GroupIDRules:        filter.DecodeIDRule(t.GroupIDRules),
 		MessageRules:        filter.DecodeMessageRule(t.MessageRules),
@@ -149,6 +157,7 @@ func payloadToTemplate(p *filterTemplatePayload, dst *models.FilterTemplate) {
 		dst.Name = p.Name
 	}
 	dst.Description = p.Description
+	dst.ClientIDRules = filter.EncodeIDRule(p.ClientIDRules)
 	dst.UserIDRules = filter.EncodeIDRule(p.UserIDRules)
 	dst.GroupIDRules = filter.EncodeIDRule(p.GroupIDRules)
 	dst.MessageRules = filter.EncodeMessageRule(p.MessageRules)
@@ -302,6 +311,7 @@ func (s *Server) handleUpdateFilterApp(c *fiber.Ctx) error {
 		// 传输闸门：规则 / 模板 字段锁定，不接受前端修改（UI 也隐藏它们）。
 		// 只让 URI / AccessToken / Enabled / SortOrder 生效。
 		p.TemplateID = app.TemplateID
+		p.ClientIDRules = filter.DecodeIDRule(app.ClientIDRules)
 		p.UserIDRules = filter.DecodeIDRule(app.UserIDRules)
 		p.GroupIDRules = filter.DecodeIDRule(app.GroupIDRules)
 		p.MessageRules = filter.DecodeMessageRule(app.MessageRules)

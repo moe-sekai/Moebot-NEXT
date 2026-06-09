@@ -77,7 +77,7 @@ func (p *pluginImpl) gate(h func(*zero.Ctx)) func(*zero.Ctx) {
 			return
 		}
 		isPrivate := ev.MessageType == "private" || ev.DetailType == "private"
-		if !p.allowedByFilter(ev.GroupID, ev.UserID, isPrivate, ev.RawMessage) {
+		if !p.allowedByFilter(ev.SelfID, ev.GroupID, ev.UserID, isPrivate, ev.RawMessage) {
 			return
 		}
 		h(ctx)

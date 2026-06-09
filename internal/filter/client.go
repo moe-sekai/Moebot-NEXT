@@ -361,17 +361,28 @@ func (c *wsClient) handleWrite(ctx context.Context, server *wsServer, gateway ga
 	if c.conn == nil {
 		return
 	}
+	clientID := clientIDFromSelfID(msg.selfID)
 	if msg.mt == websocket.TextMessage {
 		ob := ParseOneBotMessage(msg.data)
-		if ob != nil && ob.Partial.RawMessage != "" {
-			if !c.filter.Allow(ob, c.debug) {
+		if ob != nil {
+			if clientID == 0 && ob.Partial.SelfID != 0 {
+				clientID = ob.Partial.SelfID
+			}
+			if ob.Partial.RawMessage != "" {
+				if !c.filter.AllowFromClient(ob, clientID, c.debug) {
+					return
+				}
+				if err := c.conn.WriteJSON(ob.Intact); err != nil {
+					log.Warn().Str("client", c.name).Err(err).Msg("filter: write JSON to downstream failed")
+				}
 				return
 			}
-			if err := c.conn.WriteJSON(ob.Intact); err != nil {
-				log.Warn().Str("client", c.name).Err(err).Msg("filter: write JSON to downstream failed")
-			}
-			return
+		} else if clientID == 0 {
+			clientID = ExtractSelfID(msg.data)
 		}
+	}
+	if !c.filter.AllowClientEvent(clientID, c.debug) {
+		return
 	}
 	if err := c.conn.WriteMessage(msg.mt, msg.data); err != nil {
 		log.Warn().Str("client", c.name).Err(err).Msg("filter: write to downstream failed")
@@ -380,23 +391,31 @@ func (c *wsClient) handleWrite(ctx context.Context, server *wsServer, gateway ga
 
 func (c *wsClient) handleSystemWrite(ctx context.Context, server *wsServer, gateway gatewaySnapshot, msg wsMsg) {
 	selfID := msg.selfID
-	if selfID == "" && msg.mt == websocket.TextMessage {
-		if ob := ParseOneBotMessage(msg.data); ob != nil && ob.Partial.SelfID != 0 {
+	clientID := clientIDFromSelfID(selfID)
+	var ob *OneBotMessage
+	if msg.mt == websocket.TextMessage {
+		ob = ParseOneBotMessage(msg.data)
+		if ob != nil && ob.Partial.SelfID != 0 && selfID == "" {
 			selfID = strconv.FormatInt(ob.Partial.SelfID, 10)
+			clientID = ob.Partial.SelfID
+		} else if clientID == 0 {
+			clientID = ExtractSelfID(msg.data)
 		}
+	}
+	if selfID == "" && clientID != 0 {
+		selfID = strconv.FormatInt(clientID, 10)
 	}
 	if selfID == "" {
 		log.Debug().Str("client", c.name).Msg("filter: system transport skipped event without self_id")
 		return
 	}
-	if msg.mt == websocket.TextMessage {
-		ob := ParseOneBotMessage(msg.data)
-		if ob != nil && ob.Partial.RawMessage != "" {
-			if !c.filter.Allow(ob, c.debug) {
-				return
-			}
-			msg.data = encodeRawMap(ob.Intact)
+	if msg.mt == websocket.TextMessage && ob != nil && ob.Partial.RawMessage != "" {
+		if !c.filter.AllowFromClient(ob, clientID, c.debug) {
+			return
 		}
+		msg.data = encodeRawMap(ob.Intact)
+	} else if !c.filter.AllowClientEvent(clientID, c.debug) {
+		return
 	}
 	binding, err := c.ensureSystemBinding(ctx, selfID, server, gateway)
 	if err != nil {
@@ -407,6 +426,14 @@ func (c *wsClient) handleSystemWrite(ctx context.Context, server *wsServer, gate
 		log.Warn().Str("client", c.name).Str("self_id", selfID).Err(err).Msg("filter: write to downstream binding failed")
 		c.closeBinding(selfID, binding)
 	}
+}
+
+func clientIDFromSelfID(selfID string) int64 {
+	if selfID == "" {
+		return 0
+	}
+	id, _ := strconv.ParseInt(selfID, 10, 64)
+	return id
 }
 
 // gatewaySnapshot is an immutable view passed to clients.
