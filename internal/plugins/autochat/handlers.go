@@ -77,12 +77,21 @@ func (p *pluginImpl) registerHandlers() *zero.Engine {
 	return engine
 }
 
+func (p *pluginImpl) allowedByCurrentEvent(ctx *zero.Ctx) bool {
+	if ctx == nil || ctx.Event == nil {
+		return true
+	}
+	ev := ctx.Event
+	isPrivate := ev.MessageType == "private" || ev.DetailType == "private"
+	return p.allowedByFilter(ev.SelfID, ev.GroupID, ev.UserID, isPrivate, ev.RawMessage)
+}
+
 func (p *pluginImpl) handleChat(ctx *zero.Ctx) {
 	groupID := ctx.Event.GroupID
 	userID := ctx.Event.UserID
 	// Filter 网关：控制台「Filter」页面给本插件分配的 internal app 模板，
-	// 决定该 group/user/消息是否被允许触发对话。失配时静默忽略。
-	if !p.allowedByFilter(ctx.Event.SelfID, groupID, userID, false, ctx.Event.RawMessage) {
+	// 决定该 client/group/user/消息是否被允许触发对话。失配时静默忽略。
+	if !p.allowedByCurrentEvent(ctx) {
 		return
 	}
 	// 兼容旧 /开启聊天 /关闭聊天 命令的本地白名单。
@@ -137,7 +146,7 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 	groupID := ctx.Event.GroupID
 	userID := ctx.Event.UserID
 	msg := ctx.Event.Message
-	if !p.allowedByFilter(ctx.Event.SelfID, groupID, userID, false, ctx.Event.RawMessage) {
+	if !p.allowedByCurrentEvent(ctx) {
 		return
 	}
 	if !p.chatWhiteList.Check(groupID) {
@@ -284,6 +293,9 @@ func (p *pluginImpl) handleAutoReply(ctx *zero.Ctx) {
 }
 
 func (p *pluginImpl) handleModel(ctx *zero.Ctx) {
+	if !p.allowedByCurrentEvent(ctx) {
+		return
+	}
 	groupID := ctx.Event.GroupID
 	matches := ctx.State["regex_matched"].([]string)
 	args := strings.TrimSpace(matches[2])
@@ -308,6 +320,9 @@ func (p *pluginImpl) handleModel(ctx *zero.Ctx) {
 }
 
 func (p *pluginImpl) handleModelList(ctx *zero.Ctx) {
+	if !p.allowedByCurrentEvent(ctx) {
+		return
+	}
 	cfg := GetConfig()
 	if len(cfg.LLM.Models) == 0 {
 		ctx.SendChain(message.Reply(ctx.Event.MessageID), message.Text("尚未配置任何模型"))
@@ -321,6 +336,9 @@ func (p *pluginImpl) handleModelList(ctx *zero.Ctx) {
 }
 
 func (p *pluginImpl) handleWhiteList(ctx *zero.Ctx) {
+	if !p.allowedByCurrentEvent(ctx) {
+		return
+	}
 	matches := ctx.State["regex_matched"].([]string)
 	action, target := matches[1], matches[2]
 	groupID := ctx.Event.GroupID
@@ -337,6 +355,9 @@ func (p *pluginImpl) handleWhiteList(ctx *zero.Ctx) {
 }
 
 func (p *pluginImpl) handleTokenStats(ctx *zero.Ctx) {
+	if !p.allowedByCurrentEvent(ctx) {
+		return
+	}
 	pt1, ct1, rc1 := p.tokenStats.GetStats(1)
 	pt7, ct7, rc7 := p.tokenStats.GetStats(7)
 	text := fmt.Sprintf(
@@ -347,6 +368,9 @@ func (p *pluginImpl) handleTokenStats(ctx *zero.Ctx) {
 }
 
 func (p *pluginImpl) handleQueryMemory(ctx *zero.Ctx) {
+	if !p.allowedByCurrentEvent(ctx) {
+		return
+	}
 	groupID := ctx.Event.GroupID
 	senderID := ctx.Event.UserID
 	matches := ctx.State["regex_matched"].([]string)
