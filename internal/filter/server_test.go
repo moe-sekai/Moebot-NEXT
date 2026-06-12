@@ -96,7 +96,7 @@ func TestServeReplacesSameSelfID(t *testing.T) {
 	}
 }
 
-func TestDedupKeyIgnoresSelfID(t *testing.T) {
+func TestDedupKeySeparatesSelfID(t *testing.T) {
 	base := &dedupProbe{PostType: "message", SelfID: 10001, MessageType: MessageTypeGroup, GroupID: 20001, UserID: 30001, Time: 12345, RawMessage: "/b30"}
 	otherBot := *base
 	otherBot.SelfID = 10002
@@ -104,8 +104,8 @@ func TestDedupKeyIgnoresSelfID(t *testing.T) {
 	if !dedupCandidate(base) || !dedupCandidate(&otherBot) {
 		t.Fatal("expected group messages to be dedup candidates")
 	}
-	if dedupKey(base) != dedupKey(&otherBot) {
-		t.Fatal("dedup key should ignore self_id for cross-bot group dedup")
+	if dedupKey(base) == dedupKey(&otherBot) {
+		t.Fatal("dedup key should include self_id so client-id filters cannot starve allowed clients")
 	}
 }
 
@@ -135,8 +135,8 @@ func TestDedupKeyUsesMessageJSONFallback(t *testing.T) {
 	if !dedupCandidate(p1) || !dedupCandidate(&p2) {
 		t.Fatal("expected message JSON fallback to be a dedup candidate")
 	}
-	if dedupKey(p1) != dedupKey(&p2) {
-		t.Fatal("message JSON fallback should be stable across self_id")
+	if dedupKey(p1) == dedupKey(&p2) {
+		t.Fatal("message JSON fallback should still be separated by self_id")
 	}
 	if dedupKey(p1) == dedupKey(&p3) {
 		t.Fatal("different message JSON should produce different dedup keys")
@@ -149,8 +149,8 @@ func TestDedupKeyIgnoresDifferentTransportMessageIDsWhenContentExists(t *testing
 	p2.SelfID = 10002
 	p2.MessageID = json.RawMessage(`222`)
 
-	if dedupKey(p1) != dedupKey(&p2) {
-		t.Fatal("transport-specific message ids should not split cross-bot dedup when content exists")
+	if dedupKey(p1) == dedupKey(&p2) {
+		t.Fatal("self_id should split dedup even when message content exists")
 	}
 }
 

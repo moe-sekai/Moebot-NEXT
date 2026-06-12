@@ -119,15 +119,16 @@ func (p *dedupProbe) transportMessageID() string {
 
 func dedupKey(p *dedupProbe) uint64 {
 	h := fnv.New64a()
-	// 注意：不要把 self_id 纳入 key。多个 bot 账号/OneBot 客户端加入同一群时，
-	// self_id 必然不同；把它纳入 key 会让跨 bot 的同一条消息无法去重。
+	// self_id 必须纳入 key：client-id 过滤发生在下游 app / 插件层，
+	// 如果多个 OneBot client 的同一条群消息在网关层被跨 client 去重，
+	// 可能出现“被某个插件 block 的 client 先写入 dedup，允许的 client 后到却被跳过”的情况。
 	content := p.contentFingerprint()
 	if content == "" {
 		// 仅在没有可比对内容时退回到消息 ID。不同 OneBot 实现的 message_id
 		// 口径可能不同，不能把它混入正常文本/图片消息的跨 bot 去重 key。
 		content = p.transportMessageID()
 	}
-	fmt.Fprintf(h, "%s:%d:%d:%d:%s", p.MessageType, p.GroupID, p.UserID, p.Time, content)
+	fmt.Fprintf(h, "%d:%s:%d:%d:%d:%s", p.SelfID, p.MessageType, p.GroupID, p.UserID, p.Time, content)
 	return h.Sum64()
 }
 
