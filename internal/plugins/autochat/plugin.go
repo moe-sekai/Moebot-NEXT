@@ -69,7 +69,7 @@ func (p *pluginImpl) Manifest() plugin.Manifest {
 		Name:          PluginName,
 		Title:         "AutoChat (LLM 群聊)",
 		Version:       "0.1.0",
-		Author:        "Moebot Team",
+		Author:        "StarMoe",
 		Category:      plugin.CategoryOfficial,
 		Description:   "在群聊中扮演角色的 LLM 对话插件，支持 OpenAI 兼容 + Anthropic + sqlite-vec RAG。",
 		Homepage:      "https://github.com/moe-sekai/Moebot-NEXT",

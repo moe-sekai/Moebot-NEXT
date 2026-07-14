@@ -47,7 +47,7 @@ func (p *pluginImpl) Manifest() plugin.Manifest {
 		Name:          PluginName,
 		Title:         "MoeSekai (Project Sekai)",
 		Version:       "0.1.0",
-		Author:        "Moebot Team",
+		Author:        "StarMoe",
 		Category:      plugin.CategoryOfficial,
 		Description:   "Project Sekai business: card / music / gacha / suite / deck recommend / ranking / B30 etc.",
 		Homepage:      "https://github.com/moe-sekai/Moebot-NEXT",

@@ -44,7 +44,7 @@ func (p *pluginImpl) Manifest() plugin.Manifest {
 		Name:          PluginName,
 		Title:         "Gallery (图片画廊)",
 		Version:       "0.1.0",
-		Author:        "Moebot Team",
+		Author:        "StarMoe",
 		Category:      plugin.CategoryOfficial,
 		Description:   "图片画廊管理插件，支持上传/查看/去重/撤销等功能。",
 		Homepage:      "https://github.com/moe-sekai/Moebot-NEXT",

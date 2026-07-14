@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { theme } from '../styles/theme'
-import { getMoebotLogoDataUri } from '../styles/logo'
+import { getMoebotLogoDataUri, getStarMoeLogoDataUri } from '../styles/logo'
 import { defaultFontFamily } from '../fonts'
 import { getFooterText } from '../deployer'
 
@@ -21,6 +21,7 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
   const w = width ?? theme.cardWidth
   const accent = accentColor ?? theme.colors.accent
   const logo = getMoebotLogoDataUri(accent)
+  const starMoeLogo = getStarMoeLogoDataUri(accent)
 
   return (
     <div
@@ -106,7 +107,7 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
       <div
         style={{
           display: 'flex',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           alignItems: 'center',
           padding: `${theme.spacing.sm}px ${theme.cardPadding}px`,
           backgroundColor: theme.colors.surface,
@@ -115,6 +116,13 @@ export function BaseCard({ title, subtitle, children, width, accentColor, footer
           color: theme.colors.textMuted,
         }}
       >
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <img
+            src={starMoeLogo}
+            height={16}
+            style={{ objectFit: 'contain' }}
+          />
+        </div>
         <span style={{ display: 'flex' }}>{getFooterText()}</span>
       </div>
     </div>

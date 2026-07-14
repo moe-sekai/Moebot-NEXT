@@ -26,3 +26,6 @@ config.yml
 *.log
 config.yml
 .narrafork/
+moebot-next.exe
+.windsurf
+.claude
